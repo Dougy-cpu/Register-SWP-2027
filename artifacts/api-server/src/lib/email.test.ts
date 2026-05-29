@@ -85,7 +85,7 @@ describe("template substitution pattern (integration shape)", () => {
 describe("wrapInBrandedLayout", () => {
   it("renders uploaded logos with fixed email-safe dimensions", () => {
     const html = wrapInBrandedLayout("<p>Body</p>", {
-      eventName: "HR Analytics Summit",
+      eventName: "SWP Summit",
       logoDataUrl: "data:image/png;base64,abc123",
     });
 
@@ -100,7 +100,7 @@ describe("wrapInBrandedLayout", () => {
 
   it("escapes logo attributes in the branded header", () => {
     const html = wrapInBrandedLayout("<p>Body</p>", {
-      eventName: `HRAS "Summit"`,
+      eventName: `SWP "Summit"`,
       orgName: `People "Strategy" Hub`,
       logoDataUrl: `x" onerror="alert(1)`,
     });

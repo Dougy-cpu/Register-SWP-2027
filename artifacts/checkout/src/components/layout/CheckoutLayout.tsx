@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import logoUrl from "@assets/logo.webp";
+import logoUrl from "@assets/swp-summit-logo.png";
 
 interface CheckoutLayoutProps {
   children: ReactNode;
@@ -10,10 +10,10 @@ export default function CheckoutLayout({ children, currentStep = 1 }: CheckoutLa
   const steps = ["Your Details", "Select Passes", "Attendee Details", "Payment"];
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary/20 selection:text-primary">
-      <header className="w-full border-b border-border bg-white sticky top-0 z-10">
+    <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary/20 selection:text-primary swp-grid-bg">
+      <header className="w-full border-b border-border bg-white/95 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <img src={logoUrl} alt="HR Analytics Summit" className="h-8 object-contain" />
+          <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto object-contain" />
           {currentStep < 5 && (
             <div className="text-sm font-medium text-muted-foreground hidden md:block">
               Step {currentStep} of 4:{" "}
@@ -22,7 +22,6 @@ export default function CheckoutLayout({ children, currentStep = 1 }: CheckoutLa
           )}
         </div>
 
-        {/* Progress Bar */}
         {currentStep < 5 && (
           <div className="w-full bg-muted h-1">
             <div
@@ -33,11 +32,13 @@ export default function CheckoutLayout({ children, currentStep = 1 }: CheckoutLa
         )}
       </header>
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 py-12 flex flex-col">{children}</main>
+      <main className="relative flex-1 w-full max-w-6xl mx-auto px-6 py-12 flex flex-col">
+        {children}
+      </main>
 
-      <footer className="w-full border-t border-border mt-auto py-8">
+      <footer className="relative w-full border-t border-border mt-auto py-8">
         <div className="max-w-6xl mx-auto px-6 text-center text-sm text-muted-foreground font-medium">
-          HR Analytics Summit — 3 September 2026 — 155 Bishopsgate, London
+          SWP Summit 2027 - Wednesday, 3 March 2027 - 1 Basinghall Avenue, London
         </div>
       </footer>
     </div>

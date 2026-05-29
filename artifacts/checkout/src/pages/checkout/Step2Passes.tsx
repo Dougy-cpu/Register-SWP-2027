@@ -616,14 +616,14 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
 
       {/* HR: Single pass with quantity picker */}
       {isHR && (
-        <Card className="relative border-2 border-primary overflow-hidden p-0 shadow-lg">
+        <Card className="relative overflow-hidden rounded-lg border-2 border-primary/25 bg-white p-0 shadow-[0_10px_30px_rgba(0,78,185,0.05)]">
           {/* ── Header band ── */}
-          <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-border">
+          <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-primary/20 bg-gradient-to-r from-primary to-secondary text-white">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-semibold">
-                HR Analytics Summit · 3 Sep 2026, London
+              <p className="text-xs uppercase tracking-widest text-white/75 mb-1 font-semibold">
+                SWP Summit · 3 Mar 2027, London
               </p>
-              <h3 className="text-2xl font-bold text-primary font-display leading-tight">
+              <h3 className="text-2xl font-bold text-white font-display leading-tight">
                 HR Professional Pass
               </h3>
             </div>
@@ -631,11 +631,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <InventoryBadge remaining={inventory.single} />
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="text-3xl font-bold text-foreground">
+                  <span className="text-3xl font-bold text-white">
                     £{singleCurrentPrice.toFixed(0)}
                   </span>
                   {singleOriginalPrice > singleCurrentPrice && (
-                    <span className="text-sm text-muted-foreground line-through">
+                    <span className="text-sm text-white/70 line-through">
                       £{singleOriginalPrice.toFixed(0)}
                     </span>
                   )}
@@ -645,7 +645,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-white/75 mt-0.5">
                   Per ticket, ex VAT · {singlePeriodName}
                 </p>
               </div>
@@ -673,7 +673,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
             <div className="hidden md:block w-px bg-border self-stretch" />
 
             {/* ── Right column: Quantity picker (warm panel) ── */}
-            <div className="md:w-80 shrink-0 p-6 bg-muted space-y-4 ml-[0px]">
+            <div className="md:w-80 shrink-0 p-6 bg-primary/5 space-y-4 ml-[0px]">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 How many tickets?
               </p>
@@ -690,8 +690,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                 style={
                   quantity !== 3
                     ? {
-                        background:
-                          "linear-gradient(135deg, hsl(28,88%,62%) 0%, hsl(4,77%,57%) 100%)",
+                        background: "linear-gradient(135deg, #004eb9 0%, #266cc7 100%)",
                       }
                     : undefined
                 }
@@ -768,12 +767,12 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
       )}
       {/* Vendor: Business Pass with quantity + discounts */}
       {isVendor && (
-        <Card className="relative border-2 border-primary overflow-hidden p-0 shadow-lg">
+        <Card className="relative overflow-hidden rounded-lg border-2 border-primary bg-white p-0 shadow-[0_18px_45px_rgba(0,78,185,0.16)]">
           {/* ── Header band ── */}
           <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-border">
             <div>
               <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-semibold">
-                HR Analytics Summit · 3 Sep 2026 · Consultants &amp; Vendors
+                SWP Summit · 3 Mar 2027 · Consultants &amp; Vendors
               </p>
               <h3 className="text-2xl font-bold text-primary font-display leading-tight">
                 Business Pass
@@ -843,7 +842,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
             <div className="hidden md:block w-px bg-border self-stretch" />
 
             {/* ── Right column: Quantity picker (warm panel) ── */}
-            <div className="md:w-72 shrink-0 p-6 bg-muted space-y-4">
+            <div className="md:w-72 shrink-0 p-6 bg-primary/5 space-y-4">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 How many passes?
               </p>

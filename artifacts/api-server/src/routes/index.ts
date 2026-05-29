@@ -10,6 +10,7 @@ import emailRouter from "./email";
 import adminRouter from "./admin";
 import calendarRouter from "./calendar";
 import hearAboutUsRouter from "./hear-about-us";
+import companyInfoRouter from "./company-info";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(emailRouter);
 router.use(adminRouter);
 router.use(calendarRouter);
 router.use(hearAboutUsRouter);
+router.use(companyInfoRouter);
 
 export default router;

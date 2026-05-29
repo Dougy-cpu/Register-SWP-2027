@@ -61,7 +61,7 @@ app.use(
 // ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
-const PRODUCTION_ORIGIN = "https://register.hranalyticssummit.com";
+const PRODUCTION_ORIGIN = "https://register.swpsummit.com";
 
 function productionOrigin(): string {
   const raw = getOptionalEnv("APP_BASE_URL") ?? PRODUCTION_ORIGIN;
@@ -183,7 +183,7 @@ app.use("/api", router);
 // ---------------------------------------------------------------------------
 // Static frontend (production only)
 // In production, the Express server serves the pre-built Vite output so the
-// whole app lives on one origin — both at register.hranalyticssummit.com.
+// whole app lives on one origin — both at register.swpsummit.com.
 // ---------------------------------------------------------------------------
 if (isProduction) {
   // Path from compiled dist/ to the checkout frontend build

@@ -872,7 +872,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                             </a>{" "}
                             and{" "}
                             <a
-                              href="https://www.hranalyticssummit.com/terms-and-conditions"
+                              href="https://swpsummit.com/terms-and-conditions"
                               target="_blank"
                               rel="noreferrer"
                               className="underline text-primary hover:text-primary/80"

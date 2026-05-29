@@ -270,7 +270,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
   const allAttendees = await db.select().from(attendeesTable);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "HR Analytics Summit";
+  workbook.creator = "SWP Summit";
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet("Registrations");
@@ -366,7 +366,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
         registeredAt: booking.createdAt.toISOString(),
       });
       if (a.isLead) {
-        row.getCell("lead").font = { bold: true, color: { argb: "FFE74F3E" } };
+        row.getCell("lead").font = { bold: true, color: { argb: "FF004EB9" } };
       }
     }
   }
@@ -393,7 +393,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
-  res.setHeader("Content-Disposition", `attachment; filename="hras26-registrations-${date}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="swp27-registrations-${date}.xlsx"`);
   await workbook.xlsx.write(res);
   res.end();
 });

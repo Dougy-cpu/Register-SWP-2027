@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+﻿import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and, lte, gte, or, isNull, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { promoCodesTable, bookingsTable, attendeesTable } from "@workspace/db";
@@ -45,7 +45,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
     if (promo.discountType === "complimentary") {
       res
         .status(400)
-        .json({ error: "This complimentary code has been fully redeemed — no tickets remain" });
+        .json({ error: "This complimentary code has been fully redeemed â€” no tickets remain" });
     } else {
       res.status(400).json({ error: "This promo code has already been used up" });
     }
@@ -54,7 +54,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
 
   if (promo.applicablePassTypes && !promo.applicablePassTypes.includes(passType as string)) {
     const allowed = promo.applicablePassTypes
-      .map((t: string) => (t === "single" ? "Single Pass" : "Business Pass"))
+      .map((t: string) => (t === "single" ? "HR Professional Pass" : "Business Pass"))
       .join(" and ");
     res.status(400).json({ error: `This promo code is only valid for ${allowed}` });
     return;
@@ -112,7 +112,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
       if (remainingSeats === 0) {
         res
           .status(400)
-          .json({ error: "This complimentary code has been fully redeemed — no tickets remain" });
+          .json({ error: "This complimentary code has been fully redeemed â€” no tickets remain" });
         return;
       }
     }

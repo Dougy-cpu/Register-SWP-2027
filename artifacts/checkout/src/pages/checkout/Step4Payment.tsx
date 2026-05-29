@@ -22,16 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Check,
-  Link2,
-  Link2Off,
-  ChevronDown,
-  ChevronRight,
-  HelpCircle,
-  CreditCard,
-  FileText,
-} from "lucide-react";
+import { Check, Link2, Link2Off, CreditCard, FileText, Building2, Download } from "lucide-react";
 import type { BookingWithAttendees } from "@/types/booking";
 
 // Fields on the billing form that can be auto-linked to the lead attendee.
@@ -624,15 +615,16 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
       ? "Processing..."
       : paymentMethod === "card"
         ? "Proceed to secure card payment"
-        : "Complete registration and send invoice";
+        : "Issue Invoice & Confirm Registration";
 
     return (
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Step 4 of 4</p>
-          <h1 className="text-4xl md:text-5xl font-bold">Payment</h1>
+          <h1 className="text-4xl md:text-5xl font-bold">Final checkout</h1>
           <p className="max-w-3xl text-lg text-muted-foreground">
-            Choose how to pay, confirm invoice details if required, and finish the registration.
+            Choose how to pay, confirm invoice details if required, and finish your SWP Summit
+            registration.
           </p>
         </div>
 
@@ -663,11 +655,11 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
-            <section className="rounded-md border border-border bg-white">
+            <section className="swp-card rounded-lg">
               <div className="border-b border-border/70 p-5">
-                <h2 className="text-xl font-bold">Payment method</h2>
+                <h2 className="text-xl font-bold">Choose payment method</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  The invoice form only appears when invoice is selected.
+                  Pick the route that matches your procurement process.
                 </p>
               </div>
               <div className="p-5">
@@ -677,7 +669,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   className="grid gap-4 md:grid-cols-2"
                 >
                   <div
-                    className={`min-h-[118px] cursor-pointer rounded-md border-2 p-5 transition-all ${
+                    className={`min-h-[128px] cursor-pointer rounded-lg border-2 p-5 transition-all hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(0,78,185,0.08)] ${
                       paymentMethod === "card"
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/40"
@@ -690,10 +682,10 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         <div>
                           <div className="flex items-center gap-2">
                             <CreditCard className="h-5 w-5 text-primary" />
-                            <span className="text-lg font-bold">Credit or debit card</span>
+                            <span className="text-lg font-bold">Pay by card now</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Pay securely now via Stripe. Fastest confirmation route.
+                            Pay securely now via Stripe. Confirmation is immediate after payment.
                           </p>
                         </div>
                       </div>
@@ -706,7 +698,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   </div>
 
                   <div
-                    className={`min-h-[118px] cursor-pointer rounded-md border-2 p-5 transition-all ${
+                    className={`min-h-[128px] cursor-pointer rounded-lg border-2 p-5 transition-all hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(0,78,185,0.08)] ${
                       paymentMethod === "invoice"
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/40"
@@ -722,7 +714,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by invoice</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            We email the invoice to the billing contact after submission.
+                            Add billing details now. You can add or update a PO number later from
+                            the confirmation email.
                           </p>
                         </div>
                       </div>
@@ -738,12 +731,13 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             </section>
 
             {paymentMethod === "invoice" && (
-              <section className="rounded-md border border-border bg-white">
+              <section className="swp-card rounded-lg">
                 <div className="flex flex-col gap-3 border-b border-border/70 p-5 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-bold">Billing details</h2>
+                    <h2 className="text-xl font-bold">Billing details for the invoice</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Grouped to reduce scrolling and keep related fields together.
+                      These details appear on the invoice. The lead attendee details are pre-filled
+                      where possible.
                     </p>
                   </div>
                   {billingLead && (
@@ -754,16 +748,17 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                 </div>
 
                 <div className="space-y-4 p-5">
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                     <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto]">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-200 bg-white font-bold text-amber-800">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 bg-white font-bold text-primary">
                         ?
                       </span>
                       <div>
-                        <p className="font-bold text-amber-950">How invoicing works</p>
-                        <p className="mt-1 text-sm text-amber-900">
-                          The invoice will be sent to the email below and can be paid by card or
-                          bank transfer within 14 days.
+                        <p className="font-bold text-foreground">How invoicing works</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          We email the invoice as soon as you confirm registration. It includes the
+                          company information PDF, payment options, and a secure link to add or
+                          update a PO number before payment.
                         </p>
                       </div>
                       {invoiceHelpContent && (
@@ -771,7 +766,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                          className="border-primary bg-white text-primary hover:bg-primary/5"
                           onClick={() => setHelpExpanded((v) => !v)}
                           aria-expanded={helpExpanded}
                         >
@@ -780,10 +775,31 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                       )}
                     </div>
                     {invoiceHelpContent && helpExpanded && (
-                      <div className="mt-4 border-t border-amber-200 pt-4 text-sm leading-relaxed">
+                      <div className="mt-4 border-t border-primary/15 pt-4 text-sm leading-relaxed">
                         <InvoiceHelpRendered text={invoiceHelpContent} />
                       </div>
                     )}
+                  </div>
+
+                  <div className="rounded-lg border border-primary/15 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                        <div>
+                          <p className="font-bold">Need company information for procurement?</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Download Dynamic Business Leaders company details now. The same PDF is
+                            also attached to invoice emails.
+                          </p>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" asChild className="shrink-0">
+                        <a href="/api/company-info" target="_blank" rel="noreferrer">
+                          <Download className="mr-2 h-4 w-4" />
+                          Download PDF
+                        </a>
+                      </Button>
+                    </div>
                   </div>
 
                   <Form {...form}>
@@ -1020,8 +1036,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           <div>
                             <h3 className="font-bold">Invoice references</h3>
                             <p className="text-sm text-muted-foreground">
-                              Optional references can also be added from the invoice email before
-                              payment.
+                              Add procurement references now, or update them from the secure invoice
+                              link before payment.
                             </p>
                           </div>
                         </div>
@@ -1054,7 +1070,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>
-                                  Purchase order number{" "}
+                                  PO number{" "}
                                   <span className="font-normal text-muted-foreground">
                                     (optional)
                                   </span>
@@ -1062,12 +1078,17 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                                 <FormControl>
                                   <Input
                                     {...field}
-                                    placeholder="Optional"
+                                    placeholder="e.g. PO-12345"
                                     className="h-12 bg-white"
                                     maxLength={30}
                                   />
                                 </FormControl>
                                 <FormMessage />
+                                <p className="text-xs text-muted-foreground">
+                                  If your finance team needs a PO on the invoice, add it here. You
+                                  can also add or change it later from the confirmation email; the
+                                  invoice will be re-issued automatically.
+                                </p>
                               </FormItem>
                             )}
                           />
@@ -1085,8 +1106,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                 <p>{paymentError}</p>
                 <p className="mt-2 text-red-700">
                   If this continues, please email us at{" "}
-                  <a href="mailto:info@hranalyticssummit.com" className="underline">
-                    info@hranalyticssummit.com
+                  <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+                    douglas@peoplestrategyhub.com
                   </a>{" "}
                   to complete your registration.
                 </p>
@@ -1186,7 +1207,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               <div className="flex flex-col gap-3">
                 <Button
                   size="lg"
-                  className="h-14 w-full min-w-0 px-6 text-base bg-primary text-white hover:bg-primary/90"
+                  className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
                   onClick={() => {
                     if (paymentMethod === "invoice") {
                       void form.handleSubmit(onSubmit)();
@@ -1236,479 +1257,5 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
     );
   }
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-8 flex flex-col md:flex-row gap-12">
-      <div className="flex-1 space-y-8">
-        <div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Payment</h1>
-          <p className="text-lg text-muted-foreground">Choose your preferred payment method.</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-white border border-border p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Booking
-            </p>
-            <p className="text-lg font-bold mt-1">
-              {booking.quantity} {bookingPassSummary}
-            </p>
-          </div>
-          <div className="bg-white border border-border p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Payment choice
-            </p>
-            <p className="text-lg font-bold mt-1">
-              {paymentMethod === "card" ? "Card" : "Invoice"}
-            </p>
-          </div>
-          <div className="bg-white border border-border p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Total
-            </p>
-            <p className="text-lg font-bold mt-1">
-              {currentPricing ? `£${currentPricing.total.toFixed(2)}` : "Calculating"}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 md:p-8 border border-border">
-          <RadioGroup
-            value={paymentMethod}
-            onValueChange={(val: "card" | "invoice") => setPaymentMethod(val)}
-            className="space-y-4"
-          >
-            <div
-              className={`border-2 p-6 transition-all cursor-pointer ${paymentMethod === "card" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
-              onClick={() => setPaymentMethod("card")}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <RadioGroupItem value="card" />
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <span className="font-bold text-xl">Credit or Debit Card</span>
-                </div>
-                {paymentMethod === "card" && (
-                  <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-1">
-                    Selected
-                  </span>
-                )}
-              </div>
-              <p className="ml-7 mt-2 text-muted-foreground">Pay securely now via Stripe.</p>
-            </div>
-
-            <div
-              className={`border-2 p-6 transition-all cursor-pointer ${paymentMethod === "invoice" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
-              onClick={() => setPaymentMethod("invoice")}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <RadioGroupItem value="invoice" />
-                  <FileText className="w-5 h-5 text-primary" />
-                  <span className="font-bold text-xl">Pay by Invoice</span>
-                </div>
-                {paymentMethod === "invoice" && (
-                  <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-1">
-                    Selected
-                  </span>
-                )}
-              </div>
-              <p className="ml-7 mt-2 text-muted-foreground">
-                We'll email you an invoice to pay by card or bank transfer within 14 days.
-              </p>
-            </div>
-          </RadioGroup>
-        </div>
-
-        {paymentMethod === "invoice" && (
-          <div className="bg-white p-6 md:p-8 border border-border">
-            <h2 className="text-2xl font-bold mb-6">Billing Details</h2>
-            <Form {...form}>
-              <form className="space-y-6" id="invoice-form" onSubmit={form.handleSubmit(onSubmit)}>
-                {billingLead && (
-                  <p className="text-xs text-muted-foreground -mt-2">
-                    Pre-filled from your lead attendee{" "}
-                    <span className="font-semibold">
-                      {billingLead.firstName} {billingLead.lastName}
-                    </span>
-                    . Edit any field to override; use the "Use lead attendee" link to relink.
-                  </p>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="billingName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <LinkedFieldLabel
-                          label="Billing Contact Name *"
-                          field="billingName"
-                          linked={linkedFields.billingName}
-                          canLink={!!getLeadValue("billingName")}
-                          onRelink={() => relinkField("billingName")}
-                        />
-                        <FormControl>
-                          <Input
-                            {...field}
-                            onChange={(e) => {
-                              field.onChange(e);
-                              unlinkField("billingName");
-                            }}
-                            className="h-12 bg-white"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="billingCompany"
-                    render={({ field }) => (
-                      <FormItem>
-                        <LinkedFieldLabel
-                          label="Company Name *"
-                          field="billingCompany"
-                          linked={linkedFields.billingCompany}
-                          canLink={!!getLeadValue("billingCompany")}
-                          onRelink={() => relinkField("billingCompany")}
-                        />
-                        <FormControl>
-                          <Input
-                            {...field}
-                            onChange={(e) => {
-                              field.onChange(e);
-                              unlinkField("billingCompany");
-                            }}
-                            className="h-12 bg-white"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="billingEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <LinkedFieldLabel
-                        label="Invoice Email Address *"
-                        field="billingEmail"
-                        linked={linkedFields.billingEmail}
-                        canLink={!!getLeadValue("billingEmail")}
-                        onRelink={() => relinkField("billingEmail")}
-                      />
-                      <FormControl>
-                        <Input
-                          type="email"
-                          {...field}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            unlinkField("billingEmail");
-                          }}
-                          className="h-12 bg-white"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="billingPhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <LinkedFieldLabel
-                        label="Purchaser Contact Number *"
-                        field="billingPhone"
-                        linked={linkedFields.billingPhone}
-                        canLink={!!getLeadValue("billingPhone")}
-                        onRelink={() => relinkField("billingPhone")}
-                      />
-                      <FormControl>
-                        <Input
-                          type="tel"
-                          {...field}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            unlinkField("billingPhone");
-                          }}
-                          className="h-12 bg-white"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="billingAddressLine1"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Address Line 1 *</FormLabel>
-                      <FormControl>
-                        <Input {...field} className="h-12 bg-white" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="billingAddressLine2"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Address Line 2{" "}
-                        <span className="text-muted-foreground font-normal">(optional)</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input {...field} className="h-12 bg-white" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="billingTown"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Town / City *</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-12 bg-white" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="billingRegion"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Region / County{" "}
-                          <span className="text-muted-foreground font-normal">(optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-12 bg-white" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="billingPostcode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Postcode *</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-12 bg-white" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="billingCountry"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Country *</FormLabel>
-                        <FormControl>
-                          <Input {...field} className="h-12 bg-white" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="billingVatNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          VAT Number{" "}
-                          <span className="text-muted-foreground font-normal">(optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="e.g. GB123456789"
-                            className="h-12 bg-white"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="poNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          PO Number{" "}
-                          <span className="text-muted-foreground font-normal">(optional)</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="Add to appear on the invoice"
-                            className="h-12 bg-white"
-                            maxLength={30}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground bg-muted/40 border border-border/60 rounded-md p-3 leading-relaxed">
-                  <strong>Need a PO number on your invoice?</strong> Enter it above to have it
-                  printed on the invoice we issue. You can also add or change the PO number — and
-                  update billing details — at any time before payment using the secure self-service
-                  link in your confirmation email; we'll re-issue the invoice with the new details
-                  automatically.
-                </p>
-              </form>
-            </Form>
-
-            {invoiceHelpContent && (
-              <div className="mt-6 border border-border rounded-md overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setHelpExpanded((v) => !v)}
-                  aria-expanded={helpExpanded}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 text-left transition-colors"
-                >
-                  <span className="flex items-center gap-2 font-semibold text-sm">
-                    <HelpCircle className="w-4 h-4 text-primary" />
-                    How invoicing works
-                  </span>
-                  {helpExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  )}
-                </button>
-                {helpExpanded && (
-                  <div className="px-4 py-4 bg-white text-sm space-y-3 leading-relaxed">
-                    <InvoiceHelpRendered text={invoiceHelpContent} />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {paymentError && (
-          <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-800">
-            <p className="font-semibold mb-1">Payment error</p>
-            <p>{paymentError}</p>
-            <p className="mt-2 text-red-700">
-              If this continues, please email us at{" "}
-              <a href="mailto:info@hranalyticssummit.com" className="underline">
-                info@hranalyticssummit.com
-              </a>{" "}
-              to complete your registration.
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-3 pt-4">
-          <div className="flex justify-between">
-            <Button
-              variant="outline"
-              size="lg"
-              className="px-8 h-14 text-lg border-border"
-              onClick={async () => {
-                await updateBooking.mutateAsync({ id: booking.id, data: { currentStep: 3 } });
-                queryClient.invalidateQueries({ queryKey: ["booking"] });
-              }}
-            >
-              Back
-            </Button>
-            <Button
-              size="lg"
-              className="px-10 h-14 text-lg bg-primary hover:bg-primary/90 text-white border-none"
-              onClick={() =>
-                paymentMethod === "invoice"
-                  ? document
-                      .getElementById("invoice-form")
-                      ?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }))
-                  : onSubmit()
-              }
-              disabled={isProcessing}
-            >
-              {isProcessing
-                ? "Processing..."
-                : paymentMethod === "card"
-                  ? "Proceed to Checkout"
-                  : "Complete Registration"}
-            </Button>
-          </div>
-          <SaveAndReturnButton onSave={savePaymentProgress} disabled={isProcessing} />
-        </div>
-      </div>
-
-      <div className="w-full md:w-[380px] shrink-0 space-y-6">
-        <div className="bg-muted p-6">
-          <h3 className="text-xl font-bold mb-6">Order Summary</h3>
-          {currentPricing ? (
-            <div className="space-y-4">
-              <div className="flex justify-between text-base">
-                <span>
-                  {booking.quantity} × {bookingPassLabel}
-                </span>
-                <span>£{currentPricing.baseSubtotal.toFixed(2)}</span>
-              </div>
-
-              {currentPricing.groupDiscountAmount > 0 && (
-                <div className="flex justify-between text-base text-primary font-bold">
-                  <span>Group Discount</span>
-                  <span>-£{currentPricing.groupDiscountAmount.toFixed(2)}</span>
-                </div>
-              )}
-
-              {currentPricing.promoDiscountAmount > 0 && (
-                <div className="flex justify-between text-base text-primary font-bold">
-                  <span>Promo Code</span>
-                  <span>-£{currentPricing.promoDiscountAmount.toFixed(2)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between text-base">
-                <span>Subtotal</span>
-                <span>£{currentPricing.subtotalAfterDiscounts.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-base text-muted-foreground border-b border-border pb-4">
-                <span>VAT (20%)</span>
-                <span>£{currentPricing.vatAmount.toFixed(2)}</span>
-              </div>
-
-              <div className="flex justify-between font-bold text-2xl pt-2">
-                <span>Total</span>
-                <span>£{currentPricing.total.toFixed(2)}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="animate-pulse space-y-4">
-              <div className="h-4 bg-border w-full rounded"></div>
-              <div className="h-4 bg-border w-full rounded"></div>
-              <div className="h-4 bg-border w-full rounded"></div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return null;
 }

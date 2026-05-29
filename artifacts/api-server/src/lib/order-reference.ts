@@ -9,7 +9,7 @@
  * email templates) MUST go through this module so the format only has to
  * change in one place.
  */
-export const DEFAULT_REF_PREFIX = "HRAS26";
+export const DEFAULT_REF_PREFIX = "SWP27";
 export const DEFAULT_REF_OFFSET = 6541;
 
 /**

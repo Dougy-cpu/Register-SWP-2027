@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import logoUrl from "@assets/HRAS_Logo_v02_White_BG.png";
+import logoUrl from "@assets/swp-summit-logo.png";
 import {
   LayoutDashboard,
   Users,
@@ -62,7 +62,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
       {/* Sidebar */}
       <aside className="w-64 bg-slate-950 text-white flex flex-col fixed h-full z-20">
         <div className="h-20 flex items-center px-6 border-b border-white/10 bg-black">
-          <img src={logoUrl} alt="Logo" className="h-8 brightness-0 invert" />
+          <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto bg-white" />
         </div>
         <nav className="flex-1 py-6 px-4 space-y-1">
           {navItems.map((item) => (

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { customFetch } from "@workspace/api-client-react";
 import InvoiceActions from "@/components/manage/InvoiceActions";
+import logoUrl from "@assets/swp-summit-logo.png";
 
 interface BillingResponse {
   id: number;
@@ -143,14 +144,7 @@ export default function EditBilling() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-white py-4 px-6 flex items-center justify-center">
-        <img
-          src="https://hranalyticssummit.com/wp-content/uploads/2024/11/HRAS_logo_web.svg"
-          alt="HR Analytics Summit"
-          className="h-8"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+        <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto object-contain" />
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-10">
@@ -158,11 +152,11 @@ export default function EditBilling() {
           <h1 className="text-3xl font-bold mb-2">PO Number & Billing Details</h1>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground mt-1 mb-3">
             <span className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-primary" />3 September 2026
+              <Calendar className="w-4 h-4 text-primary" />
+              Wednesday, 3 March 2027
             </span>
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-primary" />
-              155 Bishopsgate, London
+              <MapPin className="w-4 h-4 text-primary" />1 Basinghall Avenue, London
             </span>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -191,8 +185,8 @@ export default function EditBilling() {
               <p className="text-sm text-muted-foreground">
                 This booking was paid by card, so there is no invoice to update. If you need a PO
                 added to your receipt, please contact us at{" "}
-                <a href="mailto:hello@hranalyticssummit.com" className="underline">
-                  hello@hranalyticssummit.com
+                <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+                  douglas@peoplestrategyhub.com
                 </a>
                 .
               </p>
@@ -209,8 +203,8 @@ export default function EditBilling() {
                 {data.lockedMessage ||
                   "Online edits to PO and billing details are temporarily disabled as the event approaches."}{" "}
                 If you need to update your PO number or billing details, please email us at{" "}
-                <a href="mailto:hello@hranalyticssummit.com" className="underline">
-                  hello@hranalyticssummit.com
+                <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+                  douglas@peoplestrategyhub.com
                 </a>
                 .
               </p>
@@ -226,8 +220,8 @@ export default function EditBilling() {
               <p className="text-sm text-green-800">
                 Billing details and PO number can no longer be changed because the invoice is
                 already settled. If you need a PO recorded for your records, please email us at{" "}
-                <a href="mailto:hello@hranalyticssummit.com" className="underline">
-                  hello@hranalyticssummit.com
+                <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+                  douglas@peoplestrategyhub.com
                 </a>
                 .
               </p>
@@ -460,11 +454,11 @@ export default function EditBilling() {
         )}
 
         <p className="text-xs text-muted-foreground mt-8 text-center">
-          HR Analytics Summit · 3 September 2026 · 155 Bishopsgate, London
+          SWP Summit · Wednesday, 3 March 2027 · 1 Basinghall Avenue, London
           <br />
           Questions? Email{" "}
-          <a href="mailto:hello@hranalyticssummit.com" className="underline">
-            hello@hranalyticssummit.com
+          <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+            douglas@peoplestrategyhub.com
           </a>
         </p>
       </main>

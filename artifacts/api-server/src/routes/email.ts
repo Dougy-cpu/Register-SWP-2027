@@ -185,16 +185,16 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
     [updated] = await db
       .insert(eventSettingsTable)
       .values({
-        eventName: eventName || "HR Analytics Summit",
-        eventDate: eventDate || "3 September 2026",
-        eventVenue: eventVenue || "155 Bishopsgate, London",
-        eventVenuePostcode: eventVenuePostcode || "EC2M 3TQ",
+        eventName: eventName || "SWP Summit",
+        eventDate: eventDate || "Wednesday, 3 March 2027",
+        eventVenue: eventVenue || "1 Basinghall Avenue, London",
+        eventVenuePostcode: eventVenuePostcode || "EC2V 5DD",
         orgName: orgName || "People Strategy Hub Ltd",
         orgAddress: orgAddress || "London, UK",
-        orgWebsite: orgWebsite || "https://www.hranalyticssummit.com",
+        orgWebsite: orgWebsite || "https://swpsummit.com",
         logoDataUrl: logoDataUrl || null,
-        fromName: fromName || "HR Analytics Summit",
-        fromEmail: fromEmail || "noreply@hranalyticssummit.com",
+        fromName: fromName || "SWP Summit",
+        fromEmail: fromEmail || "douglas@peoplestrategyhub.com",
         attendeeChangesLocked: attendeeChangesLocked === true,
         attendeeChangesLockedMessage: attendeeChangesLockedMessage || null,
         eventStartAt: parseTs(eventStartAt) ?? null,
@@ -239,19 +239,19 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
 // created when an admin explicitly saves via PUT.
 const TEMPLATE_DEFAULTS: Record<string, { subject: string; htmlBody: string }> = {
   welcome: {
-    subject: "Welcome to HR Analytics Summit 2026!",
+    subject: "Welcome to SWP Summit 2027!",
     htmlBody:
-      "<h2>Welcome, {{firstName}}!</h2><p>We're thrilled to have you join us at the HR Analytics Summit 2026. Your booking is confirmed and we can't wait to see you there.</p><p>If you have any questions in the meantime, don't hesitate to reach out.</p><p>See you on 3 September!</p>",
+      "<h2>Welcome, {{firstName}}!</h2><p>We're thrilled to have you join us at the SWP Summit 2027. Your booking is confirmed and we can't wait to see you there.</p><p>If you have any questions in the meantime, don't hesitate to reach out.</p><p>See you on 3 March!</p>",
   },
   confirmation: {
-    subject: "Booking Confirmed — HR Analytics Summit 2026",
+    subject: "Booking Confirmed — SWP Summit 2027",
     htmlBody:
-      "<h2>Booking Confirmed, {{firstName}}!</h2><p>Thank you for registering. Your order reference is <strong>{{orderReference}}</strong>.</p><p>You have booked <strong>{{quantity}}</strong> {{passType}} pass(es). A full VAT receipt is attached to this email.</p>{{promoSummary}}<p>We look forward to seeing you at the HR Analytics Summit!</p>",
+      "<h2>Booking Confirmed, {{firstName}}!</h2><p>Thank you for registering. Your order reference is <strong>{{orderReference}}</strong>.</p><p>You have booked <strong>{{quantity}}</strong> {{passType}} pass(es). A full VAT receipt is attached to this email.</p>{{promoSummary}}<p>We look forward to seeing you at the SWP Summit!</p>",
   },
   invoice_reminder: {
-    subject: "Invoice Reminder — {{orderReference}} — HR Analytics Summit 2026",
+    subject: "Invoice Reminder — {{orderReference}} — SWP Summit 2027",
     htmlBody:
-      '<p>Dear {{recipientName}},</p><p>This is a friendly reminder that invoice <strong>{{orderReference}}</strong> for your registration to the <strong>HR Analytics Summit 2026</strong> is due on <strong>{{dueDate}}</strong>.</p><p>Please arrange payment at your earliest convenience using the bank transfer details below. A copy of the invoice PDF is attached for your reference.</p>{{payOnlineButton}}<p>If you have already arranged payment, please disregard this email. For any queries, please contact <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>',
+      '<p>Dear {{recipientName}},</p><p>This is a friendly reminder that invoice <strong>{{orderReference}}</strong> for your registration to the <strong>SWP Summit 2027</strong> is due on <strong>{{dueDate}}</strong>.</p><p>Please arrange payment at your earliest convenience using the bank transfer details below. A copy of the invoice PDF is attached for your reference.</p>{{payOnlineButton}}<p>If you have already arranged payment, please disregard this email. For any queries, please contact <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>',
   },
 };
 
@@ -373,13 +373,13 @@ async function buildSampleVars(
       <div class="price-row"><span>VAT (20%)</span><span>£39.80</span></div>
       <div class="price-total"><span>Total</span><span>£238.80</span></div>`;
 
-  const sampleManagementLink = `<div style="background:#fff8f7;border:2px solid #E74F3E;border-radius:6px;padding:20px;margin:24px 0;">
-      <p style="margin:0 0 12px;font-weight:700;color:#E74F3E;font-size:15px;">📋 Your Attendee Management Link</p>
+  const sampleManagementLink = `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;">
+      <p style="margin:0 0 12px;font-weight:700;color:#004eb9;font-size:15px;">📋 Your Attendee Management Link</p>
       <ul style="margin:0 0 12px;padding-left:20px;color:#444;line-height:1.8;">
         <li>Fill in or update any attendee details</li>
         <li>No login required — just use the secure link</li>
       </ul>
-      <p style="margin:0 0 12px;text-align:center;"><a href="#" style="display:inline-block;background:#E74F3E;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">[SAMPLE LINK — not active in preview]</a></p>
+      <p style="margin:0 0 12px;text-align:center;"><a href="#" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">[SAMPLE LINK — not active in preview]</a></p>
     </div>`;
 
   const vars: Record<string, string> =
@@ -387,28 +387,28 @@ async function buildSampleVars(
       ? {
           "{{firstName}}": toName?.split(" ")[0] || "Test",
           "{{recipientName}}": toName || "Test User",
-          "{{orderReference}}": "HRAS26-TEST-001",
-          "{{dueDate}}": "30 April 2026",
-          "{{payOnlineButton}}": `<p style="margin:24px 0;text-align:center;"><a href="#" style="display:inline-block;background:#E74F3E;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online →</a></p>`,
+          "{{orderReference}}": "SWP27-TEST-001",
+          "{{dueDate}}": "30 April 2027",
+          "{{payOnlineButton}}": `<p style="margin:24px 0;text-align:center;"><a href="#" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online →</a></p>`,
           "{{payOnlineUrl}}": "#",
         }
       : {
           "{{firstName}}": toName?.split(" ")[0] || toName || "Test",
           "{{name}}": toName || "Test User",
-          "{{orderReference}}": "HRAS26-TEST-001",
+          "{{orderReference}}": "SWP27-TEST-001",
           "{{passLabel}}": "HR Professional Pass",
           "{{passType}}": "HR Professional Pass",
           "{{quantity}}": "1",
           "{{quantityLabel}}": "pass",
           "{{attendeesTable}}": sampleAttendeesTable,
           "{{priceSummary}}": samplePriceSummary,
-          "{{eventDate}}": settings.eventDate || "Thursday, 3 September 2026",
-          "{{eventVenue}}": settings.eventVenue || "155 Bishopsgate, London",
-          "{{eventVenuePostcode}}": settings.eventVenuePostcode || "EC2M 3TQ",
+          "{{eventDate}}": settings.eventDate || "Wednesday, 3 March 2027",
+          "{{eventVenue}}": settings.eventVenue || "1 Basinghall Avenue, London",
+          "{{eventVenuePostcode}}": settings.eventVenuePostcode || "EC2V 5DD",
           "{{managementLink}}": sampleManagementLink,
           "{{invoicePaymentButton}}": "",
-          "{{poNumber}}": "PO-2026-001",
-          "{{poNumberSection}}": `<br><strong>PO Number:</strong> <span style="font-family:monospace;">PO-2026-001</span>`,
+          "{{poNumber}}": "PO-2027-001",
+          "{{poNumberSection}}": `<br><strong>PO Number:</strong> <span style="font-family:monospace;">PO-2027-001</span>`,
           "{{total}}": "£238.80",
           "{{promoCode}}": "SAVE20",
           "{{promoDiscount}}": "£20.00",
@@ -430,7 +430,7 @@ async function buildSampleVars(
   vars["{{socialIcsCalendarUrl}}"] = calPh.socialIcsCalendarUrl;
 
   const subjectVars: Record<string, string> = {
-    "{{orderReference}}": "HRAS26-TEST-001",
+    "{{orderReference}}": "SWP27-TEST-001",
     "{{recipientName}}": toName || "Test User",
     "{{firstName}}": toName?.split(" ")[0] || "Test",
   };
@@ -512,7 +512,7 @@ router.post("/email-templates/:type/preview", adminAuth, async (req, res): Promi
   if (type === "welcome") {
     vars["{{managementLink}}"] =
       vars["{{managementLink}}"] ||
-      `<div style="background:#fff8f7;border:2px solid #E74F3E;border-radius:6px;padding:20px;margin:24px 0;"><p style="margin:0;text-align:center;color:#E74F3E;font-weight:700;">[SAMPLE — Manage Attendees button appears here in real emails]</p></div>`;
+      `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;"><p style="margin:0;text-align:center;color:#004eb9;font-weight:700;">[SAMPLE — Manage Attendees button appears here in real emails]</p></div>`;
   }
 
   let personalised = String(htmlBody);

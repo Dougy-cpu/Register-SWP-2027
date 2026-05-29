@@ -1,8 +1,8 @@
-# CODEX-Register-HRAS
+# Register-SWP-2027
 
-**HR Analytics Summit 2026 — Conference Registration & Checkout System**
+**SWP Summit 2027 — Conference Registration & Checkout System**
 
-A full-stack, production-grade event registration platform built for the **HR Analytics Summit 2026** (3 September 2026, 155 Bishopsgate, London). Handles the complete attendee journey from initial pass selection through Stripe card payment or invoice checkout, attendee management, email delivery, and a comprehensive admin back-office.
+A full-stack, production-grade event registration platform built for the **SWP Summit 2027** (Wednesday, 3 March 2027, 1 Basinghall Avenue, London). Handles the complete attendee journey from initial pass selection through Stripe card payment or invoice checkout, attendee management, email delivery, and a comprehensive admin back-office.
 
 ---
 
@@ -35,7 +35,7 @@ A full-stack, production-grade event registration platform built for the **HR An
 
 ## 1. Project Overview
 
-This system manages the entire registration lifecycle for the HR Analytics Summit:
+This system manages the entire registration lifecycle for the SWP Summit:
 
 - **Public checkout** — multi-step form collecting lead/attendee details, pass selection, promo code application, and payment (card or invoice)
 - **Self-service management** — token-gated attendee management and billing edit pages (no login required)
@@ -61,7 +61,7 @@ workspace/
 │   ├── api-zod/             # Generated Zod v4 schemas from OpenAPI spec
 │   └── db/                  # Drizzle ORM schema, migrations, and DB connection
 ├── scripts/
-│   ├── sync-to-github.sh    # Pushes workspace to CODEX-Register-HRAS on GitHub
+│   ├── sync-to-github.sh    # Pushes workspace to Register-SWP-2027 on GitHub
 │   └── post-merge.sh        # Post-merge setup (runs after task-agent merges)
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json       # Shared TypeScript compiler options
@@ -126,7 +126,7 @@ Express 5 REST API. Handles all business logic, DB access, Stripe calls, email s
   - `src/lib/audit.ts` — writes to `activity_log` for every admin mutation
   - `src/lib/seed.ts` — idempotent seed: email templates, discount tiers, pass config
   - `src/lib/logger.ts` — Pino logger instance
-  - `src/lib/order-reference.ts` — `HRAS26-{6541 + bookingId}` format
+  - `src/lib/order-reference.ts` — `SWP27-{6541 + bookingId}` format
   - `src/lib/ics.ts` — RFC-5545 iCalendar file generation
   - `src/lib/schema-check.ts` — startup DB schema validation
   - `src/lib/invoice-status.ts` — stale-cache poll of Stripe invoice status
@@ -190,7 +190,7 @@ Core registration record. One row per checkout session.
 | `stripe_invoice_payment_url`      | text          |                                                                                       |
 | `stripe_invoice_status`           | text          | Cached from Stripe                                                                    |
 | `stripe_invoice_status_synced_at` | timestamptz   | Cache freshness marker                                                                |
-| `order_reference`                 | text UNIQUE   | `HRAS26-{6541+id}`                                                                    |
+| `order_reference`                 | text UNIQUE   | `SWP27-{6541+id}`                                                                     |
 | `current_step`                    | integer       | Step 1–4 (checkout progress)                                                          |
 | `billing_*`                       | text          | Full billing address fields                                                           |
 | `po_number`                       | text          | Purchase order number                                                                 |
@@ -631,7 +631,7 @@ Templates use `{{placeholder}}` syntax. Available in confirmation/welcome:
 | Variable                   | Description                                         |
 | -------------------------- | --------------------------------------------------- |
 | `{{firstName}}`            | Lead attendee first name                            |
-| `{{orderReference}}`       | `HRAS26-XXXXX`                                      |
+| `{{orderReference}}`       | `SWP27-XXXXX`                                       |
 | `{{passLabel}}`            | Human-readable pass name                            |
 | `{{quantity}}`             | Number of passes                                    |
 | `{{quantityLabel}}`        | "pass" or "passes"                                  |
@@ -923,9 +923,9 @@ Defined in `artifacts/checkout/src/tokens.css`.
 
 | Token                | Value                 |
 | -------------------- | --------------------- |
-| Primary colour       | `#E74F3E` (red)       |
-| Secondary colour     | `#F48847` (orange)    |
-| Background           | `#FCFBFA` (off-white) |
+| Primary colour       | `#004eb9` (red)       |
+| Secondary colour     | `#266cc7` (orange)    |
+| Background           | `#f0f6ff` (off-white) |
 | Heading font         | Clarkson              |
 | Body font            | Figtree               |
 | Input border-radius  | `6px` (`rounded-md`)  |
@@ -938,12 +938,12 @@ shadcn/ui components are used throughout the admin panel and checkout. Tailwind 
 ## 21. Order Reference Format
 
 ```
-HRAS26-{6541 + bookingId}
+SWP27-{6541 + bookingId}
 ```
 
-Examples: first booking → `HRAS26-6542`, second → `HRAS26-6543`, etc.
+Examples: first booking → `SWP27-6542`, second → `SWP27-6543`, etc.
 
-The offset `6541` ensures all references are 4+ digits and avoids `HRAS26-1` looking like a test booking. Generated at payment/invoice completion and stored as a unique index on `bookings.order_reference`.
+The offset `6541` ensures all references are 4+ digits and avoids `SWP27-1` looking like a test booking. Generated at payment/invoice completion and stored as a unique index on `bookings.order_reference`.
 
 ---
 
@@ -1243,10 +1243,10 @@ Additional environment reset rule: if Replit says `pnpm: command not found` or d
 const url = `${window.location.origin}/?promo=${code}`;
 
 // After
-const url = `https://register.hranalyticssummit.com/?promo=${code}`;
+const url = `https://register.swpsummit.com/?promo=${code}`;
 ```
 
-**Rule**: Any URL that is shared externally (emails, admin copy-to-clipboard helpers, QR codes) must use `https://register.hranalyticssummit.com` as the base, never `window.location.origin` or a `.replit.dev` domain. The main website redirect target remains `https://hranalyticssummit.com`.
+**Rule**: Any URL that is shared externally (emails, admin copy-to-clipboard helpers, QR codes) must use `https://register.swpsummit.com` as the base, never `window.location.origin` or a `.replit.dev` domain. The main website redirect target remains `https://swpsummit.com`.
 
 ---
 
@@ -1272,4 +1272,4 @@ const url = `https://register.hranalyticssummit.com/?promo=${code}`;
 
 ---
 
-_Built and maintained on Replit. Synced to GitHub (`Dougy-cpu/CODEX-Register-HRAS`) via manual branch + PR workflow._
+_Built and maintained on Replit. Synced to GitHub (`Dougy-cpu/Register-SWP-2027`) via manual branch + PR workflow._

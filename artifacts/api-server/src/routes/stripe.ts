@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+﻿import { Router, type IRouter } from "express";
 import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -19,21 +19,21 @@ import { defaultOrderRef } from "../lib/order-reference";
 import { getStripe } from "../lib/stripe-client";
 
 const DECLINE_CODE_LABELS: Record<string, string> = {
-  authentication_required: "Strong customer authentication required — please retry your payment",
+  authentication_required: "Strong customer authentication required â€” please retry your payment",
   card_declined: "Card declined by your bank",
-  do_not_honor: "Card declined — please contact your bank",
+  do_not_honor: "Card declined â€” please contact your bank",
   expired_card: "Card has expired",
-  fraudulent: "Suspected fraudulent activity — please contact your bank",
+  fraudulent: "Suspected fraudulent activity â€” please contact your bank",
   generic_decline: "Card declined",
   incorrect_cvc: "Incorrect security code (CVC)",
   insufficient_funds: "Insufficient funds",
   invalid_account: "Invalid account",
-  lost_card: "Card reported lost — please contact your bank",
-  new_account_information_available: "Card details have changed — please use your updated card",
-  no_action_taken: "Card declined — no action taken by bank",
+  lost_card: "Card reported lost â€” please contact your bank",
+  new_account_information_available: "Card details have changed â€” please use your updated card",
+  no_action_taken: "Card declined â€” no action taken by bank",
   not_permitted: "This card type is not permitted for this transaction",
   restricted_card: "Card is restricted",
-  stolen_card: "Card reported stolen — please contact your bank",
+  stolen_card: "Card reported stolen â€” please contact your bank",
   transaction_not_allowed: "Transaction not allowed on this card",
 };
 
@@ -55,7 +55,7 @@ const router: IRouter = Router();
  *
  * Idempotency:
  *  - The status flip is performed by `claimBookingConfirmation`, a single
- *    conditional UPDATE that only flips a non-paid row → paid. Concurrent
+ *    conditional UPDATE that only flips a non-paid row â†’ paid. Concurrent
  *    webhook deliveries lose the race silently.
  *  - Side-effects are routed through `runConfirmationSideEffects`, which
  *    uses per-flag atomic claims so each side-effect runs at most once
@@ -83,7 +83,7 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  // Cache the latest Stripe status no matter what — even if we already processed,
+  // Cache the latest Stripe status no matter what â€” even if we already processed,
   // a fresh sync is cheap and keeps the badge accurate.
   await db
     .update(bookingsTable)
@@ -101,7 +101,7 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
         ? (rawPaymentIntent as { id: string }).id
         : null;
 
-  // Atomic claim. We allow the flip from "invoiced" → "paid" (the typical
+  // Atomic claim. We allow the flip from "invoiced" â†’ "paid" (the typical
   // happy path: invoice issued, then customer pays the hosted Stripe link)
   // as well as from partial/pending_payment in case the invoice flow skipped
   // those intermediates. paymentMethod stays "invoice" so invoice-specific
@@ -125,14 +125,14 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
         paymentIntentId,
         eventType: event.type,
       },
-      "invoice paid: booking claimed → paid, running side-effects",
+      "invoice paid: booking claimed â†’ paid, running side-effects",
     );
   } else {
-    // Already paid — fall through to side-effect retry so a stuck flag from
+    // Already paid â€” fall through to side-effect retry so a stuck flag from
     // a previous webhook delivery (e.g. SMTP blip) gets a fresh chance.
     logger.info(
       { bookingId: booking.id, invoiceId, eventType: event.type },
-      "invoice paid: already confirmed — retrying any unfinished side-effects",
+      "invoice paid: already confirmed â€” retrying any unfinished side-effects",
     );
   }
 
@@ -187,7 +187,7 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
   const ownsBooking =
     sessionHeader && booking.sessionToken && sessionHeader === booking.sessionToken;
   if (!ownsBooking) {
-    res.status(403).json({ error: "Forbidden — invalid booking session" });
+    res.status(403).json({ error: "Forbidden â€” invalid booking session" });
     return;
   }
 
@@ -199,9 +199,9 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
   }
 
   const passLabels: Record<string, string> = {
-    single: "Single Pass — HR Analytics Summit 2026",
-    team: "Team Pass (3 Seats) — HR Analytics Summit 2026",
-    business: "Business Pass — HR Analytics Summit 2026",
+    single: "HR Professional Pass â€” SWP Summit 2027",
+    team: "Team Pass (3 Seats) â€” SWP Summit 2027",
+    business: "Business Pass â€” SWP Summit 2027",
   };
 
   const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
@@ -213,7 +213,7 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
         currency: "gbp",
         product_data: {
           name: passLabels[booking.passType] || booking.passType,
-          description: `3 September 2026 · 155 Bishopsgate, London · ${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}`,
+          description: `Wednesday, 3 March 2027 Â· 1 Basinghall Avenue, London Â· ${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}`,
         },
         unit_amount: Math.round(subtotalAfterDiscounts * 100),
       },
@@ -276,11 +276,11 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     if (webhookSecret && sig) {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } else if (process.env.NODE_ENV === "production") {
-      logger.error("STRIPE_WEBHOOK_SECRET is not set in production — rejecting webhook");
-      res.status(400).json({ error: "Webhook not configured — set STRIPE_WEBHOOK_SECRET" });
+      logger.error("STRIPE_WEBHOOK_SECRET is not set in production â€” rejecting webhook");
+      res.status(400).json({ error: "Webhook not configured â€” set STRIPE_WEBHOOK_SECRET" });
       return;
     } else {
-      logger.warn("STRIPE_WEBHOOK_SECRET not set — accepting without verification (dev only)");
+      logger.warn("STRIPE_WEBHOOK_SECRET not set â€” accepting without verification (dev only)");
       const raw = Buffer.isBuffer(req.body) ? req.body.toString() : req.body;
       event = (typeof raw === "string" ? JSON.parse(raw) : raw) as Stripe.Event;
     }
@@ -309,7 +309,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
       const orderRef = existing.orderReference || defaultOrderRef(bookingId);
 
       // Atomic claim: only the first webhook delivery (or the racing
-      // /confirm-card-payment caller) actually flips status → paid; concurrent
+      // /confirm-card-payment caller) actually flips status â†’ paid; concurrent
       // duplicate events get back null and skip straight to side-effect retry.
       const claimed = await claimBookingConfirmation(bookingId, "paid", {
         currentStep: 5,
@@ -320,7 +320,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
 
       if (claimed) {
         // Bump the promo counter ONCE, only on the path that actually flipped
-        // the status — preserves the previous "atomic with the status flip"
+        // the status â€” preserves the previous "atomic with the status flip"
         // intent (Task #59) and prevents double-increment on webhook replays.
         if (existing.promoCode) {
           try {
@@ -328,7 +328,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
             if (!reserved) {
               logger.warn(
                 { bookingId, promoCode: existing.promoCode, quantity: existing.quantity },
-                "Promo cap exceeded after successful card payment — booking confirmed but usage not incremented",
+                "Promo cap exceeded after successful card payment â€” booking confirmed but usage not incremented",
               );
             }
           } catch (err) {
@@ -338,7 +338,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
       } else {
         logger.info(
           { bookingId, status: existing.status },
-          "checkout.session.completed: already confirmed — retrying any unfinished side-effects",
+          "checkout.session.completed: already confirmed â€” retrying any unfinished side-effects",
         );
       }
 
@@ -349,7 +349,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
   // When someone pays a Stripe invoice (e.g. via the hosted payment link), automatically
   // flip the booking status to "paid" and send the same confirmation + welcome emails the
   // card flow does. Both `invoice.paid` and `invoice.payment_succeeded` are wired here for
-  // resilience — Stripe sends both in quick succession and webhooks can be retried, so the
+  // resilience â€” Stripe sends both in quick succession and webhooks can be retried, so the
   // handler must be fully idempotent (gated by paidConfirmationEmailSentAt).
   if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
     await handleInvoicePaidEvent(event);
@@ -390,7 +390,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // Stripe gives up trying to collect — cache the status so the UI badge reflects it.
+  // Stripe gives up trying to collect â€” cache the status so the UI badge reflects it.
   // We leave the booking in `invoiced` so the organiser can decide whether to chase or
   // cancel manually.
   if (event.type === "invoice.marked_uncollectible") {
@@ -416,7 +416,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // Stripe Checkout session expired without payment — reset booking to "partial" so
+  // Stripe Checkout session expired without payment â€” reset booking to "partial" so
   // the customer can retry, and email them to let them know.
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -448,7 +448,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // A charge was refunded — mark the booking as refunded and email the customer, but only for full refunds.
+  // A charge was refunded â€” mark the booking as refunded and email the customer, but only for full refunds.
   if (event.type === "charge.refunded") {
     const charge = event.data.object as Stripe.Charge;
     const paymentIntentId =
@@ -469,7 +469,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
             amountRefunded: charge.amount_refunded,
             total: charge.amount,
           },
-          "charge.refunded: partial refund — booking status unchanged",
+          "charge.refunded: partial refund â€” booking status unchanged",
         );
       } else if (booking && isFullRefund && booking.status !== "refunded") {
         await db
@@ -479,7 +479,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
 
         logger.info(
           { bookingId: booking.id, paymentIntentId, amountRefunded: charge.amount_refunded },
-          "charge.refunded: full refund — booking marked refunded",
+          "charge.refunded: full refund â€” booking marked refunded",
         );
 
         try {
@@ -503,7 +503,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // Stripe invoice payment attempt failed — email the customer with the specific decline reason.
+  // Stripe invoice payment attempt failed â€” email the customer with the specific decline reason.
   if (event.type === "invoice.payment_failed") {
     const stripe = getStripe();
     const invoice = event.data.object as Stripe.Invoice;
@@ -554,12 +554,12 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // A payment dispute (chargeback) has been filed — mark booking disputed and alert organisers urgently.
+  // A payment dispute (chargeback) has been filed â€” mark booking disputed and alert organisers urgently.
   if (event.type === "charge.dispute.created") {
     const stripe = getStripe();
     const dispute = event.data.object as Stripe.Dispute;
 
-    // Resolve the payment intent ID — try the dispute object first, fall back to retrieving the charge
+    // Resolve the payment intent ID â€” try the dispute object first, fall back to retrieving the charge
     let piId = typeof dispute.payment_intent === "string" ? dispute.payment_intent : null;
     if (!piId && stripe) {
       const chargeId = typeof dispute.charge === "string" ? dispute.charge : null;
@@ -624,7 +624,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // A card payment attempt failed during Stripe Checkout — log the decline code for admin visibility.
+  // A card payment attempt failed during Stripe Checkout â€” log the decline code for admin visibility.
   // No status change; Stripe Checkout handles retries inline so no customer email is sent here.
   if (event.type === "payment_intent.payment_failed") {
     const pi = event.data.object as Stripe.PaymentIntent;
@@ -673,14 +673,14 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
   const ownsBooking =
     sessionHeader && existing.sessionToken && sessionHeader === existing.sessionToken;
   if (!ownsBooking) {
-    res.status(403).json({ error: "Forbidden — invalid booking session" });
+    res.status(403).json({ error: "Forbidden â€” invalid booking session" });
     return;
   }
 
   if (existing.status === "paid" || existing.status === "invoiced") {
     logger.info(
       { bookingId: id, status: existing.status },
-      "confirm-card-payment: already processed — retrying any unfinished side-effects",
+      "confirm-card-payment: already processed â€” retrying any unfinished side-effects",
     );
     // Replay safety: if a previous confirm/webhook left a side-effect stuck
     // (e.g. SMTP blip), running it again is the customer's only way to
@@ -721,7 +721,7 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
 
     const orderRef = existing.orderReference || defaultOrderRef(id);
 
-    // Atomic claim of the status flip — same primitive as the webhook path so
+    // Atomic claim of the status flip â€” same primitive as the webhook path so
     // a race between the browser and the webhook can never double-confirm.
     const claimed = await claimBookingConfirmation(id, "paid", {
       currentStep: 5,
@@ -737,7 +737,7 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
           if (!reserved) {
             logger.warn(
               { bookingId: id, promoCode: existing.promoCode, quantity: existing.quantity },
-              "Promo cap exceeded after successful card payment — booking confirmed but usage not incremented",
+              "Promo cap exceeded after successful card payment â€” booking confirmed but usage not incremented",
             );
           }
         } catch (err) {
@@ -749,12 +749,12 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
       }
       logger.info(
         { bookingId: id, orderRef },
-        "confirm-card-payment: booking confirmed — running side-effects",
+        "confirm-card-payment: booking confirmed â€” running side-effects",
       );
     } else {
       logger.info(
         { bookingId: id, orderRef },
-        "confirm-card-payment: webhook beat us — retrying any unfinished side-effects",
+        "confirm-card-payment: webhook beat us â€” retrying any unfinished side-effects",
       );
     }
 
@@ -793,7 +793,7 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
   const ownsBooking =
     sessionHeader && booking.sessionToken && sessionHeader === booking.sessionToken;
   if (!ownsBooking) {
-    res.status(403).json({ error: "Forbidden — invalid booking session" });
+    res.status(403).json({ error: "Forbidden â€” invalid booking session" });
     return;
   }
 
@@ -828,7 +828,7 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
   try {
     // Delegate the customer-sync + invoice-create + finalize + send to the
     // shared helper so the create and re-issue flows can never drift apart.
-    // The helper performs ONLY external Stripe ops — the resulting booking-row
+    // The helper performs ONLY external Stripe ops â€” the resulting booking-row
     // writes are applied below inside a transaction so they commit atomically
     // with the promo counter increment.
     const result = await reissueBookingInvoice(stripe, id);
@@ -864,10 +864,10 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
       if (booking.promoCode) {
         const reserved = await incrementPromoUsage(booking.promoCode, booking.quantity, tx);
         if (!reserved) {
-          // The Stripe invoice has already been issued — log but do not throw.
+          // The Stripe invoice has already been issued â€” log but do not throw.
           logger.warn(
             { bookingId: id, promoCode: booking.promoCode, quantity: booking.quantity },
-            "Promo cap exceeded after Stripe invoice issued — booking confirmed but usage not incremented",
+            "Promo cap exceeded after Stripe invoice issued â€” booking confirmed but usage not incremented",
           );
         }
       }

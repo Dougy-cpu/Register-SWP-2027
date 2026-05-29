@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useListDiscountTiers, useUpdateDiscountTiers } from "@workspace/api-client-react";
 
 type TierDraft = {
@@ -169,7 +169,7 @@ export default function AdminDiscountTiers() {
             value="single"
             className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-full px-8 rounded-none"
           >
-            Single Pass
+            HR Professional Pass
           </TabsTrigger>
           <TabsTrigger
             value="business"

@@ -1,4 +1,4 @@
-import PDFDocument from "pdfkit";
+﻿import PDFDocument from "pdfkit";
 import { PASS_PRICES } from "./pricing";
 
 interface BookingForPdf {
@@ -37,9 +37,9 @@ interface AttendeeForPdf {
 }
 
 const passLabels: Record<string, string> = {
-  single: "Single Pass — HR Analytics Summit",
-  team: "Team Pass (3 Seats) — HR Analytics Summit",
-  business: "Business Pass — HR Analytics Summit",
+  single: "HR Professional Pass â€” SWP Summit",
+  team: "Team Pass (3 Seats) â€” SWP Summit",
+  business: "Business Pass â€” SWP Summit",
 };
 
 export function generatePdfReceipt(
@@ -54,7 +54,7 @@ export function generatePdfReceipt(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const formatCurrency = (n: number) => `£${n.toFixed(2)}`;
+    const formatCurrency = (n: number) => `Â£${n.toFixed(2)}`;
 
     const lead = attendees.find((a) => a.isLead) || attendees[0];
     const dateStr = new Date().toLocaleDateString("en-GB", {
@@ -79,16 +79,16 @@ export function generatePdfReceipt(
     const displayQty = isBundlePass ? 1 : booking.quantity;
     const displayUnitPrice = baseAmount / Math.max(displayQty, 1);
 
-    doc.fontSize(22).fillColor("#E74F3E").text("HR Analytics Summit", { align: "left" });
+    doc.fontSize(22).fillColor("#004eb9").text("SWP Summit", { align: "left" });
 
     doc
       .fontSize(11)
       .fillColor("#666")
-      .text("3 September 2026 · 155 Bishopsgate, London EC2M 3TQ", { align: "left" });
+      .text("Wednesday, 3 March 2027 Â· 1 Basinghall Avenue, London EC2V 5DD", { align: "left" });
 
     doc.moveDown(0.5);
 
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#E74F3E").lineWidth(2).stroke();
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#004eb9").lineWidth(2).stroke();
 
     doc.moveDown(1);
 
@@ -189,7 +189,7 @@ export function generatePdfReceipt(
 
     rowY += 10;
 
-    // Subtotal (excl. VAT) = subtotalAfterDiscounts — discounts already subtracted above.
+    // Subtotal (excl. VAT) = subtotalAfterDiscounts â€” discounts already subtracted above.
     doc
       .fontSize(11)
       .fillColor("#333")
@@ -255,12 +255,9 @@ export function generatePdfReceipt(
 
     rowY += 20;
     doc.fillColor("#888");
-    doc.text(
-      "HR Analytics Summit · 155 Bishopsgate, London EC2M 3TQ · hranalyticssummit.com",
-      50,
-      rowY,
-      { align: "center" },
-    );
+    doc.text("SWP Summit Â· 1 Basinghall Avenue, London EC2V 5DD Â· swpsummit.com", 50, rowY, {
+      align: "center",
+    });
 
     doc.end();
   });

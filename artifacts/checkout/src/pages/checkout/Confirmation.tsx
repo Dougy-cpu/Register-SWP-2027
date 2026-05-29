@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { CheckCircle2, FileText, Calendar, MapPin, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { BookingWithAttendees } from "@/types/booking";
@@ -25,9 +25,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
 
       <div>
         <h1 className="text-4xl md:text-5xl font-bold mb-4">You're registered!</h1>
-        <p className="text-xl text-muted-foreground">
-          We can't wait to see you at the HR Analytics Summit.
-        </p>
+        <p className="text-xl text-muted-foreground">We can't wait to see you at the SWP Summit.</p>
       </div>
 
       <div className="bg-white p-8 border border-border text-left mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 relative overflow-hidden">
@@ -50,11 +48,11 @@ export default function Confirmation({ booking }: ConfirmationProps) {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <Calendar className="w-5 h-5 text-primary" />
-                <span className="font-medium">3 September 2026</span>
+                <span className="font-medium">Wednesday, 3 March 2027</span>
               </div>
               <div className="flex items-center gap-3">
                 <MapPin className="w-5 h-5 text-primary" />
-                <span className="font-medium">155 Bishopsgate, London</span>
+                <span className="font-medium">1 Basinghall Avenue, London</span>
               </div>
             </div>
           </div>
@@ -85,7 +83,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
                     >
-                      Pay online →
+                      Pay online â†’
                     </a>
                   )}
                   {booking.managementToken && (
@@ -95,8 +93,8 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                         className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
                       >
                         {booking.poNumber
-                          ? "Update PO / billing details →"
-                          : "Add a PO number or update billing →"}
+                          ? "Update PO / billing details â†’"
+                          : "Add a PO number or update billing â†’"}
                       </a>
                     </p>
                   )}
@@ -113,10 +111,10 @@ export default function Confirmation({ booking }: ConfirmationProps) {
             </h3>
             <div className="flex justify-between items-end border-b border-border pb-2 mb-2">
               <span className="font-bold text-lg">
-                {booking.quantity} ×{" "}
-                {booking.passType === "single" ? "Single Pass" : "Business Pass"}
+                {booking.quantity} Ã—{" "}
+                {booking.passType === "single" ? "HR Professional Pass" : "Business Pass"}
               </span>
-              <span className="font-bold text-lg">£{booking.totalAmount.toFixed(2)}</span>
+              <span className="font-bold text-lg">Â£{booking.totalAmount.toFixed(2)}</span>
             </div>
           </div>
 
@@ -157,14 +155,14 @@ export default function Confirmation({ booking }: ConfirmationProps) {
             <div>
               <h4 className="font-bold mb-1">Need to update attendee details?</h4>
               <p className="text-sm text-muted-foreground mb-3">
-                You can add or update attendee names and contact information at any time — including
-                TBC slots. This link is also included in your confirmation email.
+                You can add or update attendee names and contact information at any time â€”
+                including TBC slots. This link is also included in your confirmation email.
               </p>
               <a
                 href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage/${booking.managementToken}`}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
               >
-                Manage attendees →
+                Manage attendees â†’
               </a>
             </div>
           </div>
@@ -178,7 +176,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
         <Button
           size="lg"
           className="px-10 h-14 text-lg bg-primary hover:bg-primary/90 text-white"
-          onClick={() => (window.location.href = "https://hranalyticssummit.com")}
+          onClick={() => (window.location.href = "https://swpsummit.com")}
         >
           Return to Website
         </Button>
@@ -207,7 +205,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
               window.location.href = "/";
             }}
           >
-            ↺ Start new test registration
+            â†º Start new test registration
           </Button>
         </div>
       )}

@@ -59,6 +59,11 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    color: var(--swp-text-dark) !important;
+    background:
+      radial-gradient(circle at top left, rgba(0, 78, 185, 0.08), transparent 34rem),
+      radial-gradient(circle at bottom right, rgba(38, 108, 199, 0.07), transparent 36rem),
+      hsl(var(--background));
   }
   h1,
   h2,
@@ -67,19 +72,125 @@
   h5,
   h6 {
     @apply font-display tracking-tight;
+    color: var(--swp-text-dark) !important;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
   }
 }
 
-/* Custom styles for pill buttons but sharp inputs */
 @layer components {
-  button,
-  [role="button"] {
-    @apply rounded-[300px];
-  }
   input,
   select,
   textarea {
-    @apply rounded-none bg-white border-border text-foreground;
+    @apply rounded-md bg-white border-border text-foreground;
+  }
+
+  .swp-card {
+    border: 1px solid var(--swp-border);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 10px 30px rgba(0, 78, 185, 0.04);
+  }
+
+  .swp-grid-bg {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .swp-grid-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(var(--swp-blue) 1.5px, transparent 1.5px);
+    background-size: 30px 30px;
+    opacity: 0.04;
+  }
+
+  .swp-primary-btn,
+  .swp-secondary-btn {
+    position: relative;
+    min-width: 260px;
+    min-height: 56px;
+    overflow: hidden;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  .swp-primary-btn {
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, var(--swp-blue), var(--swp-blue-light));
+    box-shadow: 0 4px 15px rgba(0, 78, 185, 0.25);
+  }
+
+  .swp-secondary-btn {
+    color: var(--swp-blue) !important;
+    border: 2px solid var(--swp-blue);
+    background: transparent;
+  }
+
+  .swp-primary-btn::before,
+  .swp-secondary-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -100%;
+    width: 55%;
+    transform: skewX(-25deg);
+    transition: all 0.6s ease;
+  }
+
+  .swp-primary-btn::before {
+    background: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  .swp-secondary-btn::before {
+    background: linear-gradient(
+      to right,
+      rgba(0, 78, 185, 0) 0%,
+      rgba(0, 78, 185, 0.1) 50%,
+      rgba(0, 78, 185, 0) 100%
+    );
+  }
+
+  .swp-primary-btn:hover,
+  .swp-secondary-btn:hover {
+    transform: translateY(-3px) scale(1.02);
+  }
+
+  .swp-primary-btn:hover {
+    box-shadow:
+      0 12px 30px rgba(0, 78, 185, 0.5),
+      0 4px 10px rgba(0, 78, 185, 0.3);
+  }
+
+  .swp-secondary-btn:hover {
+    border-color: var(--swp-blue-light);
+    background: var(--swp-blue-wash);
+    box-shadow: 0 8px 25px rgba(0, 78, 185, 0.15);
+  }
+
+  .swp-primary-btn:hover::before,
+  .swp-secondary-btn:hover::before {
+    left: 150%;
+  }
+
+  .swp-btn-arrow {
+    transition: transform 0.3s ease;
+  }
+
+  .swp-primary-btn:hover .swp-btn-arrow,
+  .swp-secondary-btn:hover .swp-btn-arrow {
+    transform: translateX(4px);
   }
 }
 
@@ -108,11 +219,11 @@
 .badge-shine {
   background: linear-gradient(
     90deg,
-    hsl(43, 74%, 49%) 0%,
-    hsl(43, 90%, 72%) 30%,
-    hsl(43, 74%, 49%) 50%,
-    hsl(43, 90%, 72%) 80%,
-    hsl(43, 74%, 49%) 100%
+    hsl(215, 100%, 36%) 0%,
+    hsl(215, 68%, 62%) 30%,
+    hsl(215, 100%, 36%) 50%,
+    hsl(215, 68%, 62%) 80%,
+    hsl(215, 100%, 36%) 100%
   );
   background-size: 200% auto;
   animation: shine 3s ease-in-out infinite;

@@ -62,13 +62,13 @@ How can I pay?
 - BACS / wire transfer to the bank account printed at the bottom of the invoice (please quote your booking reference).
 
 Where do I send remittance advice?
-Email remittance to accounts@hranalyticssummit.com so we can match your payment quickly.
+Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
 
 Need a PO number on the invoice?
 You can add or update a PO number — and edit any billing field — at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
 
 Questions?
-Email accounts@hranalyticssummit.com and we'll come back to you within one working day.`;
+Email douglas@peoplestrategyhub.com and we'll come back to you within one working day.`;
 
 // Compute a timezone's UTC offset (in minutes) for a given UTC instant.
 // Uses Intl.DateTimeFormat to render the moment in the target tz then diff.
@@ -141,7 +141,7 @@ function tzWallClockToIso(value: string, tz: string): string | null {
 }
 
 const DEFAULT_LOCKED_MESSAGE =
-  "Attendee changes are now closed. If you need to make a change, please contact us at events@hranalyticssummit.com";
+  "Attendee changes are now closed. If you need to make a change, please contact us at douglas@peoplestrategyhub.com";
 
 function adminFetch(path: string, init?: RequestInit) {
   const token = localStorage.getItem("admin_token") || "";
@@ -187,18 +187,18 @@ export default function AdminSettings() {
   const [lockError, setLockError] = useState("");
 
   const [form, setForm] = useState<EventSettings>({
-    eventName: "HR Analytics Summit",
-    eventDate: "3 September 2026",
-    eventVenue: "155 Bishopsgate, London",
-    eventVenuePostcode: "EC2M 3TQ",
+    eventName: "SWP Summit",
+    eventDate: "Wednesday, 3 March 2027",
+    eventVenue: "1 Basinghall Avenue, London",
+    eventVenuePostcode: "EC2V 5DD",
     orgName: "Dynamic Business Leaders Limited",
     orgAddress: "London, UK",
-    orgWebsite: "https://www.hranalyticssummit.com",
-    fromName: "HR Analytics Summit",
-    fromEmail: "noreply@hranalyticssummit.com",
+    orgWebsite: "https://swpsummit.com",
+    fromName: "SWP Summit",
+    fromEmail: "douglas@peoplestrategyhub.com",
     attendeeChangesLocked: false,
     attendeeChangesLockedMessage: null,
-    refPrefix: "HRAS26",
+    refPrefix: "SWP27",
     refOffset: 6541,
     eventStartAt: null,
     eventEndAt: null,
@@ -279,7 +279,7 @@ export default function AdminSettings() {
             fromEmail: data.fromEmail,
             attendeeChangesLocked: lockState.locked,
             attendeeChangesLockedMessage: lockState.message,
-            refPrefix: data.refPrefix ?? "HRAS26",
+            refPrefix: data.refPrefix ?? "SWP27",
             refOffset: data.refOffset ?? 6541,
             eventStartAt: data.eventStartAt ?? null,
             eventEndAt: data.eventEndAt ?? null,
@@ -1093,11 +1093,11 @@ export default function AdminSettings() {
                   <Input
                     value={form.refPrefix}
                     onChange={(e) => setForm((f) => ({ ...f, refPrefix: e.target.value }))}
-                    placeholder="HRAS26"
+                    placeholder="SWP27"
                     className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    e.g. HRAS27 for next year's event
+                    e.g. SWP27 for next year's event
                   </p>
                 </div>
                 <div>
@@ -1180,7 +1180,7 @@ export default function AdminSettings() {
                     {
                       key: "STRIPE_WEBHOOK_SECRET",
                       description:
-                        "Webhook signing secret from the Stripe Dashboard → Webhooks endpoint. Must point to https://register.hranalyticssummit.com/api/stripe/webhook.",
+                        "Webhook signing secret from the Stripe Dashboard → Webhooks endpoint. Must point to https://register.swpsummit.com/api/stripe/webhook.",
                       required: true,
                     },
                     {
@@ -1401,13 +1401,13 @@ export default function AdminSettings() {
           <div className="bg-white border border-border">
             <div className="px-6 py-4 border-b border-border flex items-center gap-3">
               <Globe className="w-5 h-5 text-primary" />
-              <h2 className="font-bold text-base">Domain Setup — register.hranalyticssummit.com</h2>
+              <h2 className="font-bold text-base">Domain Setup — register.swpsummit.com</h2>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-muted-foreground">
-                To make this app live at <strong>register.hranalyticssummit.com</strong>, add a
-                single DNS record in your Squarespace domain settings. No changes are needed to your
-                main Squarespace website.
+                To make this app live at <strong>register.swpsummit.com</strong>, add a single DNS
+                record in your Squarespace domain settings. No changes are needed to your main
+                Squarespace website.
               </p>
 
               <div className="bg-amber-50 border border-amber-200 rounded p-4">
@@ -1420,8 +1420,8 @@ export default function AdminSettings() {
                     <strong>Settings → Domains</strong>.
                   </li>
                   <li>
-                    Click on <strong>hranalyticssummit.com</strong>, then open{" "}
-                    <strong>DNS Settings</strong>.
+                    Click on <strong>swpsummit.com</strong>, then open <strong>DNS Settings</strong>
+                    .
                   </li>
                   <li>
                     Click <strong>Add Record</strong> and choose <strong>CNAME</strong>.
@@ -1463,7 +1463,7 @@ export default function AdminSettings() {
               <p className="text-xs text-muted-foreground">
                 DNS propagation typically takes a few minutes on Squarespace, but may take up to 24
                 hours in rare cases. Once propagated, the app will be live at{" "}
-                <strong>https://register.hranalyticssummit.com</strong> with a valid SSL certificate
+                <strong>https://register.swpsummit.com</strong> with a valid SSL certificate
                 provided automatically by Replit.
               </p>
 
@@ -1484,7 +1484,7 @@ export default function AdminSettings() {
                   , update the endpoint URL to:
                 </p>
                 <p className="font-mono text-xs bg-white border border-border rounded px-3 py-2 select-all">
-                  https://register.hranalyticssummit.com/api/stripe/webhook
+                  https://register.swpsummit.com/api/stripe/webhook
                 </p>
                 <p className="text-muted-foreground text-xs">
                   Copy the new webhook signing secret and add it as the{" "}

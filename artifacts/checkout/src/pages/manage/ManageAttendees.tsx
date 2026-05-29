@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
 import { z } from "zod";
@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { InvoiceBadge } from "@/components/InvoiceBadge";
 import InvoiceActions from "@/components/manage/InvoiceActions";
 import type { Attendee, BookingWithAttendees } from "@/types/booking";
+import logoUrl from "@assets/swp-summit-logo.png";
 
 const attendeeSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -144,7 +145,7 @@ function AttendeeCard({
             ) : attendee.isTbc ? (
               <>
                 <p className="font-bold text-amber-700">
-                  Attendee {attendee.seatIndex} — Details Needed
+                  Attendee {attendee.seatIndex} â€” Details Needed
                 </p>
                 <p className="text-xs text-amber-600 font-medium">No details entered yet</p>
               </>
@@ -290,7 +291,7 @@ function AttendeeCard({
                     </a>{" "}
                     and{" "}
                     <a
-                      href="https://www.hranalyticssummit.com/terms-and-conditions"
+                      href="https://swpsummit.com/terms-and-conditions"
                       target="_blank"
                       rel="noreferrer"
                       className="underline text-primary hover:text-primary/80"
@@ -325,7 +326,7 @@ function AttendeeCard({
                 {mutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Saving…
+                    Savingâ€¦
                   </>
                 ) : (
                   "Save Attendee Details"
@@ -411,19 +412,12 @@ export default function ManageAttendees() {
   const changesLocked = booking.changesLocked ?? false;
   const lockedMessage =
     booking.lockedMessage ||
-    "Attendee changes are now closed. If you need to make a change, please contact us at events@hranalyticssummit.com";
+    "Attendee changes are now closed. If you need to make a change, please contact us at douglas@peoplestrategyhub.com";
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-white py-4 px-6 flex items-center justify-center">
-        <img
-          src="https://hranalyticssummit.com/wp-content/uploads/2024/11/HRAS_logo_web.svg"
-          alt="HR Analytics Summit"
-          className="h-8"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+        <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto object-contain" />
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-10">
@@ -431,11 +425,11 @@ export default function ManageAttendees() {
           <h1 className="text-3xl font-bold mb-2">Manage Attendees</h1>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground mt-1 mb-3">
             <span className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-primary flex-shrink-0" />3 September 2026
+              <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
+              Wednesday, 3 March 2027
             </span>
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-              155 Bishopsgate, London
+              <MapPin className="w-4 h-4 text-primary flex-shrink-0" />1 Basinghall Avenue, London
             </span>
           </div>
           <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
@@ -444,8 +438,9 @@ export default function ManageAttendees() {
               <span className="font-mono font-semibold text-foreground">
                 {booking.orderReference || "PENDING"}
               </span>
-              {" · "}
-              {booking.quantity} {booking.passType === "single" ? "Single Pass" : "Business Pass"}
+              {" Â· "}
+              {booking.quantity}{" "}
+              {booking.passType === "single" ? "HR Professional Pass" : "Business Pass"}
               {booking.quantity !== 1 ? "es" : ""}
             </span>
             {booking.paymentMethod === "invoice" && (
@@ -519,11 +514,11 @@ export default function ManageAttendees() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-8 text-center">
-          HR Analytics Summit · 3 September 2026 · 155 Bishopsgate, London
+          SWP Summit Â· Wednesday, 3 March 2027 Â· 1 Basinghall Avenue, London
           <br />
           Questions? Email{" "}
-          <a href="mailto:hello@hranalyticssummit.com" className="underline">
-            hello@hranalyticssummit.com
+          <a href="mailto:douglas@peoplestrategyhub.com" className="underline">
+            douglas@peoplestrategyhub.com
           </a>
         </p>
       </main>

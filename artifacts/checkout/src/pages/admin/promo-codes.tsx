@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -122,7 +122,7 @@ function restrictionBadges(promo: PromoCode) {
   if (promo.oncePerCustomer) items.push({ key: "once", label: "1/customer" });
   if (promo.minQuantity) items.push({ key: "min", label: `min ${promo.minQuantity}` });
   if (promo.discountType === "percentage" && promo.maxDiscountAmount) {
-    items.push({ key: "cap", label: `cap £${promo.maxDiscountAmount}` });
+    items.push({ key: "cap", label: `cap Â£${promo.maxDiscountAmount}` });
   }
   if (items.length === 0) return null;
   return (
@@ -219,8 +219,8 @@ function PromoFormDialog({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="percentage">Percentage (%)</SelectItem>
-                        <SelectItem value="fixed">Fixed Amount (£)</SelectItem>
-                        <SelectItem value="per_ticket">Per Ticket (£ per ticket)</SelectItem>
+                        <SelectItem value="fixed">Fixed Amount (Â£)</SelectItem>
+                        <SelectItem value="per_ticket">Per Ticket (Â£ per ticket)</SelectItem>
                         <SelectItem value="complimentary">Complimentary (free ticket)</SelectItem>
                       </SelectContent>
                     </Select>
@@ -292,7 +292,7 @@ function PromoFormDialog({
               name="maxDiscountAmount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Max Discount Cap (£, percentage codes only)</FormLabel>
+                  <FormLabel>Max Discount Cap (Â£, percentage codes only)</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -307,7 +307,7 @@ function PromoFormDialog({
                     />
                   </FormControl>
                   <p className="text-xs text-muted-foreground">
-                    Caps the £ saving from a percentage code. Leave blank for no cap.
+                    Caps the Â£ saving from a percentage code. Leave blank for no cap.
                   </p>
                   <FormMessage />
                 </FormItem>
@@ -325,7 +325,7 @@ function PromoFormDialog({
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between">
                     <div>
-                      <FormLabel className="font-normal">Single Pass</FormLabel>
+                      <FormLabel className="font-normal">HR Professional Pass</FormLabel>
                       <p className="text-xs text-muted-foreground">HR professional ticket</p>
                     </div>
                     <FormControl>
@@ -551,13 +551,13 @@ export default function AdminPromoCodes() {
                       {promo.discountType === "percentage" ? (
                         `${promo.discountValue}%`
                       ) : promo.discountType === "per_ticket" ? (
-                        `£${promo.discountValue}/ticket`
+                        `Â£${promo.discountValue}/ticket`
                       ) : promo.discountType === "complimentary" ? (
                         <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
                           Free ticket
                         </Badge>
                       ) : (
-                        `£${promo.discountValue}`
+                        `Â£${promo.discountValue}`
                       )}
                     </TableCell>
                     <TableCell>{passTypeBadges(promo.applicablePassTypes)}</TableCell>
@@ -574,7 +574,7 @@ export default function AdminPromoCodes() {
                           </TooltipContent>
                         </Tooltip>
                       ) : (
-                        <span className="text-xs text-muted-foreground/50">—</span>
+                        <span className="text-xs text-muted-foreground/50">â€”</span>
                       )}
                     </TableCell>
                     <TableCell>

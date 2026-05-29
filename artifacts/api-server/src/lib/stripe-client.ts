@@ -21,7 +21,7 @@ export function getStripe(): Stripe | null {
     maxNetworkRetries: 2,
     timeout: 10_000,
     appInfo: {
-      name: "hras-checkout",
+      name: "swp-summit-checkout",
       version: "1.0.0",
     },
   });

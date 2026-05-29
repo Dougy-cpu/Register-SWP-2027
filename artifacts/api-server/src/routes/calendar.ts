@@ -20,8 +20,8 @@ router.get("/calendar/main.ics", async (_req, res): Promise<void> => {
   const start = new Date(settings.eventStartAt);
   const end = new Date(settings.eventEndAt);
   const event: CalendarEvent = {
-    uid: `event-settings-${settings.id}-main@hranalyticssummit.com`,
-    title: settings.eventName || "HR Analytics Summit",
+    uid: `event-settings-${settings.id}-main@swpsummit.com`,
+    title: settings.eventName || "SWP Summit",
     description: settings.eventDescription || null,
     location: [settings.eventVenue, settings.eventVenuePostcode].filter(Boolean).join(", ") || null,
     startAt: start,
@@ -40,7 +40,7 @@ router.get("/calendar/social.ics", async (_req, res): Promise<void> => {
   const start = new Date(settings.socialStartAt);
   const end = new Date(settings.socialEndAt);
   const event: CalendarEvent = {
-    uid: `event-settings-${settings.id}-social@hranalyticssummit.com`,
+    uid: `event-settings-${settings.id}-social@swpsummit.com`,
     title: settings.socialName || "Pre-Event Social",
     description: settings.socialDescription || null,
     location: settings.socialVenue || null,

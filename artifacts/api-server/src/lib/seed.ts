@@ -1,5 +1,10 @@
 import { db } from "@workspace/db";
-import { emailTemplatesTable, discountTiersTable, passConfigTable } from "@workspace/db";
+import {
+  emailTemplatesTable,
+  discountTiersTable,
+  passConfigTable,
+  eventSettingsTable,
+} from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -12,13 +17,12 @@ export async function runMigrations() {
   }
 }
 
-const DEFAULT_CONFIRMATION_SUBJECT =
-  "Booking Confirmed — {{orderReference}} — HR Analytics Summit 2026";
+const DEFAULT_CONFIRMATION_SUBJECT = "Booking Confirmed — {{orderReference}} — SWP Summit 2027";
 
 const DEFAULT_CONFIRMATION_BODY = `
 <h2>Booking Confirmed!</h2>
 <p>Dear {{firstName}},</p>
-<p>Thank you for registering for the <strong>HR Analytics Summit 2026</strong>. Your booking is confirmed.</p>
+<p>Thank you for registering for the <strong>SWP Summit 2027</strong>. Your booking is confirmed.</p>
 
 <div class="info-box">
   <strong>Order Reference:</strong> {{orderReference}}<br>
@@ -49,17 +53,17 @@ const DEFAULT_CONFIRMATION_BODY = `
 
 <p>A PDF VAT receipt is attached to this email for your records.</p>
 {{invoicePaymentButton}}
-<p>We look forward to seeing you at the HR Analytics Summit!</p>
+<p>We look forward to seeing you at the SWP Summit!</p>
 `;
 
-const DEFAULT_WELCOME_SUBJECT = "Welcome to HR Analytics Summit 2026 — We Can't Wait to See You!";
+const DEFAULT_WELCOME_SUBJECT = "Welcome to SWP Summit 2027 — We Can't Wait to See You!";
 
 const DEFAULT_WELCOME_BODY = `
 <h2>Welcome, {{firstName}}!</h2>
 
-<p>We're absolutely thrilled to have you joining us at the <strong>HR Analytics Summit 2026</strong> — the UK's leading event for HR leaders, people analytics practitioners, and business innovators who are shaping the future of work.</p>
+<p>We're absolutely thrilled to have you joining us at the <strong>SWP Summit 2027</strong> — the UK's leading event for HR leaders, people analytics practitioners, and business innovators who are shaping the future of work.</p>
 
-<p>Here's what to look forward to on <strong>3 September 2026</strong> at <strong>155 Bishopsgate, London</strong>:</p>
+<p>Here's what to look forward to on <strong>Wednesday, 3 March 2027</strong> at <strong>1 Basinghall Avenue, London</strong>:</p>
 
 <ul>
   <li><strong>Inspiring keynotes</strong> from world-class HR and analytics leaders</li>
@@ -71,8 +75,8 @@ const DEFAULT_WELCOME_BODY = `
 
 <div class="info-box">
   <strong>Event Details</strong><br>
-  <strong>Date:</strong> Thursday, 3 September 2026<br>
-  <strong>Venue:</strong> 155 Bishopsgate, London EC2M 3TQ<br>
+  <strong>Date:</strong> Wednesday, 3 March 2027<br>
+  <strong>Venue:</strong> 1 Basinghall Avenue, London EC2V 5DD<br>
   <strong>Registration:</strong> From 8:30am<br>
   <strong>Event Opens:</strong> 9:00am
 </div>
@@ -84,12 +88,12 @@ const DEFAULT_WELCOME_BODY = `
 
 {{managementLink}}
 
-<p>If you have any questions before the event, please don't hesitate to reach out to us at <a href="mailto:info@hranalyticssummit.com">info@hranalyticssummit.com</a>.</p>
+<p>If you have any questions before the event, please don't hesitate to reach out to us at <a href="mailto:douglas@peoplestrategyhub.com">douglas@peoplestrategyhub.com</a>.</p>
 
 <p>We look forward to seeing you there!</p>
 
 <p>Warm regards,<br>
-<strong>The HR Analytics Summit Team</strong></p>
+<strong>The SWP Summit Team</strong></p>
 `;
 
 const DEFAULT_DISCOUNT_TIERS = [
@@ -110,8 +114,70 @@ const DEFAULT_DISCOUNT_TIERS = [
   },
 ];
 
+function rebrandLegacyText(value: string): string {
+  return value
+    .replaceAll("HR Analytics Summit 2026", "SWP Summit 2027")
+    .replaceAll("HR Analytics Summit", "SWP Summit")
+    .replaceAll("hranalyticssummit.com", "swpsummit.com")
+    .replaceAll("noreply@swpsummit.com", "douglas@peoplestrategyhub.com")
+    .replaceAll("info@swpsummit.com", "douglas@peoplestrategyhub.com")
+    .replaceAll("hello@swpsummit.com", "douglas@peoplestrategyhub.com")
+    .replaceAll("accounts@swpsummit.com", "douglas@peoplestrategyhub.com")
+    .replaceAll("Thursday, 3 September 2026", "Wednesday, 3 March 2027")
+    .replaceAll("3 September 2026", "Wednesday, 3 March 2027")
+    .replaceAll("3 Sep 2026", "3 Mar 2027")
+    .replaceAll("155 Bishopsgate, London EC2M 3TQ", "1 Basinghall Avenue, London EC2V 5DD")
+    .replaceAll("155 Bishopsgate, London", "1 Basinghall Avenue, London")
+    .replaceAll("EC2M 3TQ", "EC2V 5DD")
+    .replaceAll("#E74F3E", "#004eb9")
+    .replaceAll("#F48847", "#266cc7")
+    .replaceAll("#FCFBFA", "#f0f6ff")
+    .replaceAll("#DEDDDC", "#e2e8f0");
+}
+
+async function rebrandLegacyDefaults() {
+  const [settings] = await db.select().from(eventSettingsTable);
+  if (settings) {
+    const updates: Partial<typeof eventSettingsTable.$inferInsert> = {};
+    if (settings.eventName === "HR Analytics Summit") updates.eventName = "SWP Summit";
+    if (settings.eventDate === "3 September 2026") updates.eventDate = "Wednesday, 3 March 2027";
+    if (settings.eventVenue === "155 Bishopsgate, London")
+      updates.eventVenue = "1 Basinghall Avenue, London";
+    if (settings.eventVenuePostcode === "EC2M 3TQ") updates.eventVenuePostcode = "EC2V 5DD";
+    if (settings.orgWebsite === "https://www.hranalyticssummit.com")
+      updates.orgWebsite = "https://swpsummit.com";
+    if (settings.fromName === "HR Analytics Summit") updates.fromName = "SWP Summit";
+    if (settings.fromEmail === "noreply@hranalyticssummit.com")
+      updates.fromEmail = "douglas@peoplestrategyhub.com";
+    if (settings.refPrefix === "HRAS26") updates.refPrefix = "SWP27";
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(eventSettingsTable)
+        .set(updates)
+        .where(eq(eventSettingsTable.id, settings.id));
+      logger.info({ fields: Object.keys(updates) }, "Rebranded legacy event setting defaults");
+    }
+  }
+
+  const templates = await db.select().from(emailTemplatesTable);
+  for (const template of templates) {
+    const subject = rebrandLegacyText(template.subject);
+    const htmlBody = rebrandLegacyText(template.htmlBody);
+    if (subject !== template.subject || htmlBody !== template.htmlBody) {
+      await db
+        .update(emailTemplatesTable)
+        .set({ subject, htmlBody })
+        .where(eq(emailTemplatesTable.id, template.id));
+      logger.info({ type: template.type }, "Rebranded legacy email template text");
+    }
+  }
+}
+
 export async function seed() {
   try {
+    await rebrandLegacyDefaults();
+
     const existing = await db
       .select()
       .from(emailTemplatesTable)

@@ -73,7 +73,7 @@ function Toggle({
 const SUBJECT_VARS = [
   { token: "{{firstName}}", label: "First Name", desc: "Lead attendee's first name" },
   { token: "{{lastName}}", label: "Last Name", desc: "Lead attendee's last name" },
-  { token: "{{orderReference}}", label: "Order Ref", desc: "Booking reference (e.g. HRAS26-6542)" },
+  { token: "{{orderReference}}", label: "Order Ref", desc: "Booking reference (e.g. SWP27-6542)" },
   { token: "{{eventName}}", label: "Event Name", desc: "Event name from settings" },
   { token: "{{passType}}", label: "Pass Type", desc: "Pass type slug (single / business)" },
   { token: "{{quantity}}", label: "Quantity", desc: "Number of passes" },

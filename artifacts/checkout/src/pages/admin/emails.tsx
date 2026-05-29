@@ -253,7 +253,7 @@ const TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
     {
       tag: "{{orderReference}}",
       label: "Order Reference",
-      description: "Unique booking reference (e.g. HRAS26-6542)",
+      description: "Unique booking reference (e.g. SWP27-6542)",
     },
     {
       tag: "{{passLabel}}",
@@ -1057,12 +1057,12 @@ function BrandingSettings() {
           {field(
             "Event Name",
             "eventName",
-            "HR Analytics Summit",
+            "SWP Summit",
             "Appears in email subject lines and body text.",
           )}
-          {field("Event Date", "eventDate", "3 September 2026")}
-          {field("Venue", "eventVenue", "155 Bishopsgate, London")}
-          {field("Venue Postcode", "eventVenuePostcode", "EC2M 3TQ")}
+          {field("Event Date", "eventDate", "Wednesday, 3 March 2027")}
+          {field("Venue", "eventVenue", "1 Basinghall Avenue, London")}
+          {field("Venue Postcode", "eventVenuePostcode", "EC2V 5DD")}
         </div>
       </div>
 
@@ -1077,7 +1077,7 @@ function BrandingSettings() {
             "Shown in email footers.",
           )}
           {field("Organisation Address", "orgAddress", "London, UK")}
-          {field("Website URL", "orgWebsite", "https://www.hranalyticssummit.com")}
+          {field("Website URL", "orgWebsite", "https://swpsummit.com")}
         </div>
       </div>
 
@@ -1094,13 +1094,13 @@ function BrandingSettings() {
           {field(
             "Sender Name",
             "fromName",
-            "HR Analytics Summit",
+            "SWP Summit",
             'Shown as the "From" name in email clients.',
           )}
           {field(
             "Sender Email",
             "fromEmail",
-            "noreply@hranalyticssummit.com",
+            "douglas@peoplestrategyhub.com",
             "Must match your SMTP authentication.",
           )}
         </div>

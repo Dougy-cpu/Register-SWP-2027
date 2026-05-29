@@ -2,7 +2,7 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. This is the **HR Analytics Summit** conference registration checkout system (summit: 3 September 2026, 155 Bishopsgate, London).
+pnpm workspace monorepo using TypeScript. This is the **SWP Summit** conference registration checkout system (summit: Wednesday, 3 March 2027, 1 Basinghall Avenue, London).
 
 ## Stack
 
@@ -46,7 +46,7 @@ artifacts-monorepo/
 ### Checkout Frontend (`artifacts/checkout`)
 
 - React + Vite + Tailwind + shadcn/ui
-- Brand: Clarkson font headings, Figtree body; primary `#E74F3E`, secondary `#F48847`, bg `#FCFBFA`
+- Brand: Clarkson font headings, Figtree body; primary `#004eb9`, secondary `#266cc7`, bg `#f0f6ff`
 - Inputs: 0px border-radius (square); Buttons: 300px radius (pill)
 - Multi-step checkout: Step1 (Your Details) → Step2 (Pass Selection) → Step3 (Additional Attendees) → Step4 (Payment) → Confirmation
 - Admin panel: `/admin` (password-protected), sub-pages: registrations, promo-codes, discount-tiers, emails
@@ -110,7 +110,7 @@ Invoice payments use **Stripe Invoicing** (not FreeAgent):
 
 ## Order Reference Format
 
-`HRAS26-{6541 + bookingId}` — generated on payment/invoice completion
+`SWP27-{6541 + bookingId}` — generated on payment/invoice completion
 
 ## TypeScript & Composite Projects
 

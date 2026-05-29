@@ -60,7 +60,7 @@ export function buildIcs(event: CalendarEvent): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//HR Analytics Summit//Registration//EN",
+    "PRODID:-//SWP Summit//Registration//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

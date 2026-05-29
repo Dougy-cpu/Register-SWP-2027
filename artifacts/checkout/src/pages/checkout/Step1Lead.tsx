@@ -370,7 +370,7 @@ export default function Step1Lead({
                         </a>{" "}
                         and{" "}
                         <a
-                          href="https://www.hranalyticssummit.com/terms-and-conditions"
+                          href="https://swpsummit.com/terms-and-conditions"
                           target="_blank"
                           rel="noreferrer"
                           className="underline text-primary hover:text-primary/80"

@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "HR Analytics Summit Checkout"
+title = "SWP Summit Checkout"
 version = "1.0.0"
 id = "artifacts/checkout"
 router = "path"

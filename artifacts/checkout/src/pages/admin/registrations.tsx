@@ -1430,7 +1430,7 @@ export default function AdminRegistrations() {
       const a = document.createElement("a");
       a.href = url;
       const date = new Date().toISOString().split("T")[0];
-      a.download = `hras26-registrations-${date}.xlsx`;
+      a.download = `swp27-registrations-${date}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {

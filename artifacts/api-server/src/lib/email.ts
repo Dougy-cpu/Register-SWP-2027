@@ -1,4 +1,4 @@
-import https from "https";
+﻿import https from "https";
 import http from "http";
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
@@ -65,7 +65,7 @@ function getCompanyInfoPdf(): Buffer | null {
         "Company info PDF loaded for email attachments",
       );
     } else {
-      logger.warn({ assetPath }, "Company info PDF not found — will not be attached to emails");
+      logger.warn({ assetPath }, "Company info PDF not found â€” will not be attached to emails");
       _companyInfoPdf = null;
     }
   } catch (err) {
@@ -76,16 +76,16 @@ function getCompanyInfoPdf(): Buffer | null {
 }
 
 const defaultSettings: Omit<EventSettings, "id" | "updatedAt"> = {
-  eventName: "HR Analytics Summit",
-  eventDate: "3 September 2026",
-  eventVenue: "155 Bishopsgate, London",
-  eventVenuePostcode: "EC2M 3TQ",
-  orgName: "People Strategy Hub Ltd",
+  eventName: "SWP Summit",
+  eventDate: "Wednesday, 3 March 2027",
+  eventVenue: "1 Basinghall Avenue, London",
+  eventVenuePostcode: "EC2V 5DD",
+  orgName: "Dynamic Business Leaders Limited",
   orgAddress: "London, UK",
-  orgWebsite: "https://www.hranalyticssummit.com",
+  orgWebsite: "https://swpsummit.com",
   logoDataUrl: null,
-  fromName: "HR Analytics Summit",
-  fromEmail: "noreply@hranalyticssummit.com",
+  fromName: "SWP Summit",
+  fromEmail: "douglas@peoplestrategyhub.com",
   freeagentRefreshToken: null,
   freeagentAccessToken: null,
   freeagentTokenExpiresAt: null,
@@ -112,10 +112,10 @@ const defaultSettings: Omit<EventSettings, "id" | "updatedAt"> = {
 /**
  * Built-in fallback copy for the "How invoicing works" help block. Used
  * whenever an admin has not set `event_settings.invoice_help_content`. Edit
- * via Admin → Settings → Pay-by-Invoice Help.
+ * via Admin â†’ Settings â†’ Pay-by-Invoice Help.
  */
 export const DEFAULT_INVOICE_HELP_CONTENT = `When will I receive the invoice?
-We email a VAT invoice to the billing address you provide as soon as your registration is confirmed — usually within a few minutes.
+We email a VAT invoice to the billing address you provide as soon as your registration is confirmed â€” usually within a few minutes.
 
 What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
@@ -125,13 +125,13 @@ How can I pay?
 - BACS / wire transfer to the bank account printed at the bottom of the invoice (please quote your booking reference).
 
 Where do I send remittance advice?
-Email remittance to accounts@hranalyticssummit.com so we can match your payment quickly.
+Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
 
 Need a PO number on the invoice?
-You can add or update a PO number — and edit any billing field — at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
+You can add or update a PO number â€” and edit any billing field â€” at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
 
 Questions?
-Email accounts@hranalyticssummit.com and we'll come back to you within one working day.`;
+Email douglas@peoplestrategyhub.com and we'll come back to you within one working day.`;
 
 /**
  * Render plain-text invoice help into safe HTML for emails. Paragraphs are
@@ -154,7 +154,7 @@ export function renderInvoiceHelpHtml(text: string): string {
       // First line of a multi-line block is treated as a bold heading.
       if (lines.length > 1) {
         const [heading, ...rest] = lines;
-        return `<p style="margin:12px 0 4px;font-weight:600;color:#221D1B;">${escHtml(heading)}</p><p style="margin:0 0 8px;color:#444;">${escHtml(rest.join(" "))}</p>`;
+        return `<p style="margin:12px 0 4px;font-weight:600;color:#000000;">${escHtml(heading)}</p><p style="margin:0 0 8px;color:#444;">${escHtml(rest.join(" "))}</p>`;
       }
       return `<p style="margin:8px 0;color:#444;">${escHtml(lines[0])}</p>`;
     })
@@ -196,7 +196,7 @@ function createTransporter() {
   const port = parseInt(process.env.SMTP_PORT || "587");
 
   if (!host || !user || !pass) {
-    logger.warn("SMTP credentials not configured — emails will be logged but not sent");
+    logger.warn("SMTP credentials not configured â€” emails will be logged but not sent");
     return null;
   }
 
@@ -208,8 +208,8 @@ function createTransporter() {
   });
 }
 
-const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@hranalyticssummit.com";
-const FROM_NAME = process.env.FROM_NAME || "HR Analytics Summit";
+const FROM_EMAIL = process.env.FROM_EMAIL || "douglas@peoplestrategyhub.com";
+const FROM_NAME = process.env.FROM_NAME || "SWP Summit";
 
 async function logEmail(
   bookingId: number | null,
@@ -244,7 +244,7 @@ export async function sendMail(options: {
   if (!transporter) {
     logger.info(
       { to: options.to, subject: options.subject },
-      "Email not sent — SMTP not configured",
+      "Email not sent â€” SMTP not configured",
     );
     return false;
   }
@@ -294,17 +294,17 @@ export function wrapInBrandedLayout(
   const settings: BrandingSettings =
     typeof settingsOrTitle === "object" && settingsOrTitle !== null ? settingsOrTitle : {};
 
-  const eventName = settings.eventName || "HR Analytics Summit";
-  const eventDate = settings.eventDate || "3 September 2026";
-  const eventVenue = settings.eventVenue || "155 Bishopsgate, London";
-  const orgName = settings.orgName || "People Strategy Hub Ltd";
+  const eventName = settings.eventName || "SWP Summit";
+  const eventDate = settings.eventDate || "Wednesday, 3 March 2027";
+  const eventVenue = settings.eventVenue || "1 Basinghall Avenue, London";
+  const orgName = settings.orgName || "Dynamic Business Leaders Limited";
   const orgAddress = settings.orgAddress || "London, UK";
-  const orgWebsite = settings.orgWebsite || "https://www.hranalyticssummit.com";
+  const orgWebsite = settings.orgWebsite || "https://swpsummit.com";
   const logoDataUrl = settings.logoDataUrl;
 
   const headerContent = logoDataUrl
     ? `<img src="${escHtml(logoDataUrl)}" alt="${escHtml(orgName)}" width="${EMAIL_LOGO_SIZE_PX}" height="${EMAIL_LOGO_SIZE_PX}" style="display:block;width:${EMAIL_LOGO_SIZE_PX}px!important;height:${EMAIL_LOGO_SIZE_PX}px!important;max-width:${EMAIL_LOGO_SIZE_PX}px!important;max-height:${EMAIL_LOGO_SIZE_PX}px!important;margin:0 auto;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;object-fit:contain;" />`
-    : `<strong style="font-size: 20px; color: #E74F3E;">${escHtml(eventName)}</strong>`;
+    : `<strong style="font-size: 20px; color: #004eb9;">${escHtml(eventName)}</strong>`;
 
   return `
 <!DOCTYPE html>
@@ -314,33 +314,33 @@ export function wrapInBrandedLayout(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${eventName}</title>
   <style>
-    body { font-family: 'Figtree', Arial, sans-serif; background: #FCFBFA; margin: 0; padding: 0; color: #000; }
+    body { font-family: 'Figtree', Arial, sans-serif; background: #f0f6ff; margin: 0; padding: 0; color: #000; }
     .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
-    .header { background: #FCFBFA; padding: 24px 32px; border-bottom: 2px solid #E74F3E; text-align: center; }
+    .header { background: #f0f6ff; padding: 24px 32px; border-bottom: 2px solid #004eb9; text-align: center; }
     .content { padding: 32px; }
     .footer { background: #1a1a1a; color: #ccc; padding: 24px 32px; text-align: center; font-size: 13px; }
-    .footer a { color: #F48847; text-decoration: none; }
+    .footer a { color: #266cc7; text-decoration: none; }
     h1, h2, h3 { color: #000; }
-    .badge { display: inline-block; background: #F7E25E; color: #221D1B; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
-    .cta-btn { display: inline-block; background: #E74F3E; color: #fff; padding: 12px 28px; border-radius: 300px; text-decoration: none; font-weight: 600; margin: 16px 0; }
+    .badge { display: inline-block; background: #f0f6ff; color: #000000; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+    .cta-btn { display: inline-block; background: #004eb9; color: #fff; padding: 12px 28px; border-radius: 300px; text-decoration: none; font-weight: 600; margin: 16px 0; }
     .price-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
     .price-total { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 700; font-size: 18px; }
-    .info-box { background: #FCFBFA; border: 1px solid #DEDDDC; padding: 16px 20px; border-radius: 4px; margin: 16px 0; }
+    .info-box { background: #f0f6ff; border: 1px solid #e2e8f0; padding: 16px 20px; border-radius: 4px; margin: 16px 0; }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <div class="header">
       ${headerContent}
-      <div style="font-size: 13px; color: #666; margin-top: 4px;">${eventDate} · ${eventVenue}</div>
+      <div style="font-size: 13px; color: #666; margin-top: 4px;">${eventDate} Â· ${eventVenue}</div>
     </div>
     <div class="content">
       ${content}
     </div>
     <div class="footer">
-      <p>&copy; 2026 ${eventName}. All rights reserved.</p>
+      <p>&copy; 2027 ${eventName}. All rights reserved.</p>
       <p><a href="${orgWebsite}">${orgWebsite.replace(/^https?:\/\//, "")}</a></p>
-      <p style="font-size: 11px; color: #999;">${orgName} · ${orgAddress}</p>
+      <p style="font-size: 11px; color: #999;">${orgName} Â· ${orgAddress}</p>
     </div>
   </div>
 </body>
@@ -372,12 +372,12 @@ async function buildConfirmationEmailHtml(
   const attendeeRowsHtml = attendees
     .map(
       (a) => `<tr>
-      <td style="padding:8px 4px;border-bottom:1px solid #eee;">${a.isLead ? "✓ Lead" : ""}</td>
+      <td style="padding:8px 4px;border-bottom:1px solid #eee;">${a.isLead ? "âœ“ Lead" : ""}</td>
       <td style="padding:8px 4px;border-bottom:1px solid #eee;">${escHtml(a.firstName)} ${escHtml(a.lastName)}</td>
       <td style="padding:8px 4px;border-bottom:1px solid #eee;">${escHtml(a.jobTitle)}</td>
       <td style="padding:8px 4px;border-bottom:1px solid #eee;">${escHtml(a.company)}</td>
       <td style="padding:8px 4px;border-bottom:1px solid #eee;">${escHtml(a.workEmail)}</td>
-      <td style="padding:8px 4px;border-bottom:1px solid #eee;">${a.phone ? escHtml(a.phone) : "—"}</td>
+      <td style="padding:8px 4px;border-bottom:1px solid #eee;">${a.phone ? escHtml(a.phone) : "â€”"}</td>
     </tr>`,
     )
     .join("");
@@ -407,16 +407,16 @@ async function buildConfirmationEmailHtml(
   ].join("");
 
   const manageUrl = booking.managementToken
-    ? `${process.env.APP_BASE_URL || "https://register.hranalyticssummit.com"}/manage/${booking.managementToken}`
+    ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/${booking.managementToken}`
     : null;
   const managementLinkHtml = manageUrl ? buildManageLinkSection(manageUrl) : "";
 
   const billingEditUrl =
     booking.managementToken && booking.paymentMethod === "invoice"
-      ? `${process.env.APP_BASE_URL || "https://register.hranalyticssummit.com"}/manage/${booking.managementToken}/billing`
+      ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/${booking.managementToken}/billing`
       : "";
   const billingEditLinkHtml = billingEditUrl
-    ? `<p style="margin:14px 0 0;font-size:14px;"><a href="${billingEditUrl}" style="color:#E74F3E;font-weight:600;text-decoration:underline;">${booking.poNumber ? "Update PO number or billing details →" : "Add a PO number / update billing details →"}</a></p>`
+    ? `<p style="margin:14px 0 0;font-size:14px;"><a href="${billingEditUrl}" style="color:#004eb9;font-weight:600;text-decoration:underline;">${booking.poNumber ? "Update PO number or billing details â†’" : "Add a PO number / update billing details â†’"}</a></p>`
     : "";
   // Inline form: leading <br> renders as a new line both inside the info-box
   // (where neighbouring fields use <br> separators) and in the standalone
@@ -426,23 +426,23 @@ async function buildConfirmationEmailHtml(
     : "";
 
   const invoicePaymentButtonHtml = booking.stripeInvoicePaymentUrl
-    ? `<p style="margin-top:16px;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#E74F3E;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;">Download Invoice / Pay Online →</a></p>`
+    ? `<p style="margin-top:16px;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;">Download Invoice / Pay Online â†’</a></p>`
     : "";
 
-  // "How invoicing works" help block — only rendered for invoice bookings.
+  // "How invoicing works" help block â€” only rendered for invoice bookings.
   // Pulls admin-editable copy from event_settings (falls back to built-in
   // default) and renders a collapsed-style info card directly in the email.
   const invoiceHelpHtml =
     booking.paymentMethod === "invoice"
-      ? `<div style="margin:20px 0;padding:16px 20px;background:#FCFBFA;border:1px solid #DEDDDC;border-radius:6px;">
-      <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#221D1B;">How invoicing works</p>
+      ? `<div style="margin:20px 0;padding:16px 20px;background:#f0f6ff;border:1px solid #e2e8f0;border-radius:6px;">
+      <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#000000;">How invoicing works</p>
       ${renderInvoiceHelpHtml(settings.invoiceHelpContent || DEFAULT_INVOICE_HELP_CONTENT)}
     </div>`
       : "";
 
   const orderRef = booking.orderReference || `#${booking.id}`;
 
-  // Standalone promo summary block — surfaced in the email body whenever a
+  // Standalone promo summary block â€” surfaced in the email body whenever a
   // promo code reduced the total, so customers can see exactly which code was
   // applied and how much they saved without having to open the attached PDF.
   const promoSummaryHtml =
@@ -472,9 +472,9 @@ async function buildConfirmationEmailHtml(
         "{{quantityLabel}}": quantityLabel,
         "{{attendeesTable}}": attendeesTableHtml,
         "{{priceSummary}}": priceSummaryHtml,
-        "{{eventDate}}": escHtml(settings.eventDate || "Thursday, 3 September 2026"),
-        "{{eventVenue}}": escHtml(settings.eventVenue || "155 Bishopsgate, London"),
-        "{{eventVenuePostcode}}": escHtml(settings.eventVenuePostcode || "EC2M 3TQ"),
+        "{{eventDate}}": escHtml(settings.eventDate || "Wednesday, 3 March 2027"),
+        "{{eventVenue}}": escHtml(settings.eventVenue || "1 Basinghall Avenue, London"),
+        "{{eventVenuePostcode}}": escHtml(settings.eventVenuePostcode || "EC2V 5DD"),
         "{{managementLink}}": managementLinkHtml,
         "{{invoicePaymentButton}}": invoicePaymentButtonHtml,
         "{{poNumber}}": escHtml(booking.poNumber || ""),
@@ -497,7 +497,7 @@ async function buildConfirmationEmailHtml(
       vars["{{socialOutlookCalendarUrl}}"] = calPh.socialOutlookCalendarUrl;
       vars["{{socialIcsCalendarUrl}}"] = calPh.socialIcsCalendarUrl;
 
-      // Subject is a plain-text email header — must use raw values, not
+      // Subject is a plain-text email header â€” must use raw values, not
       // HTML-escaped ones, otherwise users see literal "&amp;" in their inbox.
       const subjectVars: Record<string, string> = {
         "{{firstName}}": lead.firstName,
@@ -505,9 +505,9 @@ async function buildConfirmationEmailHtml(
         "{{passLabel}}": passLabel,
         "{{quantity}}": String(booking.quantity),
         "{{quantityLabel}}": quantityLabel,
-        "{{eventDate}}": settings.eventDate || "Thursday, 3 September 2026",
-        "{{eventVenue}}": settings.eventVenue || "155 Bishopsgate, London",
-        "{{eventVenuePostcode}}": settings.eventVenuePostcode || "EC2M 3TQ",
+        "{{eventDate}}": settings.eventDate || "Wednesday, 3 March 2027",
+        "{{eventVenue}}": settings.eventVenue || "1 Basinghall Avenue, London",
+        "{{eventVenuePostcode}}": settings.eventVenuePostcode || "EC2V 5DD",
         "{{poNumber}}": booking.poNumber || "",
       };
 
@@ -523,7 +523,7 @@ async function buildConfirmationEmailHtml(
         const fallbackBlock =
           `\n<div style="margin:18px 0;padding:14px 18px;background:#fdf3f1;border:1px solid #f3c8c1;border-radius:6px;">` +
           `<p style="margin:0;font-size:14px;font-weight:600;color:#333;">Need a PO number on your invoice?</p>` +
-          `<p style="margin:6px 0 0;font-size:13px;color:#555;">Add or update your PO number and billing details from the secure self-service link below — we'll re-issue the invoice automatically.</p>` +
+          `<p style="margin:6px 0 0;font-size:13px;color:#555;">Add or update your PO number and billing details from the secure self-service link below â€” we'll re-issue the invoice automatically.</p>` +
           billingEditLinkHtml +
           `</div>`;
         const extraPo =
@@ -531,7 +531,7 @@ async function buildConfirmationEmailHtml(
             ? poNumberHtml
             : "";
         const insert = extraPo + fallbackBlock;
-        // Detect </body> presence first — `.replace()` always returns a truthy
+        // Detect </body> presence first â€” `.replace()` always returns a truthy
         // string even on no match, so `||` cannot be used as a fallback signal.
         if (/<\/body>/i.test(body)) {
           body = body.replace(/<\/body>/i, `${insert}</body>`);
@@ -581,14 +581,17 @@ async function buildConfirmationEmailHtml(
       };
     }
   } catch (err) {
-    logger.warn({ err }, "Could not load confirmation template from DB — using hardcoded fallback");
+    logger.warn(
+      { err },
+      "Could not load confirmation template from DB â€” using hardcoded fallback",
+    );
   }
 
   // Fallback: hardcoded template
   const fallbackBody = `
     <h2>Booking Confirmed!</h2>
     <p>Dear ${escHtml(lead.firstName)},</p>
-    <p>Thank you for registering for the <strong>${escHtml(settings.eventName || "HR Analytics Summit 2026")}</strong>. Your booking is confirmed.</p>
+    <p>Thank you for registering for the <strong>${escHtml(settings.eventName || "SWP Summit 2027")}</strong>. Your booking is confirmed.</p>
     <div class="info-box">
       <strong>Order Reference:</strong> ${escHtml(orderRef)}<br>
       <strong>Pass Type:</strong> ${escHtml(passLabel)}<br>
@@ -603,18 +606,18 @@ async function buildConfirmationEmailHtml(
       <strong>Venue:</strong> ${escHtml(settings.eventVenue)}, ${escHtml(settings.eventVenuePostcode)}
     </div>
     <h3 style="margin-top:28px;margin-bottom:12px;color:#000;">Update Attendee Details Anytime</h3>
-    <p style="margin:0 0 16px;color:#444;line-height:1.6;">You have a secure self-service link to manage all your attendee information. You can fill in placeholder seats, update existing details, add dietary requirements — all without logging in. Need to share registration with colleagues? Forward them the link to enter their own details.</p>
+    <p style="margin:0 0 16px;color:#444;line-height:1.6;">You have a secure self-service link to manage all your attendee information. You can fill in placeholder seats, update existing details, add dietary requirements â€” all without logging in. Need to share registration with colleagues? Forward them the link to enter their own details.</p>
     ${managementLinkHtml}
     <p>A PDF VAT receipt is attached to this email for your records.</p>
     ${invoicePaymentButtonHtml}
     ${billingEditLinkHtml}
     ${invoiceHelpHtml}
-    <p>We look forward to seeing you at the ${settings.eventName || "HR Analytics Summit"}!</p>
+    <p>We look forward to seeing you at the ${settings.eventName || "SWP Summit"}!</p>
   `;
 
   return {
     html: wrapInBrandedLayout(fallbackBody, settings),
-    subject: `Booking Confirmed — ${settings.eventName || "HR Analytics Summit"} (${orderRef})`,
+    subject: `Booking Confirmed â€” ${settings.eventName || "SWP Summit"} (${orderRef})`,
   };
 }
 
@@ -660,7 +663,7 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
         pdfFilename = `invoice-${booking.orderReference || bookingId}.pdf`;
       }
     } catch (err) {
-      logger.warn({ err }, "Could not download Stripe PDF — falling back to custom receipt");
+      logger.warn({ err }, "Could not download Stripe PDF â€” falling back to custom receipt");
     }
   }
   if (!pdfBuffer) {
@@ -710,7 +713,7 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
 /**
  * Send the per-attendee welcome email to every confirmed (non-TBC) attendee
  * on a booking. Returns true only if EVERY welcome email was accepted by SMTP
- * — partial success returns false so the booking-confirmation helper retries
+ * â€” partial success returns false so the booking-confirmation helper retries
  * the whole batch on the next webhook replay (welcomes are deduped per
  * recipient by sendWelcomeEmail's own once-per-attendee guard).
  */
@@ -775,10 +778,10 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
           "Using Stripe invoice PDF for email attachment",
         );
       } else {
-        logger.warn({ bookingId }, "Stripe PDF not available — falling back to custom receipt");
+        logger.warn({ bookingId }, "Stripe PDF not available â€” falling back to custom receipt");
       }
     } catch (err) {
-      logger.warn({ err }, "Could not download Stripe PDF — falling back to custom receipt");
+      logger.warn({ err }, "Could not download Stripe PDF â€” falling back to custom receipt");
     }
   }
   if (!pdfBuffer) {
@@ -871,8 +874,8 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
   );
 
   const reissueBanner = `
-    <div style="background:#fff8f7;border:2px solid #E74F3E;border-radius:6px;padding:18px 22px;margin:0 0 20px;">
-      <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#E74F3E;">Your invoice has been re-issued</p>
+    <div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:18px 22px;margin:0 0 20px;">
+      <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#004eb9;">Your invoice has been re-issued</p>
       <p style="margin:0;font-size:14px;color:#333;line-height:1.5;">
         We've updated your billing details${booking.poNumber ? ` (including PO Number <strong style="font-family:monospace;">${escHtml(booking.poNumber)}</strong>)` : ""} and issued a fresh invoice. The previous invoice has been voided. The latest invoice PDF is attached and a payment link is below.
       </p>
@@ -907,7 +910,7 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
 
   const sent = await sendMail({
     to: recipient,
-    subject: `Updated Invoice — ${settings.eventName || "HR Analytics Summit"} (${orderRef})`,
+    subject: `Updated Invoice â€” ${settings.eventName || "SWP Summit"} (${orderRef})`,
     html,
     attachments,
     fromName: settings.fromName,
@@ -969,13 +972,13 @@ export async function resendConfirmationAndReceipt(
       } else {
         logger.warn(
           { bookingId },
-          "Stripe PDF not available for resend — falling back to custom receipt",
+          "Stripe PDF not available for resend â€” falling back to custom receipt",
         );
       }
     } catch (err) {
       logger.warn(
         { err },
-        "Could not download Stripe PDF for resend — falling back to custom receipt",
+        "Could not download Stripe PDF for resend â€” falling back to custom receipt",
       );
     }
   }
@@ -1030,7 +1033,7 @@ export async function resendConfirmationAndReceipt(
 
 export async function sendOrganiserNotification(bookingId: number): Promise<boolean> {
   const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-  // Booking not found → nothing to retry; treat as a terminal success so the
+  // Booking not found â†’ nothing to retry; treat as a terminal success so the
   // delivery flag isn't left flapping forever.
   if (!booking) return true;
 
@@ -1047,7 +1050,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
   if (recipients.length === 0) {
     logger.info(
       { bookingId },
-      "No notification recipients configured — skipping organiser notification",
+      "No notification recipients configured â€” skipping organiser notification",
     );
     // No recipients = nothing to deliver; terminal success so the flag flips
     // and we don't keep re-attempting on every webhook replay.
@@ -1062,7 +1065,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
   const lead = attendees.find((a) => a.isLead) || attendees[0];
 
   const passLabels: Record<string, string> = {
-    single: "Single Pass",
+    single: "HR Professional Pass",
     team: "Team Pass (3 seats)",
     business: "Business Pass",
   };
@@ -1077,17 +1080,17 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
     .map(
       (a, i) => `
     <tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}">
-      <td style="padding:8px 10px;border:1px solid #e5e5e5">${escHtml(a.firstName)} ${escHtml(a.lastName)}${a.isLead ? ' <span style="font-size:11px;color:#E74F3E;font-weight:bold">(Buyer)</span>' : ""}</td>
+      <td style="padding:8px 10px;border:1px solid #e5e5e5">${escHtml(a.firstName)} ${escHtml(a.lastName)}${a.isLead ? ' <span style="font-size:11px;color:#004eb9;font-weight:bold">(Buyer)</span>' : ""}</td>
       <td style="padding:8px 10px;border:1px solid #e5e5e5">${escHtml(a.workEmail)}</td>
-      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.phone ? escHtml(a.phone) : "—"}</td>
-      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.jobTitle ? escHtml(a.jobTitle) : "—"}</td>
-      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.company ? escHtml(a.company) : "—"}</td>
+      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.phone ? escHtml(a.phone) : "â€”"}</td>
+      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.jobTitle ? escHtml(a.jobTitle) : "â€”"}</td>
+      <td style="padding:8px 10px;border:1px solid #e5e5e5">${a.company ? escHtml(a.company) : "â€”"}</td>
     </tr>
   `,
     )
     .join("");
 
-  const defaultCompleteSubject = `New Registration: {{orderReference}} — {{firstName}} {{lastName}}`;
+  const defaultCompleteSubject = `New Registration: {{orderReference}} â€” {{firstName}} {{lastName}}`;
   const subjectTemplate = settings.notifyCompleteSubject || defaultCompleteSubject;
   const subject = applySubjectVars(subjectTemplate, {
     orderReference: booking.orderReference || `#${bookingId}`,
@@ -1101,25 +1104,25 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
 
   const html = wrapInBrandedLayout(`
     <h2 style="margin:0 0 8px;font-size:22px">New Registration Received</h2>
-    <p style="margin:0 0 24px;color:#666">A new booking has been completed on the HR Analytics Summit checkout.</p>
+    <p style="margin:0 0 24px;color:#666">A new booking has been completed on the SWP Summit checkout.</p>
 
     <h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#888">Order Details</h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
       <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Order Reference</td><td style="border-bottom:1px solid #f0f0f0"><strong style="font-family:monospace">${escHtml(booking.orderReference || `#${bookingId}`)}</strong></td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Pass Type</td><td style="border-bottom:1px solid #f0f0f0">${passLabels[booking.passType] || booking.passType}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity} ${booking.quantity === 1 ? "ticket" : "tickets"}</td></tr>
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Payment Method</td><td style="border-bottom:1px solid #f0f0f0">${booking.paymentMethod === "card" ? "Credit/Debit Card" : booking.paymentMethod === "invoice" ? "Invoice" : "—"}</td></tr>
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Payment Method</td><td style="border-bottom:1px solid #f0f0f0">${booking.paymentMethod === "card" ? "Credit/Debit Card" : booking.paymentMethod === "invoice" ? "Invoice" : "â€”"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Status</td><td style="border-bottom:1px solid #f0f0f0"><strong style="color:${booking.status === "paid" ? "#16a34a" : "#d97706"}">${booking.status === "paid" ? "Paid" : booking.status === "invoiced" ? "Invoiced (Awaiting Payment)" : escHtml(booking.status)}</strong></td></tr>
       ${booking.promoCode ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Code</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.promoCode)}</td></tr>` : ""}
     </table>
 
     <h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#888">Pricing</h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
-      <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Base Subtotal</td><td style="border-bottom:1px solid #f0f0f0">£${subtotal.toFixed(2)}</td></tr>
-      ${groupDiscount > 0 ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Group Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#E74F3E">-£${groupDiscount.toFixed(2)}</td></tr>` : ""}
-      ${promoDiscount > 0 ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#E74F3E">-£${promoDiscount.toFixed(2)}</td></tr>` : ""}
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">VAT (20%)</td><td style="border-bottom:1px solid #f0f0f0">£${vat.toFixed(2)}</td></tr>
-      <tr><td style="padding:7px 0;font-weight:bold;border-bottom:1px solid #f0f0f0">Total</td><td style="border-bottom:1px solid #f0f0f0"><strong>£${total.toFixed(2)}</strong></td></tr>
+      <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Base Subtotal</td><td style="border-bottom:1px solid #f0f0f0">Â£${subtotal.toFixed(2)}</td></tr>
+      ${groupDiscount > 0 ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Group Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#004eb9">-Â£${groupDiscount.toFixed(2)}</td></tr>` : ""}
+      ${promoDiscount > 0 ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#004eb9">-Â£${promoDiscount.toFixed(2)}</td></tr>` : ""}
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">VAT (20%)</td><td style="border-bottom:1px solid #f0f0f0">Â£${vat.toFixed(2)}</td></tr>
+      <tr><td style="padding:7px 0;font-weight:bold;border-bottom:1px solid #f0f0f0">Total</td><td style="border-bottom:1px solid #f0f0f0"><strong>Â£${total.toFixed(2)}</strong></td></tr>
     </table>
 
     ${
@@ -1128,8 +1131,8 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
     <h3 style="margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#888">Billing Details</h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
       <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Billing Contact</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.billingName)}</td></tr>
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Company</td><td style="border-bottom:1px solid #f0f0f0">${booking.billingCompany ? escHtml(booking.billingCompany) : "—"}</td></tr>
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Invoice Email</td><td style="border-bottom:1px solid #f0f0f0">${booking.billingEmail ? escHtml(booking.billingEmail) : "—"}</td></tr>
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Company</td><td style="border-bottom:1px solid #f0f0f0">${booking.billingCompany ? escHtml(booking.billingCompany) : "â€”"}</td></tr>
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Invoice Email</td><td style="border-bottom:1px solid #f0f0f0">${booking.billingEmail ? escHtml(booking.billingEmail) : "â€”"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Address</td><td style="border-bottom:1px solid #f0f0f0">${(() => {
         if (booking.billingAddressLine1) {
           const cityRegion =
@@ -1147,7 +1150,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
             .map((s) => escHtml(s))
             .join("<br>");
         }
-        return escHtml(booking.billingAddress || "—").replace(/\n/g, "<br>");
+        return escHtml(booking.billingAddress || "â€”").replace(/\n/g, "<br>");
       })()}</td></tr>
       ${booking.billingPhone ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Contact Phone</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.billingPhone)}</td></tr>` : ""}
       ${booking.billingVatNumber ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">VAT Number</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.billingVatNumber)}</td></tr>` : ""}
@@ -1226,7 +1229,7 @@ export type BillingEditChange = {
 /**
  * Build a list of {field, label, before, after} change descriptors for the
  * billing-edit notification. Only fields that actually changed are returned.
- * Empty/null values render as "—" in the email so organisers can see when a
+ * Empty/null values render as "â€”" in the email so organisers can see when a
  * customer cleared a field.
  */
 export function diffBillingFields(
@@ -1272,7 +1275,7 @@ export async function sendBillingEditNotification(
   changes: BillingEditChange[],
 ): Promise<boolean> {
   if (changes.length === 0) {
-    logger.info({ bookingId }, "Billing edit notification skipped — no field changes detected");
+    logger.info({ bookingId }, "Billing edit notification skipped â€” no field changes detected");
     return true;
   }
 
@@ -1292,7 +1295,7 @@ export async function sendBillingEditNotification(
   if (recipients.length === 0) {
     logger.info(
       { bookingId },
-      "No notification recipients configured — skipping billing edit notification",
+      "No notification recipients configured â€” skipping billing edit notification",
     );
     return true;
   }
@@ -1318,7 +1321,7 @@ export async function sendBillingEditNotification(
 
   const renderVal = (v: string | null): string =>
     v === null
-      ? `<span style="color:#999">—</span>`
+      ? `<span style="color:#999">â€”</span>`
       : `<span style="font-family:monospace">${escHtml(v)}</span>`;
 
   const changesRows = changes
@@ -1332,7 +1335,7 @@ export async function sendBillingEditNotification(
     )
     .join("");
 
-  const subject = `Billing details updated: ${orderRef}${lead ? ` — ${lead.firstName} ${lead.lastName}` : ""}`;
+  const subject = `Billing details updated: ${orderRef}${lead ? ` â€” ${lead.firstName} ${lead.lastName}` : ""}`;
 
   const html = wrapInBrandedLayout(
     `
@@ -1415,7 +1418,7 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
   if (recipients.length === 0) {
     logger.info(
       { bookingId },
-      "No notification recipients configured — skipping incomplete form notification",
+      "No notification recipients configured â€” skipping incomplete form notification",
     );
     return;
   }
@@ -1428,7 +1431,7 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
   if (!lead) return;
 
   const passLabels: Record<string, string> = {
-    single: "Single Pass (HR Professional)",
+    single: "HR Professional Pass (HR Professional)",
     team: "Team Pass (3 seats)",
     business: "Business Pass (Vendor/Consultant)",
   };
@@ -1451,8 +1454,8 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
     ["First Name", lead.firstName],
     ["Last Name", lead.lastName],
     ["Email", lead.workEmail],
-    ["Company", lead.company || "—"],
-    ["Job Title", lead.jobTitle || "—"],
+    ["Company", lead.company || "â€”"],
+    ["Job Title", lead.jobTitle || "â€”"],
     ["Pass Type", passLabels[booking.passType] || booking.passType],
     ["Quantity", String(booking.quantity)],
     ["Submitted At", submittedAtStr],
@@ -1470,7 +1473,7 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
     .join("");
 
   const settings = await getEventSettings();
-  const defaultIncompleteSubject = `Incomplete Registration: {{firstName}} {{lastName}} — {{eventName}}`;
+  const defaultIncompleteSubject = `Incomplete Registration: {{firstName}} {{lastName}} â€” {{eventName}}`;
   const subject = applySubjectVars(settings.notifyIncompleteSubject || defaultIncompleteSubject, {
     firstName: lead.firstName,
     lastName: lead.lastName,
@@ -1492,10 +1495,10 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
           <tr>
             <td style="background:#1e293b;padding:32px 32px 24px;border-radius:4px 4px 0 0">
               <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#f8fafc;letter-spacing:-0.02em">
-                Incomplete HR Analytics Summit Registration
+                Incomplete SWP Summit Registration
               </h1>
               <p style="margin:0;font-size:14px;color:#64748b">
-                HR Analytics Summit &mdash; 3 Sep 2026, 155 Bishopsgate, London
+                SWP Summit &mdash; 3 Mar 2027, 1 Basinghall Avenue, London
               </p>
             </td>
           </tr>
@@ -1522,7 +1525,7 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
           <tr>
             <td style="background:#0f172a;padding:20px 32px;border-top:1px solid #1e293b;border-radius:0 0 4px 4px">
               <p style="margin:0;font-size:12px;color:#475569">
-                HR Analytics Summit &bull; Dynamic Business Leaders Limited &bull; This is an internal organiser notification.
+                SWP Summit &bull; Dynamic Business Leaders Limited &bull; This is an internal organiser notification.
               </p>
             </td>
           </tr>
@@ -1618,9 +1621,9 @@ function formatCalendarRangeLabel(start: Date, end: Date, tz: string): string {
       hour12: false,
       timeZone: tz,
     });
-    return `${dateFmt.format(start)} · ${timeFmt.format(start)}–${timeFmt.format(end)}`;
+    return `${dateFmt.format(start)} Â· ${timeFmt.format(start)}â€“${timeFmt.format(end)}`;
   } catch {
-    return `${start.toUTCString()} – ${end.toUTCString()}`;
+    return `${start.toUTCString()} â€“ ${end.toUTCString()}`;
   }
 }
 
@@ -1647,11 +1650,11 @@ function renderCalendarBlockHtml(opts: {
   return `
     <div style="margin:24px 0;">
       <h3 style="margin:0 0 8px;color:#000;">${opts.heading}</h3>
-      <div style="border:1px solid #DEDDDC;border-radius:6px;padding:18px 20px;margin:12px 0;background:#fff;">
+      <div style="border:1px solid #e2e8f0;border-radius:6px;padding:18px 20px;margin:12px 0;background:#fff;">
         <p style="margin:0 0 4px;font-weight:700;font-size:15px;color:#000;">${opts.title}</p>
         <p style="margin:0 0 14px;font-size:13px;color:#666;">${opts.subtitle}</p>
         <p style="margin:0;">
-          <a href="${opts.google}" style="display:inline-block;background:#E74F3E;color:#fff;padding:9px 18px;border-radius:300px;text-decoration:none;font-weight:600;font-size:13px;margin:4px 6px 4px 0;">Add to Google Calendar</a>
+          <a href="${opts.google}" style="display:inline-block;background:#004eb9;color:#fff;padding:9px 18px;border-radius:300px;text-decoration:none;font-weight:600;font-size:13px;margin:4px 6px 4px 0;">Add to Google Calendar</a>
           <a href="${opts.outlook}" style="display:inline-block;background:#1a1a1a;color:#fff;padding:9px 18px;border-radius:300px;text-decoration:none;font-weight:600;font-size:13px;margin:4px 6px 4px 0;">Add to Outlook</a>
           <a href="${opts.icsUrl}" style="display:inline-block;background:#fff;color:#000;border:1px solid #000;padding:8px 18px;border-radius:300px;text-decoration:none;font-weight:600;font-size:13px;margin:4px 6px 4px 0;">Download .ics (Apple / other)</a>
         </p>
@@ -1663,16 +1666,16 @@ function renderSocialTbcHtml(): string {
   return `
     <div style="margin:24px 0;">
       <h3 style="margin:0 0 8px;color:#000;">Pre-event social</h3>
-      <div style="border:1px dashed #DEDDDC;border-radius:6px;padding:18px 20px;margin:12px 0;background:#FCFBFA;">
+      <div style="border:1px dashed #e2e8f0;border-radius:6px;padding:18px 20px;margin:12px 0;background:#f0f6ff;">
         <p style="margin:0;font-size:14px;color:#444;line-height:1.5;">
-          Details to follow — we'll be in touch closer to the date with the time, venue, and an invite you can pop in your calendar.
+          Details to follow â€” we'll be in touch closer to the date with the time, venue, and an invite you can pop in your calendar.
         </p>
       </div>
     </div>`;
 }
 
 export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceholders {
-  const appBaseUrl = process.env.APP_BASE_URL || "https://register.hranalyticssummit.com";
+  const appBaseUrl = process.env.APP_BASE_URL || "https://register.swpsummit.com";
   const tz = settings.eventTimezone || "Europe/London";
 
   let eventCalendarLinks = "";
@@ -1683,11 +1686,11 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
   if (settings.eventStartAt && settings.eventEndAt) {
     const start = new Date(settings.eventStartAt);
     const end = new Date(settings.eventEndAt);
-    const eventName = settings.eventName || "HR Analytics Summit";
+    const eventName = settings.eventName || "SWP Summit";
     const location =
       [settings.eventVenue, settings.eventVenuePostcode].filter(Boolean).join(", ") || null;
     const ev: CalendarEvent = {
-      uid: `event-settings-${settings.id}-main@hranalyticssummit.com`,
+      uid: `event-settings-${settings.id}-main@swpsummit.com`,
       title: eventName,
       description: settings.eventDescription || null,
       location,
@@ -1701,7 +1704,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     eventCalendarLinks = renderCalendarBlockHtml({
       heading: "Save the date",
       title: eventName,
-      subtitle: formatCalendarRangeLabel(start, end, tz) + (location ? ` · ${location}` : ""),
+      subtitle: formatCalendarRangeLabel(start, end, tz) + (location ? ` Â· ${location}` : ""),
       google: googleCalendarUrl,
       outlook: outlookCalendarUrl,
       icsUrl: icsCalendarUrl,
@@ -1718,7 +1721,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     const end = new Date(settings.socialEndAt);
     const name = settings.socialName || "Pre-Event Social";
     const ev: CalendarEvent = {
-      uid: `event-settings-${settings.id}-social@hranalyticssummit.com`,
+      uid: `event-settings-${settings.id}-social@swpsummit.com`,
       title: name,
       description: settings.socialDescription || null,
       location: settings.socialVenue || null,
@@ -1734,7 +1737,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
       title: name,
       subtitle:
         formatCalendarRangeLabel(start, end, tz) +
-        (settings.socialVenue ? ` · ${settings.socialVenue}` : ""),
+        (settings.socialVenue ? ` Â· ${settings.socialVenue}` : ""),
       google: socialGoogleCalendarUrl,
       outlook: socialOutlookCalendarUrl,
       icsUrl: socialIcsCalendarUrl,
@@ -1754,22 +1757,22 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
   };
 }
 
-// Backward-compat shim — returns combined block
+// Backward-compat shim â€” returns combined block
 export function buildCalendarLinksSection(settings: EventSettings): string {
   return getCalendarPlaceholders(settings).calendarLinks;
 }
 
 function buildManageLinkSection(manageUrl: string): string {
   return `
-    <div style="margin: 28px 0; background: #fff8f7; border: 2px solid #E74F3E; border-radius: 6px; overflow: hidden;">
-      <div style="background: #E74F3E; padding: 14px 24px;">
+    <div style="margin: 28px 0; background: #f0f6ff; border: 2px solid #004eb9; border-radius: 6px; overflow: hidden;">
+      <div style="background: #004eb9; padding: 14px 24px;">
         <p style="margin: 0; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
           Manage Your Attendee Details Online
         </p>
       </div>
       <div style="padding: 20px 24px;">
         <p style="margin: 0 0 12px; font-size: 14px; color: #444; line-height: 1.6;">
-          Your booking comes with a secure self-service link that lets you fill in or update attendee details at any time — <strong>no login or account needed</strong>. Use it to:
+          Your booking comes with a secure self-service link that lets you fill in or update attendee details at any time â€” <strong>no login or account needed</strong>. Use it to:
         </p>
         <ul style="margin: 0 0 16px; padding-left: 20px; font-size: 14px; color: #444; line-height: 2;">
           <li>Fill in details for any placeholder (TBC) attendee seats</li>
@@ -1778,16 +1781,16 @@ function buildManageLinkSection(manageUrl: string): string {
           <li>Forward the link to colleagues so they can enter their own details directly</li>
         </ul>
         <p style="text-align: center; margin: 20px 0 16px;">
-          <a href="${manageUrl}" style="display: inline-block; background: #E74F3E; color: #fff; padding: 13px 32px; border-radius: 300px; text-decoration: none; font-weight: 700; font-size: 15px;">
-            Manage Attendees →
+          <a href="${manageUrl}" style="display: inline-block; background: #004eb9; color: #fff; padding: 13px 32px; border-radius: 300px; text-decoration: none; font-weight: 700; font-size: 15px;">
+            Manage Attendees â†’
           </a>
         </p>
         <p style="margin: 0 0 6px; font-size: 13px; color: #888; text-align: center;">Or copy this link:</p>
         <p style="margin: 0; text-align: center;">
-          <a href="${manageUrl}" style="font-size: 12px; color: #E74F3E; word-break: break-all; font-family: monospace;">${manageUrl}</a>
+          <a href="${manageUrl}" style="font-size: 12px; color: #004eb9; word-break: break-all; font-family: monospace;">${manageUrl}</a>
         </p>
         <p style="margin: 14px 0 0; font-size: 12px; color: #aaa; text-align: center;">
-          Keep this link safe — anyone with it can view and update attendee details for your booking.
+          Keep this link safe â€” anyone with it can view and update attendee details for your booking.
         </p>
       </div>
     </div>`;
@@ -1810,7 +1813,7 @@ export async function sendWelcomeEmail(
     }
 
     const settings = await getEventSettings();
-    const appBaseUrl = process.env.APP_BASE_URL || "https://register.hranalyticssummit.com";
+    const appBaseUrl = process.env.APP_BASE_URL || "https://register.swpsummit.com";
 
     let manageLinkHtml = "";
     if (bookingId) {
@@ -1880,7 +1883,7 @@ export async function sendAttendeeChangeNotification(
     if (recipients.length === 0) {
       logger.info(
         { bookingId, attendeeId },
-        "No notification recipients — skipping attendee change notification",
+        "No notification recipients â€” skipping attendee change notification",
       );
       return;
     }
@@ -1902,7 +1905,7 @@ export async function sendAttendeeChangeNotification(
       timeZoneName: "short",
     });
 
-    const defaultAttendeeSubject = `Attendee Details Updated — {{orderReference}} — {{firstName}} {{lastName}}`;
+    const defaultAttendeeSubject = `Attendee Details Updated â€” {{orderReference}} â€” {{firstName}} {{lastName}}`;
     const subject = applySubjectVars(settings.notifyAttendeeSubject || defaultAttendeeSubject, {
       orderReference: orderRef,
       firstName: updatedData.firstName,
@@ -1924,7 +1927,7 @@ export async function sendAttendeeChangeNotification(
                 Attendee Details Updated
               </h1>
               <p style="margin:0;font-size:14px;color:#64748b">
-                HR Analytics Summit &mdash; Self-Service Change Notification
+                SWP Summit &mdash; Self-Service Change Notification
               </p>
             </td>
           </tr>
@@ -1943,8 +1946,8 @@ export async function sendAttendeeChangeNotification(
                   ["Attendee ID", String(attendeeId)],
                   ["First Name", updatedData.firstName],
                   ["Last Name", updatedData.lastName],
-                  ["Job Title", updatedData.jobTitle || "—"],
-                  ["Company", updatedData.company || "—"],
+                  ["Job Title", updatedData.jobTitle || "â€”"],
+                  ["Company", updatedData.company || "â€”"],
                   ["Work Email", updatedData.workEmail],
                   ["Changed At", changedAt],
                 ]
@@ -1962,7 +1965,7 @@ export async function sendAttendeeChangeNotification(
           <tr>
             <td style="background:#0f172a;padding:20px 32px;border-top:1px solid #1e293b;border-radius:0 0 4px 4px">
               <p style="margin:0;font-size:12px;color:#475569">
-                HR Analytics Summit &bull; ${settings.orgName} &bull; Internal organiser notification
+                SWP Summit &bull; ${settings.orgName} &bull; Internal organiser notification
               </p>
             </td>
           </tr>
@@ -2029,20 +2032,20 @@ export async function sendCheckoutExpiredEmail(bookingId: number): Promise<void>
 
   const name = `${lead.firstName} ${lead.lastName}`;
   const safeName = escHtml(name);
-  const checkoutUrl = settings.orgWebsite || "https://www.hranalyticssummit.com";
+  const checkoutUrl = settings.orgWebsite || "https://swpsummit.com";
 
   const html = wrapInBrandedLayout(
     `
     <div style="background:#fff3cd;border:1px solid #ffc107;padding:16px 20px;border-radius:4px;margin-bottom:24px;">
-      <strong style="color:#856404;">⚠ Checkout session expired</strong>
+      <strong style="color:#856404;">Checkout session expired</strong>
     </div>
-    <h2 style="margin-top:0;">Incomplete Registration — Session Expired</h2>
+    <h2 style="margin-top:0;">Incomplete Registration â€” Session Expired</h2>
     <p>Hi ${safeName},</p>
-    <p>Your checkout session for <strong>HR Analytics Summit 2026</strong> expired before the payment was completed. This usually happens if the browser was left open for more than 24 hours without submitting payment.</p>
-    <p><strong>Your booking details are still saved.</strong> To complete your registration, simply return to the checkout and restart the payment step — you won't need to re-enter your attendee information.</p>
+    <p>Your checkout session for <strong>SWP Summit 2027</strong> expired before the payment was completed. This usually happens if the browser was left open for more than 24 hours without submitting payment.</p>
+    <p><strong>Your booking details are still saved.</strong> To complete your registration, simply return to the checkout and restart the payment step â€” you won't need to re-enter your attendee information.</p>
     <p style="text-align:center;margin:32px 0;">
-      <a href="${checkoutUrl}" class="cta-btn" style="display:inline-block;background:#E74F3E;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
-        Return to Checkout →
+      <a href="${checkoutUrl}" class="cta-btn" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
+        Return to Checkout â†’
       </a>
     </p>
     <p style="color:#666;font-size:14px;">If you have any questions, please contact us at <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>
@@ -2055,7 +2058,7 @@ export async function sendCheckoutExpiredEmail(bookingId: number): Promise<void>
   await sendMail({
     to: recipientEmail,
     bcc: organisers.length > 0 ? organisers : undefined,
-    subject: `Action Required: Your HR Analytics Summit checkout session expired — ${name}`,
+    subject: `Action Required: Your SWP Summit checkout session expired â€” ${name}`,
     html,
   });
 
@@ -2087,11 +2090,11 @@ export async function sendRefundConfirmationEmail(
     `
     <h2 style="margin-top:0;">Your Refund Has Been Processed</h2>
     <p>Hi ${escHtml(name)},</p>
-    <p>We have processed a refund for your registration at <strong>HR Analytics Summit 2026</strong>. The amount will appear in your account within 5–10 business days depending on your bank.</p>
+    <p>We have processed a refund for your registration at <strong>SWP Summit 2027</strong>. The amount will appear in your account within 5â€“10 business days depending on your bank.</p>
     <div class="info-box">
       <table style="width:100%;font-size:15px;">
         <tr><td style="color:#666;padding:4px 0;">Booking Reference</td><td style="text-align:right;font-family:monospace;font-weight:600;">${escHtml(orderRef)}</td></tr>
-        <tr><td style="color:#666;padding:4px 0;">Refund Amount</td><td style="text-align:right;font-weight:700;color:#E74F3E;">£${refundAmount}</td></tr>
+        <tr><td style="color:#666;padding:4px 0;">Refund Amount</td><td style="text-align:right;font-weight:700;color:#004eb9;">Â£${refundAmount}</td></tr>
         <tr><td style="color:#666;padding:4px 0;">Status</td><td style="text-align:right;">Refunded &amp; Booking Cancelled</td></tr>
       </table>
     </div>
@@ -2104,7 +2107,7 @@ export async function sendRefundConfirmationEmail(
   await sendMail({
     to: booking.billingEmail || lead.workEmail,
     bcc: recipients.length > 0 ? recipients : undefined,
-    subject: `Refund Confirmed — HR Analytics Summit 2026 (${orderRef})`,
+    subject: `Refund Confirmed â€” SWP Summit 2027 (${orderRef})`,
     html,
   });
 
@@ -2146,11 +2149,11 @@ export async function sendInvoicePaymentFailedEmail(
   const html = wrapInBrandedLayout(
     `
     <div style="background:#fff3cd;border:1px solid #ffc107;padding:16px 20px;border-radius:4px;margin-bottom:24px;">
-      <strong style="color:#856404;">⚠ Invoice payment unsuccessful</strong>
+      <strong style="color:#856404;">Invoice payment unsuccessful</strong>
     </div>
     <h2 style="margin-top:0;">Action Required: Invoice Payment Failed</h2>
     <p>Hi ${escHtml(name)},</p>
-    <p>We attempted to collect payment for your HR Analytics Summit 2026 invoice but the payment was unsuccessful. Your booking reference is <strong>${escHtml(orderRef)}</strong>.</p>
+    <p>We attempted to collect payment for your SWP Summit 2027 invoice but the payment was unsuccessful. Your booking reference is <strong>${escHtml(orderRef)}</strong>.</p>
     ${declineNote}
     ${attemptNote}
     <p>Please use the button below to pay your invoice. If you continue to have difficulties, contact your bank or reach out to us directly.</p>
@@ -2158,8 +2161,8 @@ export async function sendInvoicePaymentFailedEmail(
       paymentUrl
         ? `
     <p style="text-align:center;margin:32px 0;">
-      <a href="${paymentUrl}" class="cta-btn" style="display:inline-block;background:#E74F3E;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
-        Pay Invoice Now →
+      <a href="${paymentUrl}" class="cta-btn" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
+        Pay Invoice Now â†’
       </a>
     </p>
     `
@@ -2173,7 +2176,7 @@ export async function sendInvoicePaymentFailedEmail(
   await sendMail({
     to: booking.billingEmail || lead.workEmail,
     bcc: recipients.length > 0 ? recipients : undefined,
-    subject: `Action Required: Invoice Payment Failed — HR Analytics Summit 2026 (${orderRef})`,
+    subject: `Action Required: Invoice Payment Failed â€” SWP Summit 2027 (${orderRef})`,
     html,
   });
 
@@ -2225,7 +2228,7 @@ export async function sendDisputeAlertEmail(
   const html = wrapInBrandedLayout(
     `
     <div style="background:#f8d7da;border:2px solid #dc3545;padding:16px 20px;border-radius:4px;margin-bottom:24px;">
-      <strong style="color:#842029;font-size:16px;">🚨 Chargeback / Dispute Filed</strong>
+      <strong style="color:#842029;font-size:16px;">ðŸš¨ Chargeback / Dispute Filed</strong>
     </div>
     <h2 style="margin-top:0;color:#842029;">Urgent: Payment Dispute Received</h2>
     <p>A customer has filed a chargeback with their bank. <strong>You must respond by the deadline below</strong> or the funds will be automatically returned and a dispute fee charged.</p>
@@ -2233,14 +2236,14 @@ export async function sendDisputeAlertEmail(
       <table style="width:100%;font-size:15px;">
         <tr><td style="color:#666;padding:6px 0;">Booking Reference</td><td style="text-align:right;font-family:monospace;font-weight:600;">${escHtml(orderRef)}</td></tr>
         <tr><td style="color:#666;padding:6px 0;">Customer</td><td style="text-align:right;font-weight:600;">${escHtml(customerName)}</td></tr>
-        <tr><td style="color:#666;padding:6px 0;">Disputed Amount</td><td style="text-align:right;font-weight:700;color:#842029;">£${disputeAmount}</td></tr>
+        <tr><td style="color:#666;padding:6px 0;">Disputed Amount</td><td style="text-align:right;font-weight:700;color:#842029;">Â£${disputeAmount}</td></tr>
         <tr><td style="color:#666;padding:6px 0;">Dispute Reason</td><td style="text-align:right;">${escHtml(disputeReason)}</td></tr>
         <tr><td style="color:#666;padding:6px 0;font-weight:700;">Evidence Deadline</td><td style="text-align:right;font-weight:700;color:#842029;">${deadlineStr}</td></tr>
       </table>
     </div>
     <p style="text-align:center;margin:32px 0;">
       <a href="${stripeUrl}" class="cta-btn" style="display:inline-block;background:#842029;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
-        View Dispute in Stripe →
+        View Dispute in Stripe â†’
       </a>
     </p>
     <p style="font-size:14px;color:#666;">Evidence to submit typically includes: the booking confirmation email, signed terms and conditions, and any correspondence with the customer.</p>
@@ -2250,7 +2253,7 @@ export async function sendDisputeAlertEmail(
 
   await sendMail({
     to: recipients,
-    subject: `🚨 Dispute Filed — ${orderRef} — £${disputeAmount} — Deadline: ${deadlineStr}`,
+    subject: `ðŸš¨ Dispute Filed â€” ${orderRef} â€” Â£${disputeAmount} â€” Deadline: ${deadlineStr}`,
     html,
   });
 
@@ -2286,8 +2289,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     : "14 days from invoice issue";
 
   const passLabels: Record<string, string> = {
-    single: "Single Pass — HR Professional",
-    business: "Business Pass — Vendor/Consultant",
+    single: "HR Professional Pass â€” HR Professional",
+    business: "Business Pass â€” Vendor/Consultant",
   };
   const passLabel = passLabels[booking.passType] || booking.passType;
   const totalAmount = parseFloat(booking.totalAmount?.toString() || "0").toFixed(2);
@@ -2305,7 +2308,7 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     .from(emailTemplatesTable)
     .where(eq(emailTemplatesTable.type, "invoice_reminder"));
   const payOnlineButton = booking.stripeInvoicePaymentUrl
-    ? `<p style="margin:24px 0;text-align:center;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#E74F3E;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online →</a></p>`
+    ? `<p style="margin:24px 0;text-align:center;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online â†’</a></p>`
     : "";
 
   // Body-vars are HTML-escaped (these are inserted into HTML email content),
@@ -2318,7 +2321,7 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     "{{payOnlineButton}}": payOnlineButton,
     "{{payOnlineUrl}}": booking.stripeInvoicePaymentUrl || "",
   };
-  // Subject is a plain-text mail header — must use raw values.
+  // Subject is a plain-text mail header â€” must use raw values.
   const subjectVars: Record<string, string> = {
     "{{firstName}}": lead.firstName || recipientName,
     "{{recipientName}}": recipientName,
@@ -2339,8 +2342,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     introHtml = `<p>Dear ${escHtml(recipientName)},</p>
     <p>${
       isOverdue
-        ? `We are writing to remind you that invoice <strong>${escHtml(orderRef)}</strong> for your registration to the <strong>HR Analytics Summit 2026</strong> was due on <strong>${escHtml(dueDateStr)}</strong> and remains unpaid.`
-        : `This is a friendly reminder that invoice <strong>${escHtml(orderRef)}</strong> for your registration to the <strong>HR Analytics Summit 2026</strong> is due on <strong>${escHtml(dueDateStr)}</strong>.`
+        ? `We are writing to remind you that invoice <strong>${escHtml(orderRef)}</strong> for your registration to the <strong>SWP Summit 2027</strong> was due on <strong>${escHtml(dueDateStr)}</strong> and remains unpaid.`
+        : `This is a friendly reminder that invoice <strong>${escHtml(orderRef)}</strong> for your registration to the <strong>SWP Summit 2027</strong> is due on <strong>${escHtml(dueDateStr)}</strong>.`
     }</p>
     <p>Please arrange payment at your earliest convenience using the details below. A copy of the invoice PDF is attached to this email for your reference.</p>`;
   }
@@ -2348,8 +2351,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
   let rawSubject =
     storedTemplate?.subject ||
     (isOverdue
-      ? `Overdue Invoice — {{orderReference}} — HR Analytics Summit 2026`
-      : `Invoice Reminder — {{orderReference}} — HR Analytics Summit 2026`);
+      ? `Overdue Invoice â€” {{orderReference}} â€” SWP Summit 2027`
+      : `Invoice Reminder â€” {{orderReference}} â€” SWP Summit 2027`);
   for (const [key, val] of Object.entries(subjectVars)) {
     rawSubject = rawSubject.replaceAll(key, val);
   }
@@ -2359,8 +2362,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
 
   const html = wrapInBrandedLayout(
     `
-    <div style="background:${isOverdue ? "#fff3cd" : "#e8f4fd"};border-left:4px solid ${isOverdue ? "#E74F3E" : "#F48847"};padding:16px 20px;border-radius:4px;margin-bottom:24px;">
-      <strong style="color:${isOverdue ? "#E74F3E" : "#F48847"};font-size:15px;">${isOverdue ? "⚠️ Invoice Overdue" : "📋 Invoice Reminder"}</strong>
+    <div style="background:${isOverdue ? "#fff3cd" : "#e8f4fd"};border-left:4px solid ${isOverdue ? "#004eb9" : "#266cc7"};padding:16px 20px;border-radius:4px;margin-bottom:24px;">
+      <strong style="color:${isOverdue ? "#004eb9" : "#266cc7"};font-size:15px;">${isOverdue ? "Invoice Overdue" : "Invoice Reminder"}</strong>
     </div>
 
     ${introHtml}
@@ -2369,16 +2372,16 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
       <strong>Order Details</strong><br><br>
       <table style="width:100%;border-collapse:collapse;font-size:14px;">
         <tr><td style="padding:6px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Reference</td><td style="border-bottom:1px solid #f0f0f0;font-family:monospace;font-weight:600;">${escHtml(orderRef)}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Event</td><td style="border-bottom:1px solid #f0f0f0">HR Analytics Summit 2026, 3 September 2026</td></tr>
-        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Venue</td><td style="border-bottom:1px solid #f0f0f0">155 Bishopsgate, London EC2M 3TQ</td></tr>
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Event</td><td style="border-bottom:1px solid #f0f0f0">SWP Summit 2027, Wednesday, 3 March 2027</td></tr>
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Venue</td><td style="border-bottom:1px solid #f0f0f0">1 Basinghall Avenue, London EC2V 5DD</td></tr>
         <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Pass Type</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(passLabel)}</td></tr>
         <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity}</td></tr>
-        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Net Amount</td><td style="border-bottom:1px solid #f0f0f0">£${baseAmount.toFixed(2)}</td></tr>
-        ${groupDiscount > 0 ? `<tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Group Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#E74F3E">-£${groupDiscount.toFixed(2)}</td></tr>` : ""}
-        ${promoDiscount > 0 ? `<tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#E74F3E">-£${promoDiscount.toFixed(2)}</td></tr>` : ""}
-        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">VAT (20%)</td><td style="border-bottom:1px solid #f0f0f0">£${vatAmount}</td></tr>
-        <tr><td style="padding:6px 0;font-weight:700;border-bottom:1px solid #f0f0f0">Total Due</td><td style="border-bottom:1px solid #f0f0f0"><strong style="font-size:16px;">£${totalAmount}</strong></td></tr>
-        <tr><td style="padding:6px 0;color:${isOverdue ? "#E74F3E" : "#888"};border-bottom:1px solid #f0f0f0">Invoice Due</td><td style="border-bottom:1px solid #f0f0f0;color:${isOverdue ? "#E74F3E" : "inherit"};font-weight:${isOverdue ? "700" : "400"};">${escHtml(dueDateStr)}${isOverdue ? " — OVERDUE" : ""}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Net Amount</td><td style="border-bottom:1px solid #f0f0f0">Â£${baseAmount.toFixed(2)}</td></tr>
+        ${groupDiscount > 0 ? `<tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Group Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#004eb9">-Â£${groupDiscount.toFixed(2)}</td></tr>` : ""}
+        ${promoDiscount > 0 ? `<tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Discount</td><td style="border-bottom:1px solid #f0f0f0;color:#004eb9">-Â£${promoDiscount.toFixed(2)}</td></tr>` : ""}
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #f0f0f0">VAT (20%)</td><td style="border-bottom:1px solid #f0f0f0">Â£${vatAmount}</td></tr>
+        <tr><td style="padding:6px 0;font-weight:700;border-bottom:1px solid #f0f0f0">Total Due</td><td style="border-bottom:1px solid #f0f0f0"><strong style="font-size:16px;">Â£${totalAmount}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:${isOverdue ? "#004eb9" : "#888"};border-bottom:1px solid #f0f0f0">Invoice Due</td><td style="border-bottom:1px solid #f0f0f0;color:${isOverdue ? "#004eb9" : "inherit"};font-weight:${isOverdue ? "700" : "400"};">${escHtml(dueDateStr)}${isOverdue ? " â€” OVERDUE" : ""}</td></tr>
       </table>
     </div>
 
@@ -2398,7 +2401,7 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     </div>
 
     <p style="font-size:14px;color:#666;">If you have already arranged payment, please disregard this email. For queries, please contact <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>
-    <p style="font-size:14px;color:#666;"><strong>Dynamic Business Leaders Limited</strong> · Company No. 12252258 · VAT No. 336124621</p>
+    <p style="font-size:14px;color:#666;"><strong>Dynamic Business Leaders Limited</strong> Â· Company No. 12252258 Â· VAT No. 336124621</p>
   `,
     settings,
   );
@@ -2414,7 +2417,10 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
           "Stripe invoice PDF attached to reminder",
         );
     } catch (err) {
-      logger.warn({ err }, "Could not download Stripe PDF for reminder — attaching custom receipt");
+      logger.warn(
+        { err },
+        "Could not download Stripe PDF for reminder â€” attaching custom receipt",
+      );
     }
   }
   if (!pdfBuffer) {
@@ -2487,7 +2493,7 @@ export async function resolveLatestBookingPdf(
         source = "stripe";
       }
     } catch (err) {
-      logger.warn({ err, bookingId }, "Failed to fetch Stripe PDF — falling back to custom");
+      logger.warn({ err, bookingId }, "Failed to fetch Stripe PDF â€” falling back to custom");
     }
   }
   if (!buffer) {

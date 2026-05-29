@@ -408,7 +408,7 @@ function seedBooking(over: Partial<Record<string, unknown>> = {}): Record<string
     paidAt: null,
     stripeInvoiceStatusSyncedAt: null,
     lastInvoiceReminderSentAt: null,
-    orderReference: "HRAS-12345",
+    orderReference: "SWP-12345",
     currentStep: 4,
     managementToken: "mgmt-101",
     billingName: null,
@@ -489,7 +489,7 @@ describe("admin audit trail — integration", () => {
   });
 
   it("PATCH /admin/registrations/:id/status records a status change with before/after diff", async () => {
-    seedBooking({ id: 101, status: "partial", orderReference: "HRAS-12345" });
+    seedBooking({ id: 101, status: "partial", orderReference: "SWP-12345" });
 
     const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
       method: "PATCH",
@@ -509,7 +509,7 @@ describe("admin audit trail — integration", () => {
     expect(row.bookingId).toBe(101);
 
     const data = row.data as Record<string, unknown>;
-    expect(data.summary).toBe("Booking HRAS-12345: partial → paid");
+    expect(data.summary).toBe("Booking SWP-12345: partial → paid");
     const changes = data.changes as Record<string, { from: unknown; to: unknown }>;
     expect(changes.status).toEqual({ from: "partial", to: "paid" });
     expect((data.before as Record<string, unknown>).status).toBe("partial");
@@ -559,7 +559,7 @@ describe("admin audit trail — integration", () => {
   });
 
   it("GET /admin/activity surfaces a freshly-written audit row in the feed", async () => {
-    seedBooking({ id: 101, status: "partial", orderReference: "HRAS-12345" });
+    seedBooking({ id: 101, status: "partial", orderReference: "SWP-12345" });
 
     // Drive a real mutation so an audit row is written.
     const mutateRes = await fetch(`${baseUrl}/admin/registrations/101/status`, {
@@ -581,7 +581,7 @@ describe("admin audit trail — integration", () => {
     expect(auditEntry).toBeDefined();
     expect(auditEntry!.actor).toBe("admin");
     const data = auditEntry!.data as Record<string, unknown>;
-    expect(data.summary).toBe("Booking HRAS-12345: partial → paid");
+    expect(data.summary).toBe("Booking SWP-12345: partial → paid");
     const changes = data.changes as Record<string, { from: unknown; to: unknown }>;
     expect(changes.status).toEqual({ from: "partial", to: "paid" });
   });

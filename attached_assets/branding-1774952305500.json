@@ -15,10 +15,10 @@
     }
   ],
   "colors": {
-    "primary": "#E74F3E",
-    "secondary": "#F48847",
-    "accent": "#E74F3E",
-    "background": "#FCFBFA",
+    "primary": "#004eb9",
+    "secondary": "#266cc7",
+    "accent": "#004eb9",
+    "background": "#f0f6ff",
     "textPrimary": "#000000",
     "link": "#F7E25E"
   },
@@ -52,7 +52,7 @@
     "input": {
       "background": "#FFFFFF",
       "textColor": "#000000",
-      "borderColor": "#DEDDDC",
+      "borderColor": "#e2e8f0",
       "borderRadius": "0px",
       "borderRadiusCorners": {
         "topLeft": "0px",
@@ -63,40 +63,40 @@
       "shadow": "none"
     },
     "buttonPrimary": {
-      "background": "#E74F3E",
+      "background": "#004eb9",
       "textColor": "#FFFFFF",
-      "borderRadius": "300px",
+      "borderRadius": "8px",
       "borderRadiusCorners": {
-        "topLeft": "300px",
-        "topRight": "300px",
-        "bottomRight": "300px",
-        "bottomLeft": "300px"
+        "topLeft": "8px",
+        "topRight": "8px",
+        "bottomRight": "8px",
+        "bottomLeft": "8px"
       },
       "shadow": "none"
     },
     "buttonSecondary": {
-      "background": "#F7E25E",
-      "textColor": "#221D1B",
-      "borderRadius": "300px",
+      "background": "#f0f6ff",
+      "textColor": "#004eb9",
+      "borderRadius": "8px",
       "borderRadiusCorners": {
-        "topLeft": "300px",
-        "topRight": "300px",
-        "bottomRight": "300px",
-        "bottomLeft": "300px"
+        "topLeft": "8px",
+        "topRight": "8px",
+        "bottomRight": "8px",
+        "bottomLeft": "8px"
       },
       "shadow": "none"
     }
   },
   "images": {
-    "logo": "File saved at: attached_assets/logo.webp",
-    "favicon": "File saved at: attached_assets/favicon.webp",
-    "ogImage": "http://static1.squarespace.com/static/635cfa1fc76ae72fbff0e2d4/t/680f747f8099fc548e755c03/1772731267598/Social+Post+Image+link.png?format=1500w",
+    "logo": "File saved at: attached_assets/swp-summit-logo.png",
+    "favicon": "File saved at: attached_assets/swp-summit-icon.png",
+    "ogImage": "File saved at: artifacts/checkout/public/opengraph.png",
     "logoHref": "File saved at: attached_assets/logoHref.html",
-    "logoAlt": "HR Analytics Summit"
+    "logoAlt": "SWP Summit"
   },
   "__llm_logo_reasoning": {
     "selectedIndex": 1,
-    "reasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'HR Analytics Summit'.",
+    "reasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'SWP Summit'.",
     "confidence": 0.9,
     "source": "llm"
   },
@@ -104,7 +104,7 @@
     "primary": {
       "index": 7,
       "text": "BOOK NOW",
-      "reasoning": "Button #7 with text 'BOOK NOW' uses the vibrant brand color #E74F3E, indicating a strong call-to-action. It is likely the main CTA due to its prominent color and action-oriented text."
+      "reasoning": "Button #7 with text 'BOOK NOW' uses the vibrant brand color #004eb9, indicating a strong call-to-action. It is likely the main CTA due to its prominent color and action-oriented text."
     },
     "secondary": {
       "index": 1,
@@ -134,7 +134,7 @@
       "finalSource": "llm",
       "rawLogoSelection": {
         "selectedLogoIndex": 0,
-        "selectedLogoReasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'HR Analytics Summit'.",
+        "selectedLogoReasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'SWP Summit'.",
         "confidence": 0.9
       }
     },
