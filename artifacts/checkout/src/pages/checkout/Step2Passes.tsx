@@ -624,9 +624,13 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <p className="swp-blue-header-muted mb-1 text-xs font-semibold uppercase tracking-widest">
                 SWP Summit · 3 Mar 2027, London
               </p>
-              <h3 className="swp-blue-header-title font-display text-2xl font-bold leading-tight !text-white">
+              <div
+                role="heading"
+                aria-level={3}
+                className="font-display text-2xl font-bold leading-tight text-white"
+              >
                 HR Professional Pass
-              </h3>
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <InventoryBadge remaining={inventory.single} />
