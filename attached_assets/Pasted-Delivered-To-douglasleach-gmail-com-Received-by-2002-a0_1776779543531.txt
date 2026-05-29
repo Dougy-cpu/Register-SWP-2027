@@ -1,0 +1,368 @@
+Delivered-To: douglasleach@gmail.com
+Received: by 2002:a05:7108:58c:b0:558:d8cb:4eea with SMTP id cn12csp2310674gdb;
+        Tue, 21 Apr 2026 06:51:06 -0700 (PDT)
+X-Received: by 2002:a05:6808:308d:b0:462:dc57:f8ba with SMTP id 5614622812f47-4799ca087b9mr9140867b6e.27.1776779466454;
+        Tue, 21 Apr 2026 06:51:06 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1776779466; cv=none;
+        d=google.com; s=arc-20240605;
+        b=hJ46rbh0rGCGNE3U2ZaKfo2L0fuQtwJTYFvpicm+RteoGVO5TbA5k0sU+wUyEjO2wA
+         /QS7Hrp/gqNoSx6rE/kgY9Eo702626Ruw4JuR+/7GoQV7VJrdj0vwNFeCqsvzFDOdlNJ
+         T2htRIcQk1QmtWqefMwoXbFPCT/gwf7hfjSaiXaxKVSM2DCb4NF9Gnl5xGIRfQYwvJOT
+         cVG1SS3Um64MP0YKZo5AcUV1/b3WFRV6s3LZZCgUG2dZcD4yHfuPnA5w46Tyip538r1t
+         sGbM3D4LKjM7DaiGhc4e4wQJekvvVxM2LoqAg/wdkYMiCjlKWCjZwIyjIdf2WQDqouXp
+         M1ug==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:dkim-signature;
+        bh=T5C5jWoyW0CS+iDhhJ7AQiPmPDu6seMofpG1iYygdPk=;
+        fh=KCp9bCkyoDM/cEePSJumRCMFFI6SB5pl5LHvb0Jv/N8=;
+        b=GNhZA+yeBP0eH7f2W8YURAKkjXTxSP30+HaiFviimiXTukPyqaawczEtWtBNzLPxdq
+         +uqz7KeNoQhayJMzcR7bLTHi/6dYzuGC8FeLJ4L3g7z9ANdQoyKL0jvMH+PipI/g9qI/
+         ljd6qbp7D4Mw6BXIPO2P/n7h8Xut4aXqWc35cyXkaqrNqAM7DToP13ZimnqeEJrJadqy
+         /snjhif2xxR/djKXslf+1ZHDWg7kwr+DdR/Viwj7+6kMVKGzAwTlnANH0iA2oc1wKRFd
+         J4gK2PfAitQ1MjIlJgYUhE7rPSEu8rac2mpUCd81HxovuW+mdBT0txkzX3lGMeck2T1T
+         52bQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@hranalyticssummit.com header.s=google header.b=NE5V4wB5;
+       spf=pass (google.com: domain of douglas@peoplestrategyhub.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=douglas@peoplestrategyhub.com;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=hranalyticssummit.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <douglas@peoplestrategyhub.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 5614622812f47-479a01e9b04sor3145368b6e.12.2026.04.21.06.51.06
+        for <douglasleach@gmail.com>
+        (Google Transport Security);
+        Tue, 21 Apr 2026 06:51:06 -0700 (PDT)
+Received-SPF: pass (google.com: domain of douglas@peoplestrategyhub.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@hranalyticssummit.com header.s=google header.b=NE5V4wB5;
+       spf=pass (google.com: domain of douglas@peoplestrategyhub.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=douglas@peoplestrategyhub.com;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=hranalyticssummit.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=hranalyticssummit.com; s=google; t=1776779466; x=1777384266; dara=google.com;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:from:to:cc:subject:date:message-id:reply-to;
+        bh=T5C5jWoyW0CS+iDhhJ7AQiPmPDu6seMofpG1iYygdPk=;
+        b=NE5V4wB5POK5nIrk0yKicRM3onEOXiLA/8k0rGvzNeefoB3IIvnu0mOT7X83R9JczR
+         Tupg70yYmr1fCSzXDiWDSXNP8fwL0o91+09XM8r+MvH+6lf+W1CWI6knJiN4RdtSvPCL
+         06rgQ47BeYqi+1fK409Wn5ppkOjP8kPSaCNviSLyBxKg9YYq9MC2J/4RVDuQkgKyj59/
+         86JZ5kFWQW1muZfMYuq5rx9hDEi9JCDJ/XX/l3woCKUFt04X2JJk87kad98RWteElWiP
+         AsDFt74Vp250FDRGZmuWkKwImCR9yW7Wopb2I5W23gW2fxwymOH4Q3egtKdsnU5SnYII
+         4JjQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1776779466; x=1777384266;
+        h=mime-version:date:content-transfer-encoding:message-id:subject:to
+         :from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=T5C5jWoyW0CS+iDhhJ7AQiPmPDu6seMofpG1iYygdPk=;
+        b=E/WTS/q3fzO4hT2npKFzh2gbv8xHtoRmtih1IfBpy+pePr6zlqHp8dwEs1YC9OlJi3
+         d3UrABYZKVIPjTnnLtaCu8MeNAs1iiATd2a/brYwukd3+D4Tbtuq3eh0AZUm+yIWqvwS
+         7pYItMsd64skKNreuS6ZLjdjbiROvNOmjgKFHjmY+YXBEc9+EyqNLbG8MW8pKtyMDVYd
+         PSj7BD59pjbHVLzKH9CUUGxvt7SwEFZutI0dpJ7pHz7Mpa9hOq2Yi6pFSjB1/ZU/jUQh
+         mqCqJimlpi+MFlj/cCywlwVn5FOKtiv7MCuQe2fXHnS1WyuMQRpDDi+sZWO3rfi8MC6G
+         ZWow==
+X-Gm-Message-State: AOJu0Yxf0G0kpJw3ZhikzMyFZvlOS7JMNt57dAVKpGvTgGJ/hil8FaIo ZOhKuYD18/hEIHb4+nfMK/BLs1AIbcgeB2LTDxc9+eb9OkEgD6+JzdXEPXEJ3LjjF2VkGts4xHj GjVpmv64=
+X-Gm-Gg: AeBDiet3nWaovHO/sgKvPNm92Tq7bAEGy4ykB7t9FQoL8a2fdfhFk/91rMtHwFT9joI VD0MUDInyUf5DLbur8Vkz7+/aZpwu5eR2mtM3OttJ6iK47w/87agvalhdwOGuNlPjDtfdOoY3y6 WRhmqRr1AwJRe/GhgC8lhPqKf2oG4WRKsx8XbrgPcqwxSaErvwdjBpaCoOuEKlCwmtbQd6VpceP ar8p5TMq6rO6CHb9vnYK8wG5tekp36HPZaxGFNxOEHcyLABn4TN8h0crgK+bpcdTtItNIxVYQpP 2kKDjbVRK+NySFtvCXKHf+azT74N2jx2dgQ9W5HSb3IZLisxhyDbh6CobO0Luj6gjKPaz68a6O8 48afoK2i050LD6WGlk1MLbpLOAMz/R6PhxiI7nPExMm4WRaD8thiy8G1DyIJKeOEDmbcXt38d4o vuFntdh7j4pwKncqEYRuI+KiuEgoaigCx9Zw3iOnSkm6UN
+X-Received: by 2002:a05:6808:159d:b0:471:f036:791f with SMTP id 5614622812f47-4799ca09423mr9015046b6e.30.1776779465395;
+        Tue, 21 Apr 2026 06:51:05 -0700 (PDT)
+Return-Path: <douglas@peoplestrategyhub.com>
+Received: from [127.0.0.1] ([34.34.233.130])
+        by smtp.gmail.com with ESMTPSA id 586e51a60fabf-42fae7ee3a5sm1009541fac.7.2026.04.21.06.51.04
+        for <douglasleach@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Tue, 21 Apr 2026 06:51:04 -0700 (PDT)
+From: HR Analytics Summit <douglas@hranalyticssummit.com>
+To: douglasleach@gmail.com
+Subject: Welcome to HR Analytics Summit 2026 — We Can't Wait to See You!
+Message-ID: <0a6a71ee-ac0f-9809-f0ec-c1b6025ee8e8@hranalyticssummit.com>
+Content-Transfer-Encoding: quoted-printable
+Date: Tue, 21 Apr 2026 13:51:03 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset=3D"utf-8">
+  <meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scale=3D=
+1">
+  <title>HR Analytics Summit</title>
+  <style>
+    body { font-family: 'Figtree', Arial, sans-serif; background: #FCFBFA; =
+margin: 0; padding: 0; color: #000; }
+    .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
+    .header { background: #FCFBFA; padding: 24px 32px; border-bottom: 2px s=
+olid #E74F3E; text-align: center; }
+    .content { padding: 32px; }
+    .footer { background: #1a1a1a; color: #ccc; padding: 24px 32px; text-al=
+ign: center; font-size: 13px; }
+    .footer a { color: #F48847; text-decoration: none; }
+    h1, h2, h3 { color: #000; }
+    .badge { display: inline-block; background: #F7E25E; color: #221D1B; pa=
+dding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+    .cta-btn { display: inline-block; background: #E74F3E; color: #fff; pad=
+ding: 12px 28px; border-radius: 300px; text-decoration: none; font-weight: =
+600; margin: 16px 0; }
+    .price-row { display: flex; justify-content: space-between; padding: 8p=
+x 0; border-bottom: 1px solid #eee; }
+    .price-total { display: flex; justify-content: space-between; padding: =
+12px 0; font-weight: 700; font-size: 18px; }
+    .info-box { background: #FCFBFA; border: 1px solid #DEDDDC; padding: 16=
+px 20px; border-radius: 4px; margin: 16px 0; }
+  </style>
+</head>
+<body>
+  <div class=3D"wrapper">
+    <div class=3D"header">
+      <img src=3D"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAACWCAI=
+AAACzY+a1AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAE22lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAA=
+AAPD94cGFja2V0IGJlZ2luPSfvu78nIGlkPSdXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQnPz4KP=
+Hg6eG1wbWV0YSB4bWxuczp4PSdhZG9iZTpuczptZXRhLyc+CjxyZGY6UkRGIHhtbG5zOnJkZj0n=
+aHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyc+CgogPHJkZjpEZXN=
+jcmlwdGlvbiByZGY6YWJvdXQ9JycKICB4bWxuczpBdHRyaWI9J2h0dHA6Ly9ucy5hdHRyaWJ1dG=
+lvbi5jb20vYWRzLzEuMC8nPgogIDxBdHRyaWI6QWRzPgogICA8cmRmOlNlcT4KICAgIDxyZGY6b=
+GkgcmRmOnBhcnNlVHlwZT0nUmVzb3VyY2UnPgogICAgIDxBdHRyaWI6Q3JlYXRlZD4yMDI1LTEy=
+LTI5PC9BdHRyaWI6Q3JlYXRlZD4KICAgICA8QXR0cmliOkV4dElkPmI3OWI3MWZiLTMxNmItNGQ=
+1MS1iOTZkLWZlM2JjZGY1YjU0NDwvQXR0cmliOkV4dElkPgogICAgIDxBdHRyaWI6RmJJZD41Mj=
+UyNjU5MTQxNzk1ODA8L0F0dHJpYjpGYklkPgogICAgIDxBdHRyaWI6VG91Y2hUeXBlPjI8L0F0d=
+HJpYjpUb3VjaFR5cGU+CiAgICA8L3JkZjpsaT4KICAgPC9yZGY6U2VxPgogIDwvQXR0cmliOkFk=
+cz4KIDwvcmRmOkRlc2NyaXB0aW9uPgoKIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PScnCiA=
+geG1sbnM6ZGM9J2h0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvJz4KICA8ZGM6dGl0bG=
+U+CiAgIDxyZGY6QWx0PgogICAgPHJkZjpsaSB4bWw6bGFuZz0neC1kZWZhdWx0Jz5TcG9uc29yc=
+yAtIEFsbCAoMTUwIHggMTUwIHB4KSAtIExpZ2h0PC9yZGY6bGk+CiAgIDwvcmRmOkFsdD4KICA8=
+L2RjOnRpdGxlPgogPC9yZGY6RGVzY3JpcHRpb24+CgogPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJ=
+vdXQ9JycKICB4bWxuczpwZGY9J2h0dHA6Ly9ucy5hZG9iZS5jb20vcGRmLzEuMy8nPgogIDxwZG=
+Y6QXV0aG9yPkRvdWdsYXMgTGVhY2g8L3BkZjpBdXRob3I+CiA8L3JkZjpEZXNjcmlwdGlvbj4KC=
+iA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0nJwogIHhtbG5zOnhtcD0naHR0cDovL25zLmFk=
+b2JlLmNvbS94YXAvMS4wLyc+CiAgPHhtcDpDcmVhdG9yVG9vbD5DYW52YSAoUmVuZGVyZXIpIGR=
+vYz1EQUc4REpZQUFzTSB1c2VyPVVBRG5zWF9kWW1FIGJyYW5kPURvdWdsYXMgTGVhY2gmIzM5O3=
+MgVGVhbSB0ZW1wbGF0ZT08L3htcDpDcmVhdG9yVG9vbD4KIDwvcmRmOkRlc2NyaXB0aW9uPgo8L=
+3JkZjpSREY+CjwveDp4bXBtZXRhPgo8P3hwYWNrZXQgZW5kPSdyJz8+WsY7kwAAGHtJREFUeJzt=
+nXlcE2f+x59JIOFUw30WAYUAiiKCImDrgSBary6XVRALFqGiliKr20UF6oJSldoFWS2CiqJSLHi=
+xKIotFXUpooRiiiDUKohYbhJIwvz+mF+ffZoDEy6ddd4v/nguZp6ZzzznfL8TDFCQHOx1V4BiuF=
+ASkh5KQtLzJwlzcnKsra1fV1Uo5ITL5fr7+8OoEppnbW09ffr0Ma8SxbCgve4KUAwXSkLSQ0lIe=
+igJSQ8lIemhJCQ9lISkh5KQ9FASkh5KQtJDSUh6KAlJDyUh6aEkJD2UhKSHkpD0UBKSHkpC0kNJ=
+SHooCUkPJSHpoSQkPZSEpIeSkPRQEpIeSkLSQ0lIeigJSQ8lIemhJCQ9lISkh5KQ9FASkh5KQtJ=
+DSUh6KAlJDyUh6aEkJD2UhKSHkpD0UBKSHkpC0kNJSHooCUkPJSHpoSQkPZSEpIeSkPRQEpIeSk=
+LSo/TqIn9GJBJduXIFw6R8l338+PFTp04dP378SFRs5Ont7b1+/TpRcxqN5uXlJfUqSIfCEvb39=
+y9btgzHcam5DAbDw8Njx44dc+bMGXbdRpiWlhZYczU1te7u7tddo5FhhDvS/v7+S5cuvffee4mJ=
+ibJkfo3AKr2BdRsyozIWCgSCHTt2nDt3bjQOTiGGwh2pGM7Ozubm5gAAoVBYUlLy8uVLIh3H8Yi=
+ICG9vbw0NjeHWkWJQhithWFhYcHAwEebz+ZGRkUeOHCGira2td+/enT9/PiyM4/jz58/b2tpwHG=
+exWAYGBoNMKIRCYVNTU2dnJ41G09bW1tXVlSyM9odEbnt7e1NTEwBAR0dHR0dHoQmLSCRqaWlpa=
+2sDAGhra+vp6ZFivjOSHamKisqePXtotP8e8/79+0RAIBBkZmba2toaGRnZ2dnZ2dkZGxs7ODjk=
+5+dLDkvd3d3JyckmJiZmZmZTpkyxtbU1MDCYOXPm2bNnBwYGYLG2tjb1P9DQ0Ghvb4+KitLR0bG=
+1tbW1tdXX1/f29i4vL5en5kKh8PDhw1ZWVsbGxkT1DA0N3dzcioqKhn1XRp0RHgsnTJhAp9NhtL=
++/HwDA4/EWLVoUHBz88OFDHMcJzXAcv3///ooVKzZv3oweoba21tnZOTo6+vnz5+jso6Kiws/Pb=
+9WqVSKRCBbm8/k8Ho/H4/X29q5YsWL//v0wF8fxwsLCuXPnXr16dfA6P3v2zNnZeePGjfX19egZ=
+b9265eXltXPnzuHelFFmhCXMy8sTCAQwamZmJhQKlyxZUlJSAhPV1NRUVFRg9Ouvv96/fz8Rbmt=
+r8/b2rqmpkXX8/Px8f39/qfPJmzdvSibyeLwPPvigublZ1gF5PN77779/7949mKKhoQGrh+N4XF=
+xcdna2rH9/ExiuhGVlZSdOnDhx4sTx48d3794dEBAAszAMc3d3z8nJuXHjBpFCp9MPHDjQ1dXV1=
+dX197//nUjEcTw+Pr61tRUA8OWXXz569AgeYfz48StXrly4cKGS0n/H7Nzc3MLCQqmVUVdXX7Zs=
+mYeHB9qZd3V1paamyqp/WlpaRUUFEdbU1MzIyOjo6Hj58uVnn30GB8Lo6Gi06b9p/Gm4vnfv3it=
+/dovH46mrq8uzrgoLC0tLS3N2dv7Pf/5DpOzcuRPtl1avXp2Tk0OEjxw5EhAQoKury+PxiBRnZ+=
+fvvvuOmPKUlpbOmzdPKBQSWX5+fjk5OW1tbdra2rAmJiYmxcXFVlZWOI6Xl5e/9957vb29RJa9v=
+X1lZWVjYyMxeQYAqKqq9vT0YBjGZrO5XC6RGBsbu2vXLlg9d3f3H3/8kQh/880369evf+Uljw2V=
+lZUODg4wOlp7pI6OjomJie3t7eiEIjU11QIBnSzcunWrvr4e6gcASEhIMDQ0JJqCm5tbbGwszDp=
+//jwxyqLEx8dbWVkBADAMc3JyWrduHcx68uSJ1Er29fXV19fDaHp6Olq9Bw8ewKzbt28rdv1jyH=
+AXFZLQaLR169alpaUxGIxff/0VzXrx4sWLFy+k/tfNmzfFOmGxLTo2mw3DAoGgp6cHzcUwzMXFB=
+U1Bn1P0yUB5+vQpOnI/f/5c1kU9efIEx/E3c40xXAk9PDxsbW2J8Pjx442MjDw9PSdOnEikoGPS=
+4DQ1NaEDHvijx4ZR9F4TR0YXGDiO9/X1oQU6OzvRwlJPymAw5Kze77//LmfJsWe4EgYEBMClvSR=
+aWlp0Oh2OYUePHl27di3M5fP5SkpKULknT55gGAaXHAUFBXD4IVYI6GE1NTU7OjrQc+Xm5trb28=
+PyxcXFMGvcuHFSG5CRkZG6ujps0Dk5OStXroS5fX19ysrKhPwYhr2ZTRCM9vtCNTU1Hx8fGN27d=
++/Lly8ZDAaDwaDT6du2bbOxsUlJSeFyuQwGw8zM7J133oGFw8PDz54929fX19nZmZCQcOLECZi1=
+fv16yYa1d+/e7OxsPp//+++/R0dHX758GWahnTAKhmHo9C05Obmrq4uonpKSUkhIyJQpU1JTUx8=
+/fqysrDzMWzF6DHdGmpGRMUgrBACUlZW5urrC8np6esuXL2cymT/99FNZWdn/VwLDLl686O3tff=
+LkSbSZAgCUlJRwHEfn9EpKSlVVVWw2W2xGSqCsrCwSidA+FgCQlZUVGBjY0NAgOSO9fPnykiVLY=
+EkzMzMvLy8lJaXS0lK4tUSn0+/evTtjxozB78yYITYjHfnpjBguLi4xMTFJSUnEvW5paYGbqBBP=
+T09PT08AQEBAwIULF86ePQuzYCdMQKPREhMTpbYqohMWGzIBANOnT/f19ZVVPS8vr/DwcLhwbGx=
+sTE9PFyvj7+//5ugnyVgYXvzjH/+Ii4uT1Rf5+vpeuHCB2Jaj0+lnzpwJDw+XOvCoq6unpKR8+u=
+mnklkYhkVEREj+l42NTW5uLroZJAaNRvvnP//517/+VWr1aDRaYGBgRkbGIFf32lG4IxUIBF988=
+QWMLl++HG3Ug1BXV5ebm/vtt98+ePBgYGDAyspq2bJlixcvdnNzk7z1lZWV58+f//bbb3/55Rc6=
+nT5jxowPPvjA19fXxMQElkE7UgzDamtr6+rqUlNTi4qKcBx3cXHx8/MLCgqC+rW3tx88eJAIKys=
+r79ixA54Xx/Hq6uq8vLy8vDxie8/W1nb58uXe3t7Ozs7yXN1YItaRKizh8CF2uuVcbwwMDMiaDU=
+pKaGlpSfwLUGQ9I3nG4fz7GDDWY6EkCk3Qh3Arh3n332TxpEKy6lJIQklIel5DRzqCMJlMIvDGb=
+p2MASSWkMViwddJ4C1WkcQSgrdYNpThSojjeHt7e29vr5qa2oQJEwB1W8ecIU5ncBy/ePHiX/7y=
+F319fW1tbRMTEy0tLSMjow8//PDOnTsjW0WKwRnK0r6/vz80NPTkyZNiu8kEdDr9008/TUxMhAu=
+sy5cvFxQUEGEDAwPUuGFkwXE8OTm5rq6OiAYEBLz77rujdK7XyAgs7ePj448fPy4rVyQSJScnM5=
+nM+Ph4eEq4d2xjYzN6EgIACgoKSktLifD06dP/JyUUQ+GOtLW1NTExEU2ZOXPmhg0bJk+eDFNwH=
+N+3b9/PP/88AhWkeBUKS1hZWYm+AEpJSblz5056evrDhw/37t0LAMAwzMzMLCgoCLUJphg9FO5I=
+nz59ikZ9fX2JMY9Go0VFRfX09Pj7+1tbWxPz0srKyoqKip9++gmW7+joIN7daGho+Pj4YBhWVlY=
+GbX8nTZo0d+5cHMd//fXX77//3tHRERrmcLncwsLCn3/+ubW1VV9fn81mz58/f8qUKUQujuNnz5=
+7t6elBTZhu3bpFWMfMmDFDbIyvrq6+fv06l8ttbm7W19e3s7N7//33TU1NJa+3pqamsLCwqqqqp=
+6fH3t5+6dKl06ZNu3LlCuG5AQCYMmWKsbHxv//9b/gvjo6O06ZNQw/C5/NPnToFo9bW1q6urvLc=
+bXlQeDqTn5+/YsUKGCVeiMsqHB8fjxoPopiZmT1+/BjDsMjIyEOHDhGJa9euTU9PDw0NPX369MD=
+AQHp6+oYNG3Ac37Jly9dffy02e6LT6UR5BoOB4/jEiRPFDOYgcXFx0PK4s7Nz48aNZ86cEbPuVV=
+NT27lzZ3R0NPoGateuXYmJiajBI5PJzMjI+Oabb65fv06kREVFJSYmmpqaQptxHx+fM2fOoIur3=
+Nxc1ADl0qVL3t7esm7aKxmuHamjoyO6lx8cHDxv3rz9+/ffv39flq2f/HR0dMyZMyc7OxuqheN4=
+cHDwV199JTn7FYlEmZmZqL3oK2lra3N3dz916pSkdXZvb29MTMzu3buhJUdSUlJ8fLyYwWpfX19=
+gYODDhw/RRCUlpcjISBgtKCh49uwZjOI4jpr0GxoaLliwQP46vxKFJTQxMQkNDYXRgYGBkpKSqK=
+goBwcHFosVGhqKdpuKUlBQUFlZiaYUFhais18WizVr1izUnT8nJ+fatWvyHBzH8U8++QQa+CorK=
+/v7+0dFRaENIi4ujljXPn/+PCEhQcwwh2hYIpEIVYjg448/VlVVJcJ9fX2o7cjTp0/z8/NhNCYm=
+Bm7tjghDWdrv27dPcrJOWHIePXrUyckJdp5hYWEcDgf1XbKwsOBwOBwOp6ioSNY+DoZhxsbGvr6=
++bDbb09Pzhx9+iI+PNzIy8vX1bWhoKCsre/z4MRwjiWccw7CrV69yOBzUyCU2NpY4V1hYGACgoa=
+EBOh7TaLSCgoLTp08nJydfvHhx27Zt8GhxcXEAgJSUFNTa2M7O7tq1a01NTZcuXTIzM5Oss5aWV=
+nR0NIwmJyfD5nv69Gn4KKioqPj5+Q12cxVnKOtCTU3Nq1evpqWlHThwoLGxUexRxXE8ISGBxWJt=
+3bpVV1dXV1dXT08P5jKZTDs7u0EOHhgYuGvXrokTJ0KBXV1dXV1dY2JiRCKRkpKSSCTS1NTcsGH=
+Dli1biALV1dU4jhPeFGpqavBQhoaG6LkyMjKgcZS2tnZLSwts35aWltC2uLS0VCQSoV0lg8E4f/=
+48sWry9vY+cuSIp6enpFdJSEjIvn37iNHk2bNnJSUlixYtAgAcO3YMllm1apWBgcEglz8EhrhHq=
+qysHBkZuWnTprq6ulOnTlVVVV29ehXa5hITgaCgIC0tLYUO6+rqmpmZKdY6BQLB8ePH8/Lyvv/+=
+e9gy0DsIvcMHB+39Xrx4ERQUJLVYV1dXZWUl6oZhYWExadIkGF24cCGLxZK07zY1NQ0ICIC2Ul9=
+99ZWHh0d5eTl8Gmg02ieffCJPVRViWK98MQybNGlSbGzsuXPnGhoa0ElXZ2enLBeyQbCwsBDTr6=
+enZ/bs2SEhIZcvX+7u7sb/QKwa8hxc0j5RFlVVVWhhyQWuLOOMzz//HBr5FxcXt7a2Hj58GNZ22=
+rRpYo4fI8LQ31S8ePGis7OTsDgCAEyYMCEpKQn9yoUsDxiF+Ne//gX9/wAAOjo6hoaGDAaju7sb=
+OpXRaDSpKoopjfaxFhYWsB+WxMHBQV9fH0br6+ubm5sNDQ2J6L1792S5WJibmy9dujQvLw8AwOf=
+zd+3adf78eZi7adMm2Rc6dBSWsLy8/NatW+fOnfvxxx/ZbPb169dh5456dwIZTic8Hk8hF6Hvvv=
+sOhhcvXlxQUED4YBw/fhz2hLK2gYgbDU9nY2MDs16+fOnj44MOS+np6U5OTg4ODkRha2tr6DtHu=
+AofO3bMysqqpqbmo48+krq/T7B9+3ZCQgBAWloafIzU1dVXrVol51UrhMIdaUJCwubNm0tLS3Ec=
+r6mpcXd33759e2pq6tatW9GOFABgbW1NBFBL3MbGxrVr165fvx7drRgEtCnb2NjQ6XQcx7lc7t/=
++9rf/XgPSraHz9YMHD0ZGRi5YsIDQMjQ0lHijCQDo6Ojw8PC4ffs28REOHx+fsLAwR0fHmTNnJi=
+QkAAA2bdqEPoJlZWVsNpvFYtnZ2Ykte8RwdHRcvHgxEUa7ga1bt47Sp80UlnDPnj2oz9ijR48SE=
+xMjIiIOHjyIuho5OjrChcf8+fPRLY/s7Oxjx47FxcXJ4yqMbkTt37/fysrK3t5++vTpv/32G0yH=
+rRDDMOgXBwBobW09dOjQjRs3CBcANTW12NhYWBMOh+Pi4qKhoWFsbJybm0skVlRUEB/2mjx58rZ=
+t28R6C+IC6XS6rq6urApjGLZ161axRDqdvnr16lde7NBQWEJbW9uioiKp24kQY2PjY8eOwTs7bd=
+o0JycnsTJcLleehhgUFIT6HT569IjD4fD5fLSJoK0wJCREcuGckpJCbM1v3rz5o48+QoXp7e1Fd=
+2oWLly4e/duIhwXFxcXF4c+rwAATU3N7OzsqVOnDlLnhQsXzpo1C01ZtGiRLO+q4TOUGemcOXPu=
+3buXkJCgqakp9pzS6fTw8PA7d+6gF4lh2Llz58Q2didNmgRd0TAEsXO5ubnl5+eLPfUGBgZZWVn=
+ELAbDMHQsnD17dlZWlpgThYeHB7Fco9FoR44cyc3NFZv6YhimpaWVmpp65coV1Cru888/f/ToUW=
+ZmZlJS0p49ew4fPszhcPz8/Nrb2+H/Sg75GIaJzZVCQkJGzx5lWAb5fD6fy+VyudyOjg41NTVLS=
+0s2mw3HGzGEQmFNTQ2Hw+nt7bWzs5sxYwZx8e3t7XC1p6qqKnUpyePxqqqquFxuf3+/paWlk5MT=
+k8mELyWUlZXR3QMAQGdnZ0VFRX19vaqq6uzZs9GNAgKBQFBbW8vhcDo6OsaNG2djY2NlZSXpPSM=
+UCsV8jwEAzc3NlpaW0HguJydHcsPlyy+//Oyzz4iwubl5XV3dCEr4+n0qyIJQKHR3d3dxcVm5cu=
+Xs2bMJLaurq0NDQ+HXEzQ0NAinVyKan59vaGjY3d0dHBwMX5skJSXBDbwR4fX7VJCFoqKi27dv3=
+759+8CBAyoqKvr6+gKBQGyD29/fH+rX0tISGBiI+vgDAFRUVNC3AqMBJaF04H43AZ/Pb2xsFCtj=
+aWmJ2qCcOHFCTD8AwL59+1gs1ujVE1A+FbLo7+8fZOUAAHBzc7tx44a2tjYRFQgEycnJYmVWrlw=
+ZERExWlX8A6oVSofJZF64cIHD4dy8ebOqqqq8vLy5uXlgYMDU1HTBggVz58718vJCyysrK1dUVO=
+Tl5V27do14F7Z06dLRWwuiUNMZ8jFGH/CiGDMU7kiFQiFqVTBr1iz4sgLl5s2bcGxns9molamcN=
+DQ0VFVVEWE1NTV0l44CRWEJBQLBmjVr0O/OSJVwy5YtcDt4z54927dvV/REV65cCQ8PJ8KWlpa1=
+tbWKHuEtgepISQ8lIemhJCQ9Y7ouHMTmRfLnCqTy7Nmzx48fq6urs9lsJpNJTXDAGLfC8PDwiX8=
+AP6kOAODxeBMRoIMgSm1trYeHh6mpqZubm4ODg56eXkhICPFF77ec4bbCnp4eqTaAYp+/I2htbY=
+X79+grfsIPhghjGCb5v+3t7fPmzUO3mLu6ujIyMoqLi3/44YfB3z//zzNcCTdt2jRKhlkosixFG=
+xsb161bd+3atbe5RyXTdEZHR+fDDz9EDdEAACUlJW+5dz9pJFyyZElDQ8PJkyerqqqSkpJgsxsY=
+GIC/lPB2MlwJmUymhjRG9mN0TCYzMzOTsESi0+nR0dHQLQZIeK2+bQz3RqelpXVJA37pfEQwNDS=
+Eb+YAABiGOTo6wijxU2wjeDpy8do6UtT1Uur0VVZhAvRnXCUtlN4qxlRC9F4/ePAANp3B7aMBAE=
+1NTXfv3oXRjo4O9Ee2pP60IcBx+f/eHIZyV4fwP0NGU1MThouLi7OysoKCgqqrq6V+bhsFx/HVq=
+1efOnXK2dn5t99+8/HxQZcZFhYWYuUHeLy2WHGTapkHByAeLLiNv/PqogAAAFjmHO1J1XIfHPdO=
+n07D5W0qHl946trqvbocwphKiFo09/f3BwcHh4WF9ff3y/P01dfXu7i4jBs3rqenB+14VVVVpdi=
+nDIgEtTJ/QU8MHIBfwJS7uLwOD3rKzwxYv8h9cHzGA33agLwS9veKDxmvZEw70o8//ljMNaSvrw=
+/H8Vd+6pnIxXG8o6NDbOCMiIgQswN+2xhTCdXV1Q8dOiSmFoZhMTEx6O/ESOLs7CzVs2vNmjWEI=
+9LbjMIdKZ1OJ74+QAA90MTw8fGBHq2orc6aNWssLS2Tk5MfPHggEAjMzc23bNmyYsWKCRMmQENN=
+wqTf1tZ248aNRIq9vX1wcPDRo0ezsrKam5sZDMbUqVM3bNjg6ekpdQGKMZjjwqMl02WxGZh/AOT=
+tSFVYuqosZzk39HAAJn9hIP/u3wQzhY1OX5sFGxz/FN3exP/4VYORrxNJeFMM8oeswdssnlRIs0=
+dKIQtKQtJDSUh6KAlJDyUh6aEkJD2UhKSHkpD0UBKSHkpC0kNJSHooCUnPn7a54Rc+Kd5kxGSid=
+v1JDyUh6aEkJD2UhKTn/wBkw+aO4OZ2ogAAAABJRU5ErkJggg=3D=3D" alt=3D"HR Analytic=
+s Summit" style=3D"max-height:60px;max-width:200px;" />
+      <div style=3D"font-size: 13px; color: #666; margin-top: 4px;">3 Septe=
+mber 2026 =C2=B7 155 Bishopsgate, London</div>
+    </div>
+    <div class=3D"content">
+      <h2>Welcome, douglas!</h2><p>Thanks for booking your place at HR Anal=
+ytics Summit 2026. We=E2=80=99re looking forward to welcoming you to London=
+ on Thursday, 3 September.</p><p>HR Analytics Summit brings together HR, pe=
+ople analytics, workforce planning, talent, employee experience, HR technol=
+ogy and transformation professionals for a day built around practical insig=
+ht, stronger connections and better workforce decisions.</p><p>Here=E2=80=
+=99s what to look forward to on 3 September 2026 at 155 Bishopsgate, London=
+:</p><p>=E2=80=A2 Keynotes, case studies and practical sessions from leadin=
+g organisations<br>=E2=80=A2 Insight across AI, workforce planning, skills,=
+ governance, employee insight and business impact<br>=E2=80=A2 Time and spa=
+ce for meaningful conversations with peers, partners and new connections<br=
+>=E2=80=A2 Great food, drinks and a strong event atmosphere throughout the =
+day</p><p><strong>Event Details</strong></p><p>Date: Thursday, 3 September =
+2026<br>Venue: 155 Bishopsgate, London EC2M 3TQ<br>Registration: From 8:30a=
+m<br>Event Opens: 9:00am</p><p>Add to your calendar</p><p>
+    <div style=3D"margin:24px 0;">
+      <h3 style=3D"margin:0 0 8px;color:#000;">Save the date</h3>
+      <div style=3D"border:1px solid #DEDDDC;border-radius:6px;padding:18px=
+ 20px;margin:12px 0;background:#fff;">
+        <p style=3D"margin:0 0 4px;font-weight:700;font-size:15px;color:#00=
+0;">HR Analytics Summit</p>
+        <p style=3D"margin:0 0 14px;font-size:13px;color:#666;">Thu, 03 Sep=
+t 2026 =C2=B7 08:00=E2=80=9318:10 =C2=B7 155 Bishopsgate, London, EC2M 3TQ<=
+/p>
+        <p style=3D"margin:0;">
+          <a href=3D"https://calendar.google.com/calendar/render?action=3DT=
+EMPLATE&text=3DHR+Analytics+Summit&dates=3D20260903T070000Z%2F20260903T1710=
+00Z&details=3DHR+Analytics+Summit+brings+together+HR%2C+people+analytics%2C=
++workforce+planning%2C+talent%2C+employee+experience%2C+HR+technology+and+t=
+ransformation+professionals+for+a+day+built+around+practical+insight%2C+str=
+onger+connections+and+better+workforce+decisions.%0A%0AHere%E2%80%99s+what+=
+to+expect%3A%0A%E2%80%A2+Keynotes%2C+case+studies+and+practical+sessions+fr=
+om+leading+organisations%0A%E2%80%A2+Insight+across+AI%2C+workforce+plannin=
+g%2C+skills%2C+governance%2C+employee+insight+and+business+impact%0A%E2%80%=
+A2+Time+and+space+for+meaningful+conversations+with+peers%2C+partners+and+n=
+ew+connections%0A%E2%80%A2+Great+food%2C+drinks+and+a+strong+event+atmosphe=
+re+throughout+the+day%0A%0AEvent+details%0A%0ADate%3A+Thursday%2C+3+Septemb=
+er+2026%0AVenue%3A+155+Bishopsgate%2C+London+EC2M+3TQ%0ARegistration+opens%=
+3A+8%3A00am%0AFirst+sessions+begin%3A+9%3A00am&location=3D155+Bishopsgate%2=
+C+London%2C+EC2M+3TQ&ctz=3DEurope%2FLondon" style=3D"display:inline-block;b=
+ackground:#E74F3E;color:#fff;padding:9px 18px;border-radius:300px;text-deco=
+ration:none;font-weight:600;font-size:13px;margin:4px 6px 4px 0;">Add to Go=
+ogle Calendar</a>
+          <a href=3D"https://outlook.live.com/calendar/0/deeplink/compose?p=
+ath=3D%2Fcalendar%2Faction%2Fcompose&rru=3Daddevent&subject=3DHR+Analytics+=
+Summit&startdt=3D2026-09-03T07%3A00%3A00.000Z&enddt=3D2026-09-03T17%3A10%3A=
+00.000Z&body=3DHR+Analytics+Summit+brings+together+HR%2C+people+analytics%2=
+C+workforce+planning%2C+talent%2C+employee+experience%2C+HR+technology+and+=
+transformation+professionals+for+a+day+built+around+practical+insight%2C+st=
+ronger+connections+and+better+workforce+decisions.%0A%0AHere%E2%80%99s+what=
++to+expect%3A%0A%E2%80%A2+Keynotes%2C+case+studies+and+practical+sessions+f=
+rom+leading+organisations%0A%E2%80%A2+Insight+across+AI%2C+workforce+planni=
+ng%2C+skills%2C+governance%2C+employee+insight+and+business+impact%0A%E2%80=
+%A2+Time+and+space+for+meaningful+conversations+with+peers%2C+partners+and+=
+new+connections%0A%E2%80%A2+Great+food%2C+drinks+and+a+strong+event+atmosph=
+ere+throughout+the+day%0A%0AEvent+details%0A%0ADate%3A+Thursday%2C+3+Septem=
+ber+2026%0AVenue%3A+155+Bishopsgate%2C+London+EC2M+3TQ%0ARegistration+opens=
+%3A+8%3A00am%0AFirst+sessions+begin%3A+9%3A00am&location=3D155+Bishopsgate%=
+2C+London%2C+EC2M+3TQ" style=3D"display:inline-block;background:#1a1a1a;col=
+or:#fff;padding:9px 18px;border-radius:300px;text-decoration:none;font-weig=
+ht:600;font-size:13px;margin:4px 6px 4px 0;">Add to Outlook</a>
+          <a href=3D"https://register.hranalyticssummit.com/api/calendar/ma=
+in.ics" style=3D"display:inline-block;background:#fff;color:#000;border:1px=
+ solid #000;padding:8px 18px;border-radius:300px;text-decoration:none;font-=
+weight:600;font-size:13px;margin:4px 6px 4px 0;">Download .ics (Apple / oth=
+er)</a>
+        </p>
+      </div>
+    </div></p><p><strong>Community Social</strong></p><p>The evening before=
+ the summit, we=E2=80=99ll also share details about how to sign up for the =
+HR Analytics Summit Community Social, taking place in collaboration with Pe=
+ople Analytics Meetup UK. The social is expected to run from approximately =
+6pm to 9pm at a venue close to 155 Bishopsgate, giving attendees the chance=
+ to start conversations early in a more relaxed setting.</p><p>
+    <div style=3D"margin:24px 0;">
+      <h3 style=3D"margin:0 0 8px;color:#000;">Pre-event social</h3>
+      <div style=3D"border:1px dashed #DEDDDC;border-radius:6px;padding:18p=
+x 20px;margin:12px 0;background:#FCFBFA;">
+        <p style=3D"margin:0;font-size:14px;color:#444;line-height:1.5;">
+          Details to follow =E2=80=94 we'll be in touch closer to the date =
+with the time, venue, and an invite you can pop in your calendar.
+        </p>
+      </div>
+    </div></p><p><strong>Build your own agenda</strong></p><p>Closer to the=
+ event, we=E2=80=99ll send you access to our personalised agenda builder so=
+ you can explore the sessions and plan your day in advance. Please keep an =
+eye out for this email, as it will help you get the most from the event.</p=
+><p><strong>Manage your booking</strong></p><p>You can use the link below t=
+o update your details or transfer your place to a colleague if needed.</p><=
+p></p><p><strong>On the day</strong></p><p>There is no physical ticket for =
+the event. Your attendee badge will be ready and waiting for you at the reg=
+istration desk on arrival, along with the rest of your team if you are atte=
+nding together.</p><p>If you have any questions before the event, please do=
+n=E2=80=99t hesitate to reach out to us at <a target=3D"_blank" rel=3D"noop=
+ener noreferrer nofollow" href=3D"mailto:info@hranalyticssummit.com">info@h=
+ranalyticssummit.com</a>.</p><p>We look forward to seeing you there!</p><p>=
+Warm regards,<br>The HR Analytics Summit Team</p>
+    </div>
+    <div class=3D"footer">
+      <p>&copy; 2026 HR Analytics Summit. All rights reserved.</p>
+      <p><a href=3D"https://www.peoplestrategyhub.com">www.peoplestrategyhu=
+b.com</a></p>
+      <p style=3D"font-size: 11px; color: #999;">People Strategy Hub =C2=B7=
+ London, UK</p>
+    </div>
+  </div>
+</body>
+</html>

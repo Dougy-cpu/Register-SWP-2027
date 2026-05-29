@@ -1,0 +1,37 @@
+kind = "api"
+previewPath = "/api" # TODO - should be excluded from preview in the first place
+title = "API Server"
+version = "1.0.0"
+id = "3B4_FFSkEVBkAeYMFRJ2e"
+
+[[services]]
+localPort = 8080
+name = "API Server"
+# Dev routing: only /api routes reach this service in the dev proxy.
+# Production: the deployed service receives all traffic (frontend + API)
+# because deployment bypasses the multi-artifact dev proxy entirely.
+paths = ["/api"]
+
+[services.development]
+run = "pnpm --filter @workspace/api-server run dev"
+
+[services.production]
+
+[services.production.build]
+# Build the frontend first (with BASE_PATH=/), then compile the API server TypeScript
+args = ["sh", "-c", "BASE_PATH=/ pnpm --filter @workspace/checkout run build && pnpm --filter @workspace/api-server run build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+BASE_PATH = "/"
+
+[services.production.run]
+# we don't run through pnpm to make startup faster in production
+args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+
+[services.production.run.env]
+PORT = "8080"
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/api/healthz"

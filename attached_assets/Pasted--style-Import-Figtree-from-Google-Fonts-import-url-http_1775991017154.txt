@@ -1,0 +1,420 @@
+<style>
+  /* Import Figtree from Google Fonts */
+  @import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+
+  /* --- Pass Section Container --- */
+  .hras-passes-section {
+    font-family: 'Figtree', sans-serif;
+    max-width: 1100px;
+    margin: 60px auto;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+
+  /* --- Section Header --- */
+  .hras-passes-header {
+    text-align: center;
+    margin-bottom: 50px;
+  }
+
+  .hras-passes-header h2 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 0;
+    margin-bottom: 15px;
+    line-height: 1.2;
+  }
+
+  .hras-passes-header p {
+    font-size: 1.1rem;
+    color: #444;
+    max-width: 750px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* --- Cards Wrapper --- */
+  .hras-passes-wrapper {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    align-items: stretch; /* Ensures both cards are equal height */
+  }
+
+  /* --- Color Variables for Theming --- */
+  .hras-pass-hr {
+    --theme-color: #e74f3e; /* Brand Orange */
+    --theme-bg: #fef4f3; /* Light orange wash */
+    --theme-shadow: rgba(231, 79, 62, 0.2);
+  }
+
+  .hras-pass-biz {
+    --theme-color: #004eb9; /* Business Blue */
+    --theme-bg: #f0f6ff; /* Light blue wash */
+    --theme-shadow: rgba(0, 78, 185, 0.2);
+  }
+
+  /* --- The Pass Cards --- */
+  .hras-pass-card {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #f0f0f0;
+    border-radius: 12px;
+    padding: 40px 35px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    
+    /* Smooth animation transitions */
+    transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), 
+                box-shadow 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), 
+                border-color 0.4s ease;
+  }
+
+  .hras-pass-card:hover {
+    transform: translateY(-12px);
+    border-color: var(--theme-color);
+    box-shadow: 0 15px 30px var(--theme-shadow);
+  }
+
+  /* --- Card Header Elements --- */
+  .hras-pass-label {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--theme-color);
+    margin-bottom: 10px;
+  }
+
+  .hras-pass-card h3 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #111;
+    margin-top: 0;
+    margin-bottom: 5px; /* Reduced to bring price closer */
+  }
+
+  /* --- Pricing Block --- */
+  .hras-pass-price {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #111;
+    margin-bottom: 20px;
+    line-height: 1;
+  }
+
+  .hras-pass-price span {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #666;
+    margin-left: 5px;
+  }
+
+  .hras-pass-intro {
+    font-size: 1rem;
+    color: #444;
+    line-height: 1.5;
+    margin-top: 0;
+    margin-bottom: 25px;
+  }
+
+  .hras-pass-intro strong {
+    display: block;
+    color: #111;
+    margin-bottom: 8px;
+  }
+
+  /* --- Important Notice Box --- */
+  .hras-important-box {
+    background-color: var(--theme-bg);
+    border-left: 4px solid var(--theme-color);
+    padding: 15px 20px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 30px;
+    line-height: 1.4;
+  }
+
+  /* --- Content Blocks --- */
+  .hras-pass-block {
+    margin-bottom: 30px;
+  }
+
+  .hras-pass-block h4 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 8px;
+  }
+
+  .hras-pass-block ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .hras-pass-block ul li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+    color: #444;
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  /* Custom Bullet Points */
+  .hras-pass-block ul.bullet-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--theme-color);
+  }
+
+  /* Custom Checkmarks */
+  .hras-pass-block ul.check-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    top: -1px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--theme-color);
+  }
+
+  /* Exclusive Badge */
+  .hras-exclusive-badge {
+    background-color: var(--theme-color);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
+    line-height: 1;
+  }
+
+  /* --- Card Footer (Pinned to bottom) --- */
+  .hras-pass-footer {
+    margin-top: auto; /* Pushes the booking note and button to the bottom */
+    padding-top: 20px;
+  }
+
+  .hras-booking-note {
+    font-size: 0.9rem;
+    color: #666;
+    font-style: italic;
+    line-height: 1.4;
+    margin-bottom: 20px;
+  }
+
+  .hras-booking-note strong {
+    font-style: normal;
+    color: #111;
+  }
+
+  .hras-pass-btn {
+    display: block;
+    text-align: center;
+    background-color: var(--theme-color);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 16px 20px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+  }
+
+  .hras-pass-btn:hover {
+    filter: brightness(0.9);
+    color: #fff;
+  }
+
+  /* --- Contact Footer --- */
+  .hras-contact-footer {
+    text-align: center;
+    margin-top: 60px;
+    padding-top: 40px;
+    border-top: 1px solid #e0e0e0;
+  }
+
+  .hras-contact-footer h4 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 0;
+    margin-bottom: 10px;
+  }
+
+  .hras-contact-footer p {
+    font-size: 1.05rem;
+    color: #444;
+    max-width: 600px;
+    margin: 0 auto 25px auto;
+    line-height: 1.5;
+  }
+
+  .hras-contact-btn {
+    display: inline-block;
+    background-color: #111;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    padding: 14px 30px;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+  }
+
+  .hras-contact-btn:hover {
+    background-color: #333;
+    color: #fff;
+  }
+
+  /* --- Mobile Responsiveness --- */
+  @media (max-width: 850px) {
+    .hras-passes-wrapper {
+      flex-direction: column;
+    }
+    
+    .hras-pass-card {
+      padding: 30px 25px;
+    }
+  }
+</style>
+
+<div class="hras-passes-section">
+  
+  <div class="hras-passes-header">
+    <h2>Choose your pass</h2>
+    <p>Please select the pass that matches your organisation type. This helps us protect the quality of the audience and make sure each attendee is booked on the correct rate.</p>
+  </div>
+
+  <div class="hras-passes-wrapper">
+    
+    <div class="hras-pass-card hras-pass-hr">
+      <span class="hras-pass-label">In-house attendees</span>
+      <h3>HR Professional Pass</h3>
+      
+      <div class="hras-pass-price">£XXX <span>(+ VAT)</span></div>
+      
+      <p class="hras-pass-intro">
+        <strong>For in-house HR and business leaders</strong>
+        This pass is for HR executives, HR practitioners and business leaders attending from in-house teams. It is intended for professionals joining the event to learn, connect with peers and explore practical ideas, technologies and approaches shaping modern people strategy.
+      </p>
+
+      <div class="hras-important-box">
+        Important: This pass is not valid for consultants, recruiters, vendors, agencies or commercial service providers.
+      </div>
+
+      <div class="hras-pass-block">
+        <h4>Who this pass is for:</h4>
+        <ul class="bullet-list">
+          <li>In-house HR leaders and practitioners</li>
+          <li>People analytics teams</li>
+          <li>Workforce planning professionals</li>
+          <li>Talent, employee experience and transformation leaders</li>
+          <li>Business leaders attending from employer organisations</li>
+        </ul>
+      </div>
+
+      <div class="hras-pass-block">
+        <h4>What’s included:</h4>
+        <ul class="check-list">
+          <li>Conference Sessions</li>
+          <li>Networking Sessions</li>
+          <li>Happy Hour Networking</li>
+          <li>Personalised Agenda</li>
+          <li>Access to Pre-Event Social</li>
+          <li>Exhibition Hall</li>
+          <li>Award-winning Food & Drink</li>
+          <li>On-Demand Recordings</li>
+          <li>Additional Content Access</li>
+          <li>Presentation Slides</li>
+          <li>Post-Event Content</li>
+        </ul>
+      </div>
+
+      <div class="hras-pass-footer">
+        <p class="hras-booking-note"><strong>Booking notes:</strong> Automatic group savings are applied at checkout when multiple passes are selected. You can also choose invoice at checkout.</p>
+        <a href="https://register.hranalyticssummit.com/" class="hras-pass-btn">Book HR Professional Pass</a>
+      </div>
+    </div>
+
+    <div class="hras-pass-card hras-pass-biz">
+      <span class="hras-pass-label">Commercial attendees</span>
+      <h3>Business Pass</h3>
+      
+      <div class="hras-pass-price">£XXX <span>(+ VAT)</span></div>
+      
+      <p class="hras-pass-intro">
+        <strong>For commercial organisations attending the Summit</strong>
+        This pass is for vendors, solution partners, recruiters, consultants and other commercial organisations attending the event. It is intended for businesses joining the Summit to build visibility, connect with relevant attendees and take part in a high-quality day alongside senior HR and workforce leaders.
+      </p>
+
+      <div class="hras-important-box">
+        Important: This pass is not intended for in-house HR or employer-side attendees.
+      </div>
+
+      <div class="hras-pass-block">
+        <h4>Who this pass is for:</h4>
+        <ul class="bullet-list">
+          <li>Vendors and software providers</li>
+          <li>Solution partners</li>
+          <li>Consultants and advisory firms</li>
+          <li>Recruiters and search firms</li>
+          <li>Commercial service providers</li>
+        </ul>
+      </div>
+
+      <div class="hras-pass-block">
+        <h4>What’s included:</h4>
+        <ul class="check-list">
+          <li>Conference Sessions</li>
+          <li>Networking Sessions</li>
+          <li>Happy Hour Networking</li>
+          <li>Personalised Agenda</li>
+          <li>Access to Pre-Event Social</li>
+          <li>Exhibition Hall</li>
+          <li>Award-winning Food & Drink</li>
+          <li>On-Demand Recordings</li>
+          <li>Additional Content Access</li>
+          <li>Presentation Slides</li>
+          <li>Post-Event Content</li>
+          <li>Exclusive attendee report <span class="hras-exclusive-badge">Pass Exclusive</span></li>
+          <li>Company branding on site <span class="hras-exclusive-badge">Pass Exclusive</span></li>
+        </ul>
+      </div>
+
+      <div class="hras-pass-footer">
+        <p class="hras-booking-note"><strong>Booking notes:</strong> Automatic group savings are applied at checkout when multiple passes are selected. You can also choose invoice at checkout.</p>
+        <a href="https://register.hranalyticssummit.com/" class="hras-pass-btn">Book Business Pass</a>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="hras-contact-footer">
+    <h4>Not sure which pass applies to you?</h4>
+    <p>If you are unsure which option is right for you, please contact us before booking and we will point you in the right direction.</p>
+    <a href="https://www.hranalyticssummit.com/contact-us" class="hras-contact-btn">Contact Us</a>
+  </div>
+
+</div>

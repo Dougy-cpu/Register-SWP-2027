@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Confirmation Email Logo Fixed Preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 32px 16px;
+        background: #efeeec;
+        color: #111;
+        font-family: Arial, sans-serif;
+      }
+
+      .preview-note {
+        max-width: 600px;
+        margin: 0 auto 18px;
+        padding: 14px 16px;
+        border: 1px solid #d9d6d2;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .email-wrapper {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #fff;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+      }
+
+      .email-header {
+        background: #fcfbfa;
+        padding: 24px 32px;
+        border-bottom: 2px solid #e74f3e;
+        text-align: center;
+      }
+
+      .email-content {
+        padding: 32px;
+      }
+
+      .email-footer {
+        background: #1a1a1a;
+        color: #ccc;
+        padding: 24px 32px;
+        text-align: center;
+        font-size: 13px;
+      }
+
+      .badge {
+        display: inline-block;
+        background: #f7e25e;
+        color: #221d1b;
+        padding: 4px 12px;
+        border-radius: 100px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .info-box {
+        background: #fcfbfa;
+        border: 1px solid #dedddc;
+        padding: 16px 20px;
+        border-radius: 6px;
+        margin: 16px 0;
+      }
+
+      .price-row,
+      .price-total {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+      }
+
+      .price-total {
+        padding: 12px 0;
+        font-weight: 700;
+        font-size: 18px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 8px 4px;
+        border-bottom: 1px solid #eee;
+        text-align: left;
+      }
+
+      th {
+        background: #f5f5f5;
+      }
+
+      @media (max-width: 520px) {
+        body {
+          padding: 0;
+        }
+
+        .preview-note {
+          margin: 0;
+          border-radius: 0;
+          border-left: 0;
+          border-right: 0;
+        }
+
+        .email-header,
+        .email-content,
+        .email-footer {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-note">
+      <strong>Logo sizing preview:</strong> the People Strategy Hub logo below is locked to
+      <code>width="96"</code>, <code>height="96"</code>, <code>width:96px!important</code>, and
+      <code>height:96px!important</code>. This mirrors the production confirmation email wrapper.
+    </div>
+
+    <div class="email-wrapper">
+      <div class="email-header">
+        <img
+          src="../attached_assets/Light_1775054575733.png"
+          alt="People Strategy Hub"
+          width="96"
+          height="96"
+          style="
+            display: block;
+            width: 96px !important;
+            max-width: 96px !important;
+            height: 96px !important;
+            max-height: 96px !important;
+            margin: 0 auto;
+            border: 0;
+            outline: none;
+            text-decoration: none;
+            -ms-interpolation-mode: bicubic;
+            object-fit: contain;
+          "
+        />
+        <div style="font-size: 13px; color: #666; margin-top: 8px">
+          3 September 2026 &middot; 155 Bishopsgate, London
+        </div>
+      </div>
+
+      <div class="email-content">
+        <span class="badge">Booking confirmed</span>
+        <h1 style="font-size: 24px; margin: 18px 0 10px">Thank you for registering</h1>
+        <p style="font-size: 15px; line-height: 1.6; margin: 0 0 18px">
+          Hi Douglas, your booking for the <strong>HR Analytics Summit</strong> is confirmed. Your
+          confirmation details are below.
+        </p>
+
+        <div class="info-box">
+          <p style="margin: 0 0 8px"><strong>Order reference:</strong> HRAS26-TEST-001</p>
+          <p style="margin: 0 0 8px"><strong>Pass type:</strong> HR Professional Pass</p>
+          <p style="margin: 0"><strong>Quantity:</strong> 3 passes</p>
+        </div>
+
+        <h2 style="font-size: 18px; margin: 28px 0 12px">Attendees</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Lead</th>
+              <th>Name</th>
+              <th>Job Title</th>
+              <th>Company</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Lead</td>
+              <td>Douglas Leach</td>
+              <td>Global Head of L&amp;D Strategy</td>
+              <td>Vattenfall</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td>Attendee Two</td>
+              <td>People Analytics Lead</td>
+              <td>Example Ltd</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td>Attendee Three</td>
+              <td>HR Director</td>
+              <td>Example Ltd</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 style="font-size: 18px; margin: 28px 0 12px">Price summary</h2>
+        <div class="price-row"><span>Subtotal</span><span>GBP 507.45</span></div>
+        <div class="price-row"><span>VAT (20%)</span><span>GBP 101.49</span></div>
+        <div class="price-total"><span>Total</span><span>GBP 608.94</span></div>
+
+        <div class="info-box">
+          <p style="margin: 0; line-height: 1.6">
+            A VAT receipt is attached. If this booking is being paid by invoice, your secure invoice
+            email includes the link to add or update PO numbers and billing details.
+          </p>
+        </div>
+      </div>
+
+      <div class="email-footer">
+        <p style="margin: 0 0 8px">&copy; 2026 HR Analytics Summit. All rights reserved.</p>
+        <p style="margin: 0 0 8px">
+          <a href="https://www.hranalyticssummit.com" style="color: #f48847; text-decoration: none">
+            www.hranalyticssummit.com
+          </a>
+        </p>
+        <p style="font-size: 11px; color: #999; margin: 0">
+          People Strategy Hub Ltd &middot; London, UK
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

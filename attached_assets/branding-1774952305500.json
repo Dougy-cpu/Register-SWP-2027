@@ -1,0 +1,146 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "Figtree",
+      "role": "body"
+    },
+    {
+      "family": "Clarkson",
+      "role": "heading"
+    },
+    {
+      "family": "Arial",
+      "role": "unknown"
+    }
+  ],
+  "colors": {
+    "primary": "#E74F3E",
+    "secondary": "#F48847",
+    "accent": "#E74F3E",
+    "background": "#FCFBFA",
+    "textPrimary": "#000000",
+    "link": "#F7E25E"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "Figtree",
+      "heading": "Clarkson"
+    },
+    "fontStacks": {
+      "heading": [
+        "Figtree"
+      ],
+      "body": [
+        "sans-serif"
+      ],
+      "paragraph": [
+        "Figtree"
+      ]
+    },
+    "fontSizes": {
+      "h1": "82.816px",
+      "h2": "45.952px",
+      "body": "18.304px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "5px"
+  },
+  "components": {
+    "input": {
+      "background": "#FFFFFF",
+      "textColor": "#000000",
+      "borderColor": "#DEDDDC",
+      "borderRadius": "0px",
+      "borderRadiusCorners": {
+        "topLeft": "0px",
+        "topRight": "0px",
+        "bottomRight": "0px",
+        "bottomLeft": "0px"
+      },
+      "shadow": "none"
+    },
+    "buttonPrimary": {
+      "background": "#E74F3E",
+      "textColor": "#FFFFFF",
+      "borderRadius": "300px",
+      "borderRadiusCorners": {
+        "topLeft": "300px",
+        "topRight": "300px",
+        "bottomRight": "300px",
+        "bottomLeft": "300px"
+      },
+      "shadow": "none"
+    },
+    "buttonSecondary": {
+      "background": "#F7E25E",
+      "textColor": "#221D1B",
+      "borderRadius": "300px",
+      "borderRadiusCorners": {
+        "topLeft": "300px",
+        "topRight": "300px",
+        "bottomRight": "300px",
+        "bottomLeft": "300px"
+      },
+      "shadow": "none"
+    }
+  },
+  "images": {
+    "logo": "File saved at: attached_assets/logo.webp",
+    "favicon": "File saved at: attached_assets/favicon.webp",
+    "ogImage": "http://static1.squarespace.com/static/635cfa1fc76ae72fbff0e2d4/t/680f747f8099fc548e755c03/1772731267598/Social+Post+Image+link.png?format=1500w",
+    "logoHref": "File saved at: attached_assets/logoHref.html",
+    "logoAlt": "HR Analytics Summit"
+  },
+  "__llm_logo_reasoning": {
+    "selectedIndex": 1,
+    "reasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'HR Analytics Summit'.",
+    "confidence": 0.9,
+    "source": "llm"
+  },
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": 7,
+      "text": "BOOK NOW",
+      "reasoning": "Button #7 with text 'BOOK NOW' uses the vibrant brand color #E74F3E, indicating a strong call-to-action. It is likely the main CTA due to its prominent color and action-oriented text."
+    },
+    "secondary": {
+      "index": 1,
+      "text": "Sign UpSign Up",
+      "reasoning": "Button #1 with text 'Sign UpSign Up' uses a different vibrant color #F7E25E, making it suitable as a secondary CTA. It stands out with a distinct color from the primary button."
+    },
+    "confidence": 0.95
+  },
+  "personality": {
+    "tone": "professional",
+    "energy": "medium",
+    "targetAudience": "HR professionals and analytics experts"
+  },
+  "designSystem": {
+    "framework": "custom",
+    "componentLibrary": ""
+  },
+  "confidence": {
+    "buttons": 0.95,
+    "colors": 0.9,
+    "overall": 0.925
+  },
+  "__llm_metadata": {
+    "logoSelection": {
+      "llmCalled": true,
+      "llmSucceeded": true,
+      "finalSource": "llm",
+      "rawLogoSelection": {
+        "selectedLogoIndex": 0,
+        "selectedLogoReasoning": "Selected #0 because it is visible, located in the header, links to the homepage, and matches the brand name 'HR Analytics Summit'.",
+        "confidence": 0.9
+      }
+    },
+    "buttonClassification": {
+      "llmCalled": true,
+      "llmSucceeded": true
+    }
+  }
+}

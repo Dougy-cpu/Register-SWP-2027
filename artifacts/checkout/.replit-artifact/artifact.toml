@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "HR Analytics Summit Checkout"
+version = "1.0.0"
+id = "artifacts/checkout"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25227
+
+[services.development]
+run = "pnpm --filter @workspace/checkout run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/checkout", "run", "build" ]
+publicDir = "artifacts/checkout/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25227"
+BASE_PATH = "/"

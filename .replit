@@ -1,0 +1,116 @@
+modules = ["nodejs-24", "postgresql-16", "python-3.11"]
+
+[[artifacts]]
+id = "artifacts/api-server"
+
+[[artifacts]]
+id = "artifacts/checkout"
+
+[[artifacts]]
+id = "artifacts/mockup-sandbox"
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "typecheck"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "lint"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "format"
+
+[[workflows.workflow]]
+name = "typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm run typecheck"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "lint"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm run lint"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm run test"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "format"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm run format"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[userenv]
+
+[userenv.development]
+
+[userenv.shared]
+FREEAGENT_CLIENT_ID = "ZuB3ZkYghCkkWqU9aGm45A"
+FREEAGENT_CLIENT_SECRET = "ny0W4D2wIUeo_-6mUcA_lA"
+FREEAGENT_REFRESH_TOKEN = "1hnNsxzTl6IZpYqvrVWNuowYKy02O-brX7gr7jlxu"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = "587"
+SMTP_USER = "douglas@peoplestrategyhub.com"
+SMTP_PASS = "vmoy uean sqxl acoa"
+FROM_EMAIL = "douglas@peoplestrategyhub.com"
+FROM_NAME = "HR Analytics Summit"
+STRIPE_SECRET_KEY = "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"
+STRIPE_WEBHOOK_SECRET = "whsec_YyLH1qLOy9Tvqkudd3LrAwtntU3MArZE"
+APP_BASE_URL = "https://register.hranalyticssummit.com"
+ORGANISER_EMAIL = "(none)"
+
+[nix]
+channel = "stable-25_05"

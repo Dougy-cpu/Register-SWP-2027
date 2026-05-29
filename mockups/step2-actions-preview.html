@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Step 2 Action Footer Preview</title>
+    <style>
+      :root {
+        --bg: #fcfbfa;
+        --panel: #ffffff;
+        --ink: #111827;
+        --muted: #5f6b7a;
+        --line: #d9dee7;
+        --brand: #e74f3e;
+        --brand-dark: #d43f30;
+        --success: #22c55e;
+        --orange: #ff7a2f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      .page {
+        margin: 0 auto;
+        max-width: 960px;
+        padding: 28px 18px 44px;
+      }
+
+      .checkout-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 312px;
+        overflow: hidden;
+      }
+
+      .main {
+        padding: 32px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        font-size: 22px;
+        margin-bottom: 6px;
+      }
+
+      .discount {
+        color: var(--orange);
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .fieldbox {
+        border: 1px solid #ff998c;
+        border-radius: 6px;
+        margin-top: 22px;
+        padding: 14px 16px 12px;
+      }
+
+      label {
+        color: #42526b;
+        display: block;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+      }
+
+      select,
+      input {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        height: 42px;
+        padding: 0 14px;
+        width: 100%;
+      }
+
+      .promo {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: minmax(0, 1fr) 74px;
+        margin-top: 20px;
+      }
+
+      .apply {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .summary {
+        background: #f3f2f1;
+        padding: 32px;
+      }
+
+      .summary h2 {
+        font-size: 20px;
+      }
+
+      .line {
+        display: flex;
+        justify-content: space-between;
+        margin: 13px 0;
+      }
+
+      .saving,
+      .discount-line {
+        color: var(--orange);
+        font-weight: 800;
+      }
+
+      .total {
+        border-top: 1px solid #d4d4d4;
+        font-size: 26px;
+        font-weight: 900;
+        margin-top: 14px;
+        padding-top: 16px;
+      }
+
+      .saving-box {
+        align-items: center;
+        background: var(--success);
+        border-radius: 6px;
+        color: #ffffff;
+        display: flex;
+        font-weight: 900;
+        justify-content: space-between;
+        margin-top: 14px;
+        padding: 13px 16px;
+      }
+
+      .footer {
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: auto minmax(260px, 1fr) minmax(260px, 320px);
+        gap: 16px;
+        margin-top: 28px;
+        padding-top: 28px;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        cursor: default;
+        font: inherit;
+        font-weight: 800;
+        min-height: 56px;
+        padding: 0 30px;
+      }
+
+      .back {
+        background: #ffffff;
+      }
+
+      .primary {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #ffffff;
+        width: 100%;
+      }
+
+      .primary:hover {
+        background: var(--brand-dark);
+      }
+
+      .save {
+        align-items: center;
+        background: #ffffff;
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        min-height: 48px;
+        width: 100%;
+      }
+
+      .note {
+        color: var(--muted);
+        font-size: 13px;
+        grid-column: 1 / -1;
+        margin-top: 10px;
+        text-align: center;
+      }
+
+      @media (max-width: 760px) {
+        .checkout-card {
+          grid-template-columns: 1fr;
+        }
+
+        .summary {
+          order: -1;
+        }
+
+        .footer {
+          grid-template-columns: 1fr;
+        }
+
+        .back,
+        .save,
+        .primary {
+          width: 100%;
+        }
+
+        .primary {
+          order: 1;
+        }
+
+        .save {
+          order: 2;
+        }
+
+        .back {
+          order: 3;
+        }
+
+        .note {
+          order: 4;
+          text-align: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="checkout-card">
+        <div class="main">
+          <h1>3 tickets selected</h1>
+          <p class="discount">15% off group discount applied</p>
+          <p class="muted">You'll add attendee details in the next step.</p>
+
+          <div class="fieldbox">
+            <label for="source">How did you hear about the event?</label>
+            <select id="source">
+              <option>Select an option...</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 20px">
+            <label for="promo">Promo code</label>
+            <div class="promo">
+              <input id="promo" value="ENTER CODE" />
+              <button class="apply">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="summary">
+          <h2>Order Summary</h2>
+          <div class="line"><span>3 x HR Professional Pass</span><span>£597.00</span></div>
+          <div class="line discount-line">
+            <span>Group Discount (15%)</span><span>-£89.55</span>
+          </div>
+          <div class="line"><span>Subtotal</span><span>£507.45</span></div>
+          <div class="line muted"><span>VAT (20%)</span><span>£101.49</span></div>
+          <div class="line total"><span>Total</span><span>£608.94</span></div>
+          <div class="saving-box"><span>✓ You're saving</span><span>£779.55</span></div>
+        </aside>
+      </section>
+
+      <section class="footer" aria-label="Checkout actions">
+        <button class="back">Back</button>
+        <button class="save">Save and return to HR Analytics Summit ↗</button>
+        <button class="primary">Continue to Attendees</button>
+        <p class="note">Progress is saved without advancing the booking.</p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,2336 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: HR Analytics Summit Conference Registration API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: bookings
+    description: Conference registration bookings
+  - name: attendees
+    description: Attendee details management
+  - name: pricing
+    description: Pricing and discount calculations
+  - name: promo-codes
+    description: Promo code management
+  - name: discount-tiers
+    description: Group discount tier management
+  - name: stripe
+    description: Stripe payment operations
+  - name: email
+    description: Email template and log management
+  - name: admin
+    description: Admin panel operations
+  - name: calendar
+    description: Public iCalendar (.ics) downloads for the event and pre-event social
+paths:
+  /calendar/main.ics:
+    get:
+      operationId: downloadMainCalendarIcs
+      tags: [calendar]
+      summary: Download .ics file for the main event
+      description: |
+        Returns an RFC-5545 iCalendar file for the main summit event. Public
+        endpoint — no authentication. Returns 404 with a plain-text body when
+        the event start/end times have not been configured in admin settings.
+      responses:
+        "200":
+          description: iCalendar file
+          content:
+            text/calendar:
+              schema:
+                type: string
+        "404":
+          description: Event schedule not configured
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /calendar/social.ics:
+    get:
+      operationId: downloadSocialCalendarIcs
+      tags: [calendar]
+      summary: Download .ics file for the pre-event social
+      description: |
+        Returns an RFC-5545 iCalendar file for the optional pre-event social.
+        Public endpoint — no authentication. Returns 404 with a plain-text
+        body when the social is not enabled or its times are unset.
+      responses:
+        "200":
+          description: iCalendar file
+          content:
+            text/calendar:
+              schema:
+                type: string
+        "404":
+          description: Social not enabled or not configured
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ==================== BOOKINGS ====================
+  /bookings:
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a new booking (or upsert by session token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a booking by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingWithAttendees"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateBooking
+      tags: [bookings]
+      summary: Update booking details (payment method, promo code, step progress)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingBody"
+      responses:
+        "200":
+          description: Booking updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings/by-session/{sessionToken}:
+    get:
+      operationId: getBookingBySession
+      tags: [bookings]
+      summary: Get or create a booking by session token
+      parameters:
+        - name: sessionToken
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking found or created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingWithAttendees"
+
+  /bookings/{id}/pricing:
+    get:
+      operationId: getBookingPricing
+      tags: [pricing]
+      summary: Get pricing breakdown for a booking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: promoCode
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pricing breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingBreakdown"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== ATTENDEES ====================
+  /bookings/{bookingId}/attendees:
+    post:
+      operationId: createAttendee
+      tags: [attendees]
+      summary: Add an attendee to a booking
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttendeeBody"
+      responses:
+        "201":
+          description: Attendee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendee"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings/{bookingId}/attendees/{attendeeId}:
+    patch:
+      operationId: updateAttendee
+      tags: [attendees]
+      summary: Update an attendee's details
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: attendeeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAttendeeBody"
+      responses:
+        "200":
+          description: Attendee updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendee"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== PRICING ====================
+  /pricing/calculate:
+    post:
+      operationId: calculatePricing
+      tags: [pricing]
+      summary: Calculate pricing for a given pass type and quantity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PricingRequest"
+      responses:
+        "200":
+          description: Pricing breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingBreakdown"
+
+  # ==================== PROMO CODES ====================
+  /promo-codes/validate:
+    post:
+      operationId: validatePromoCode
+      tags: [promo-codes]
+      summary: Validate a promo code for a given booking context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidatePromoCodeBody"
+      responses:
+        "200":
+          description: Promo code is valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoCodeValidationResult"
+        "400":
+          description: Invalid or expired promo code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/promo-codes:
+    get:
+      operationId: listPromoCodes
+      tags: [promo-codes]
+      summary: List all promo codes (admin)
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: List of promo codes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PromoCode"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createPromoCode
+      tags: [promo-codes]
+      summary: Create a promo code (admin)
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePromoCodeBody"
+      responses:
+        "201":
+          description: Promo code created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoCode"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/promo-codes/{id}:
+    patch:
+      operationId: updatePromoCode
+      tags: [promo-codes]
+      summary: Update a promo code (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePromoCodeBody"
+      responses:
+        "200":
+          description: Promo code updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoCode"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deletePromoCode
+      tags: [promo-codes]
+      summary: Delete a promo code (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== DISCOUNT TIERS ====================
+  /discount-tiers:
+    get:
+      operationId: listDiscountTiers
+      tags: [discount-tiers]
+      summary: List group discount tiers for all pass types
+      responses:
+        "200":
+          description: List of discount tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscountTier"
+
+  /admin/discount-tiers:
+    put:
+      operationId: updateDiscountTiers
+      tags: [discount-tiers]
+      summary: Replace all discount tiers for a pass type (admin)
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDiscountTiersBody"
+      responses:
+        "200":
+          description: Tiers updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiscountTier"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== STRIPE ====================
+  /stripe/create-checkout-session:
+    post:
+      operationId: createStripeCheckoutSession
+      tags: [stripe]
+      summary: Create a Stripe Checkout session for a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStripeSessionBody"
+      responses:
+        "200":
+          description: Stripe session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StripeSessionResponse"
+        "400":
+          description: Invalid booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stripe/confirm-card-payment:
+    post:
+      operationId: confirmCardPayment
+      tags: [stripe]
+      summary: Confirm a card payment after Stripe Checkout redirect and trigger fulfillment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCardPaymentBody"
+      responses:
+        "200":
+          description: Payment confirmed or already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmCardPaymentResponse"
+        "400":
+          description: Payment not completed or missing params
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — invalid booking session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stripe/webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [stripe]
+      summary: Handle Stripe webhook events
+      responses:
+        "200":
+          description: Webhook received
+
+  /stripe/create-invoice:
+    post:
+      operationId: createStripeInvoice
+      tags: [stripe]
+      summary: Create a Stripe invoice for a booking (invoice payment route)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceBody"
+      responses:
+        "200":
+          description: Invoice created and sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponse"
+        "400":
+          description: Invalid booking or Stripe error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== EMAIL TEMPLATES ====================
+  /email-templates/welcome:
+    get:
+      operationId: getWelcomeEmailTemplate
+      tags: [email]
+      summary: Get the current welcome email template
+      responses:
+        "200":
+          description: Welcome email template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+    put:
+      operationId: updateWelcomeEmailTemplate
+      tags: [email]
+      summary: Update the welcome email template (admin)
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmailTemplateBody"
+      responses:
+        "200":
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /email-templates/welcome/test-send:
+    post:
+      operationId: sendTestWelcomeEmail
+      tags: [email]
+      summary: Send a test welcome email to a specified address
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestEmailBody"
+      responses:
+        "200":
+          description: Test email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== EMAIL LOGS ====================
+  /admin/email-logs:
+    get:
+      operationId: listEmailLogs
+      tags: [email]
+      summary: List all email logs (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: bookingId
+          in: query
+          required: false
+          schema:
+            type: ["integer", "null"]
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Email logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailLogList"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/email-logs/{bookingId}/resend:
+    post:
+      operationId: resendBookingEmails
+      tags: [email]
+      summary: Resend confirmation + receipt emails for a booking
+      security:
+        - AdminToken: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Emails resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/bookings/{bookingId}/send-invoice-reminder:
+    post:
+      operationId: sendInvoiceReminder
+      tags: [email]
+      summary: Send invoice payment reminder email to the billing contact
+      security:
+        - AdminToken: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reminder email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to send reminder
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== UNPAID INVOICES WIDGET ====================
+  /admin/unpaid-invoices/summary:
+    get:
+      operationId: getUnpaidInvoicesSummary
+      tags: [admin]
+      summary: Aging-bucket summary of unpaid invoices for the admin dashboard
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Bucket counts and totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnpaidInvoicesSummary"
+
+  /admin/unpaid-invoices:
+    get:
+      operationId: listUnpaidInvoices
+      tags: [admin]
+      summary: List unpaid invoice bookings, optionally filtered by aging bucket
+      security:
+        - AdminToken: []
+      parameters:
+        - name: bucket
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["0-7", "8-14", "15+"]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [daysOutstanding, totalAmount, lastReminder, orderReference]
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        "200":
+          description: Page of unpaid invoice rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnpaidInvoiceList"
+
+  /admin/unpaid-invoices/bulk-remind:
+    post:
+      operationId: bulkRemindUnpaidInvoices
+      tags: [admin]
+      summary: Send invoice reminder emails to every booking in the 15+ days bucket
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkRemindBody"
+      responses:
+        "200":
+          description: Bulk send result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkRemindResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== ADMIN ====================
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Admin login — validate password and return session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations:
+    get:
+      operationId: listRegistrations
+      tags: [admin]
+      summary: List all registrations (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: passType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: needsAttention
+          in: query
+          required: false
+          description: When true, only return confirmed (paid or invoiced) bookings with at least one undelivered confirmation side-effect.
+          schema:
+            type: string
+            enum: ["true", "false", "1", "0"]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of registrations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationList"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/{id}/redeliver:
+    post:
+      operationId: redeliverRegistration
+      tags: [admin]
+      summary: Re-run any unfinished post-confirmation side-effects (admin)
+      description: |
+        Retries the confirmation email, welcome emails, organiser notification,
+        and Sheets sync for any flag that is still false on a paid/invoiced booking.
+        Each side-effect is gated on its own boolean flag, so already-delivered
+        ones are skipped. Use after fixing an SMTP / Sheets outage to clear the
+        "needs attention" badge.
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated registration with redelivery summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationRedeliveryResult"
+        "400":
+          description: Booking is not yet confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/{id}:
+    get:
+      operationId: getRegistration
+      tags: [admin]
+      summary: Get a registration with full attendee details (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Registration with attendees
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingWithAttendees"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/export:
+    get:
+      operationId: exportRegistrations
+      tags: [admin]
+      summary: Export registrations as CSV (admin)
+      security:
+        - AdminToken: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /event-settings/public:
+    get:
+      operationId: getPublicEventSettings
+      tags: [public]
+      summary: Public subset of event settings
+      description: |
+        Returns the public-facing copy required by the checkout, currently the
+        How-invoicing-works help content shown on Step 4 (Pay by Invoice).
+        No authentication required.
+      responses:
+        "200":
+          description: Public event settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicEventSettings"
+
+  /admin/event-settings:
+    get:
+      operationId: getAdminEventSettings
+      tags: [admin]
+      summary: Get event/organisation settings (admin)
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Current event settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSettings"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateAdminEventSettings
+      tags: [admin]
+      summary: Update event/organisation settings (admin)
+      description: |
+        Partial update — any field omitted is left unchanged. Calendar
+        timestamps (`eventStartAt`, `eventEndAt`, `socialStartAt`,
+        `socialEndAt`) accept ISO-8601 strings, `null`, or empty strings
+        (treated as null).
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventSettingsUpdate"
+      responses:
+        "200":
+          description: Updated event settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSettings"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get dashboard stats (admin)
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Admin dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    AdminToken:
+      type: apiKey
+      in: header
+      name: x-admin-token
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    # ==================== BOOKING SCHEMAS ====================
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        sessionToken:
+          type: string
+        status:
+          type: string
+          enum: [partial, pending_payment, paid, invoiced, cancelled, disputed]
+        passType:
+          type: string
+          enum: [single, business]
+        attendeeType:
+          type: string
+          enum: [hr_professional, consultant_vendor]
+        quantity:
+          type: integer
+        promoCode:
+          type: ["string", "null"]
+        promoDiscountAmount:
+          type: ["number", "null"]
+        groupDiscountAmount:
+          type: ["number", "null"]
+        subtotalAmount:
+          type: number
+        vatAmount:
+          type: number
+        totalAmount:
+          type: number
+        paymentMethod:
+          type: ["string", "null"]
+          enum: ["card", "invoice", null]
+        stripeSessionId:
+          type: ["string", "null"]
+        stripePaymentIntentId:
+          type: ["string", "null"]
+        stripeInvoiceId:
+          type: ["string", "null"]
+        stripeInvoicePdfUrl:
+          type: ["string", "null"]
+        stripeInvoicePaymentUrl:
+          type: ["string", "null"]
+        orderReference:
+          type: ["string", "null"]
+        currentStep:
+          type: integer
+        billingName:
+          type: ["string", "null"]
+        billingCompany:
+          type: ["string", "null"]
+        billingEmail:
+          type: ["string", "null"]
+        billingAddress:
+          type: ["string", "null"]
+        billingAddressLine1:
+          type: ["string", "null"]
+        billingAddressLine2:
+          type: ["string", "null"]
+        billingTown:
+          type: ["string", "null"]
+        billingRegion:
+          type: ["string", "null"]
+        billingPostcode:
+          type: ["string", "null"]
+        billingCountry:
+          type: ["string", "null"]
+        billingVatNumber:
+          type: ["string", "null"]
+        billingPhone:
+          type: ["string", "null"]
+        poNumber:
+          type: ["string", "null"]
+        managementToken:
+          type: ["string", "null"]
+        invoiceDueDate:
+          type: ["string", "null"]
+          format: date-time
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        stripeInvoiceStatus:
+          type: ["string", "null"]
+        stripeInvoiceStatusSyncedAt:
+          type: ["string", "null"]
+          format: date-time
+        invoiceBadgeStatus:
+          type: string
+          enum: [paid, voided, overdue, sent, pending]
+        confirmationEmailSent:
+          type: boolean
+        welcomeEmailsSent:
+          type: boolean
+        organiserNotified:
+          type: boolean
+        sheetsSynced:
+          type: boolean
+        needsAttention:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionToken
+        - status
+        - passType
+        - attendeeType
+        - quantity
+        - subtotalAmount
+        - vatAmount
+        - totalAmount
+        - currentStep
+        - createdAt
+        - updatedAt
+
+    BookingWithAttendees:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            attendees:
+              type: array
+              items:
+                $ref: "#/components/schemas/Attendee"
+          required:
+            - attendees
+
+    CreateBookingBody:
+      type: object
+      properties:
+        sessionToken:
+          type: string
+        passType:
+          type: string
+          enum: [single, business]
+        attendeeType:
+          type: string
+          enum: [hr_professional, consultant_vendor]
+        quantity:
+          type: integer
+        currentStep:
+          type: integer
+      required:
+        - sessionToken
+        - passType
+        - attendeeType
+        - quantity
+
+    UpdateBookingBody:
+      type: object
+      properties:
+        passType:
+          type: string
+          enum: [single, business]
+        attendeeType:
+          type: string
+          enum: [hr_professional, consultant_vendor]
+        quantity:
+          type: integer
+        promoCode:
+          type: ["string", "null"]
+        paymentMethod:
+          type: ["string", "null"]
+          enum: ["card", "invoice", null]
+        currentStep:
+          type: integer
+        billingName:
+          type: ["string", "null"]
+        billingCompany:
+          type: ["string", "null"]
+        billingEmail:
+          type: ["string", "null"]
+        billingAddress:
+          type: ["string", "null"]
+        billingAddressLine1:
+          type: ["string", "null"]
+        billingAddressLine2:
+          type: ["string", "null"]
+        billingTown:
+          type: ["string", "null"]
+        billingRegion:
+          type: ["string", "null"]
+        billingPostcode:
+          type: ["string", "null"]
+        billingCountry:
+          type: ["string", "null"]
+        billingVatNumber:
+          type: ["string", "null"]
+        billingPhone:
+          type: ["string", "null"]
+        poNumber:
+          type: ["string", "null"]
+        invoiceDueDate:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [partial, pending_payment, paid, invoiced, cancelled, disputed]
+        stripeInvoiceId:
+          type: ["string", "null"]
+        stripeInvoicePdfUrl:
+          type: ["string", "null"]
+        stripeInvoicePaymentUrl:
+          type: ["string", "null"]
+
+    # ==================== ATTENDEE SCHEMAS ====================
+    Attendee:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: integer
+        isLead:
+          type: boolean
+        firstName:
+          type: string
+        lastName:
+          type: string
+        jobTitle:
+          type: string
+        company:
+          type: string
+        workEmail:
+          type: string
+        phone:
+          type: ["string", "null"]
+        isTbc:
+          type: boolean
+        gdprConsent:
+          type: boolean
+        gdprConsentAt:
+          type: ["string", "null"]
+          format: date-time
+        dietaryAccessibility:
+          type: ["string", "null"]
+        seatIndex:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - bookingId
+        - isLead
+        - isTbc
+        - firstName
+        - lastName
+        - jobTitle
+        - company
+        - workEmail
+        - gdprConsent
+        - createdAt
+        - updatedAt
+
+    CreateAttendeeBody:
+      type: object
+      properties:
+        isLead:
+          type: boolean
+        isTbc:
+          type: boolean
+        firstName:
+          type: string
+        lastName:
+          type: string
+        jobTitle:
+          type: string
+        company:
+          type: string
+        workEmail:
+          type: string
+        phone:
+          type: ["string", "null"]
+        dietaryAccessibility:
+          type: ["string", "null"]
+        gdprConsent:
+          type: boolean
+        seatIndex:
+          type: integer
+      required:
+        - gdprConsent
+
+    UpdateAttendeeBody:
+      type: object
+      properties:
+        isTbc:
+          type: boolean
+        firstName:
+          type: string
+        lastName:
+          type: string
+        jobTitle:
+          type: string
+        company:
+          type: string
+        workEmail:
+          type: string
+        phone:
+          type: ["string", "null"]
+        dietaryAccessibility:
+          type: ["string", "null"]
+        gdprConsent:
+          type: boolean
+
+    # ==================== PRICING SCHEMAS ====================
+    PricingRequest:
+      type: object
+      properties:
+        passType:
+          type: string
+          enum: [single, business]
+        quantity:
+          type: integer
+        promoCode:
+          type: ["string", "null"]
+      required:
+        - passType
+        - quantity
+
+    PricingBreakdown:
+      type: object
+      properties:
+        passType:
+          type: string
+        quantity:
+          type: integer
+        pricePerHead:
+          type: number
+        baseSubtotal:
+          type: number
+        groupDiscountPercent:
+          type: number
+        groupDiscountAmount:
+          type: number
+        promoDiscountAmount:
+          type: number
+        subtotalAfterDiscounts:
+          type: number
+        vatRate:
+          type: number
+        vatAmount:
+          type: number
+        total:
+          type: number
+        originalPrice:
+          type: number
+        savedAmount:
+          type: number
+        promoDiscountType:
+          type: ["string", "null"]
+          enum: [percentage, fixed, per_ticket, complimentary, null]
+        promoRemainingSeats:
+          type: ["integer", "null"]
+      required:
+        - passType
+        - quantity
+        - pricePerHead
+        - baseSubtotal
+        - groupDiscountPercent
+        - groupDiscountAmount
+        - promoDiscountAmount
+        - subtotalAfterDiscounts
+        - vatRate
+        - vatAmount
+        - total
+        - originalPrice
+        - savedAmount
+
+    # ==================== PROMO CODE SCHEMAS ====================
+    PromoCode:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        discountType:
+          type: string
+          enum: [percentage, fixed, per_ticket, complimentary]
+        discountValue:
+          type: number
+        maxUses:
+          type: ["integer", "null"]
+        usedCount:
+          type: integer
+        validFrom:
+          type: ["string", "null"]
+          format: date-time
+        validUntil:
+          type: ["string", "null"]
+          format: date-time
+        isActive:
+          type: boolean
+        applicablePassTypes:
+          type: array
+          items:
+            type: string
+            enum: [single, business]
+        description:
+          type: ["string", "null"]
+        oncePerCustomer:
+          type: boolean
+        minQuantity:
+          type: ["integer", "null"]
+        maxDiscountAmount:
+          type: ["number", "null"]
+        internalNote:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - code
+        - discountType
+        - discountValue
+        - usedCount
+        - isActive
+        - applicablePassTypes
+        - oncePerCustomer
+        - createdAt
+
+    CreatePromoCodeBody:
+      type: object
+      properties:
+        code:
+          type: string
+        discountType:
+          type: string
+          enum: [percentage, fixed, per_ticket, complimentary]
+        discountValue:
+          type: number
+        maxUses:
+          type: ["integer", "null"]
+        validFrom:
+          type: ["string", "null"]
+          format: date-time
+        validUntil:
+          type: ["string", "null"]
+          format: date-time
+        isActive:
+          type: boolean
+        applicablePassTypes:
+          type: array
+          items:
+            type: string
+            enum: [single, business]
+        description:
+          type: ["string", "null"]
+        oncePerCustomer:
+          type: boolean
+        minQuantity:
+          type: ["integer", "null"]
+        maxDiscountAmount:
+          type: ["number", "null"]
+        internalNote:
+          type: ["string", "null"]
+      required:
+        - code
+        - discountType
+        - discountValue
+
+    UpdatePromoCodeBody:
+      type: object
+      properties:
+        code:
+          type: string
+        discountType:
+          type: string
+          enum: [percentage, fixed, per_ticket, complimentary]
+        discountValue:
+          type: number
+        maxUses:
+          type: ["integer", "null"]
+        validFrom:
+          type: ["string", "null"]
+          format: date-time
+        validUntil:
+          type: ["string", "null"]
+          format: date-time
+        isActive:
+          type: boolean
+        applicablePassTypes:
+          type: array
+          items:
+            type: string
+            enum: [single, business]
+        description:
+          type: ["string", "null"]
+        oncePerCustomer:
+          type: boolean
+        minQuantity:
+          type: ["integer", "null"]
+        maxDiscountAmount:
+          type: ["number", "null"]
+        internalNote:
+          type: ["string", "null"]
+
+    ValidatePromoCodeBody:
+      type: object
+      properties:
+        code:
+          type: string
+        passType:
+          type: string
+          enum: [single, business]
+        quantity:
+          type: integer
+        leadEmail:
+          type: ["string", "null"]
+      required:
+        - code
+        - passType
+        - quantity
+
+    PromoCodeValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        code:
+          type: string
+        discountType:
+          type: string
+          enum: [percentage, fixed, per_ticket, complimentary]
+        discountValue:
+          type: number
+        discountAmount:
+          type: number
+        message:
+          type: ["string", "null"]
+        remainingSeats:
+          type: ["integer", "null"]
+          description: For complimentary codes only — the number of free tickets still available on this code (null if the code is uncapped or not complimentary).
+      required:
+        - valid
+        - code
+        - discountType
+        - discountValue
+        - discountAmount
+
+    # ==================== DISCOUNT TIER SCHEMAS ====================
+    DiscountTier:
+      type: object
+      properties:
+        id:
+          type: integer
+        passType:
+          type: string
+          enum: [single, business]
+        minQuantity:
+          type: integer
+        discountPercent:
+          type: number
+        label:
+          type: ["string", "null"]
+      required:
+        - id
+        - passType
+        - minQuantity
+        - discountPercent
+
+    UpdateDiscountTiersBody:
+      type: object
+      properties:
+        passType:
+          type: string
+          enum: [single, business]
+        tiers:
+          type: array
+          items:
+            type: object
+            properties:
+              minQuantity:
+                type: integer
+              discountPercent:
+                type: number
+              label:
+                type: ["string", "null"]
+            required:
+              - minQuantity
+              - discountPercent
+      required:
+        - passType
+        - tiers
+
+    # ==================== STRIPE SCHEMAS ====================
+    CreateStripeSessionBody:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+        successUrl:
+          type: string
+        cancelUrl:
+          type: string
+      required:
+        - bookingId
+        - successUrl
+        - cancelUrl
+
+    StripeSessionResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        url:
+          type: string
+      required:
+        - sessionId
+        - url
+
+    ConfirmCardPaymentBody:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+        sessionId:
+          type: string
+      required:
+        - bookingId
+        - sessionId
+
+    ConfirmCardPaymentResponse:
+      type: object
+      properties:
+        alreadyProcessed:
+          type: boolean
+        orderReference:
+          type: string
+      required:
+        - alreadyProcessed
+        - orderReference
+
+    # ==================== FREEAGENT SCHEMAS ====================
+    CreateInvoiceBody:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+      required:
+        - bookingId
+
+    InvoiceResponse:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+        invoiceUrl:
+          type: ["string", "null"]
+        paymentUrl:
+          type: ["string", "null"]
+        invoiceReference:
+          type: string
+      required:
+        - invoiceId
+        - invoiceReference
+
+    # ==================== EMAIL SCHEMAS ====================
+    EmailTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        subject:
+          type: string
+        htmlBody:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - subject
+        - htmlBody
+        - updatedAt
+
+    UpdateEmailTemplateBody:
+      type: object
+      properties:
+        subject:
+          type: string
+        htmlBody:
+          type: string
+      required:
+        - subject
+        - htmlBody
+
+    TestEmailBody:
+      type: object
+      properties:
+        toEmail:
+          type: string
+        toName:
+          type: string
+      required:
+        - toEmail
+
+    EmailLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: ["integer", "null"]
+        recipient:
+          type: string
+        type:
+          type: string
+          enum: [confirmation, receipt, welcome, invoice, test]
+        status:
+          type: string
+          enum: [sent, failed, pending]
+        errorMessage:
+          type: ["string", "null"]
+        sentAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - recipient
+        - type
+        - status
+        - sentAt
+
+    EmailLogList:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailLog"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - logs
+        - total
+        - page
+        - limit
+
+    # ==================== ADMIN SCHEMAS ====================
+    AdminLoginBody:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - token
+        - expiresAt
+
+    RegistrationSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        orderReference:
+          type: ["string", "null"]
+        status:
+          type: string
+        passType:
+          type: string
+        attendeeType:
+          type: string
+        quantity:
+          type: integer
+        totalAmount:
+          type: number
+        paymentMethod:
+          type: ["string", "null"]
+        leadName:
+          type: ["string", "null"]
+        leadEmail:
+          type: ["string", "null"]
+        leadCompany:
+          type: ["string", "null"]
+        stripeInvoiceId:
+          type: ["string", "null"]
+        stripeInvoicePaymentUrl:
+          type: ["string", "null"]
+        invoiceDueDate:
+          type: ["string", "null"]
+          format: date-time
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        stripeInvoiceStatus:
+          type: ["string", "null"]
+        invoiceBadgeStatus:
+          type: string
+          enum: [paid, voided, overdue, sent, pending]
+        confirmationEmailSent:
+          type: boolean
+          description: True once the customer-facing confirmation+receipt email has been sent.
+        welcomeEmailsSent:
+          type: boolean
+          description: True once welcome emails have been sent to all attendees.
+        organiserNotified:
+          type: boolean
+          description: True once the organiser has been notified of this booking.
+        sheetsSynced:
+          type: boolean
+          description: True once this booking has been synced to the Google Sheet.
+        needsAttention:
+          type: boolean
+          description: True if the booking is confirmed (paid or invoiced) but at least one delivery flag is still false.
+        currentStep:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - passType
+        - attendeeType
+        - quantity
+        - totalAmount
+        - currentStep
+        - createdAt
+        - updatedAt
+
+    RegistrationRedeliveryResult:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            redelivery:
+              type: object
+              properties:
+                ran:
+                  type: array
+                  items:
+                    type: string
+                skipped:
+                  type: array
+                  items:
+                    type: string
+                failed:
+                  type: array
+                  items:
+                    type: string
+              required: [ran, skipped, failed]
+          required: [redelivery]
+
+    RegistrationList:
+      type: object
+      properties:
+        registrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegistrationSummary"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - registrations
+        - total
+        - page
+        - limit
+
+    UnpaidInvoiceBucket:
+      type: object
+      properties:
+        count:
+          type: integer
+        totalAmount:
+          type: number
+      required:
+        - count
+        - totalAmount
+
+    UnpaidInvoicesSummary:
+      type: object
+      properties:
+        totalUnpaid:
+          type: integer
+        totalOutstanding:
+          type: number
+        buckets:
+          type: object
+          properties:
+            "0-7":
+              $ref: "#/components/schemas/UnpaidInvoiceBucket"
+            "8-14":
+              $ref: "#/components/schemas/UnpaidInvoiceBucket"
+            "15+":
+              $ref: "#/components/schemas/UnpaidInvoiceBucket"
+          required:
+            - "0-7"
+            - "8-14"
+            - "15+"
+      required:
+        - totalUnpaid
+        - totalOutstanding
+        - buckets
+
+    UnpaidInvoiceRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        orderReference:
+          type: ["string", "null"]
+        leadName:
+          type: ["string", "null"]
+        billingEmail:
+          type: ["string", "null"]
+        totalAmount:
+          type: number
+        daysOutstanding:
+          type: integer
+        bucket:
+          type: string
+          enum: ["0-7", "8-14", "15+"]
+        invoiceDueDate:
+          type: ["string", "null"]
+          format: date-time
+        lastInvoiceReminderSentAt:
+          type: ["string", "null"]
+          format: date-time
+        invoiceBadgeStatus:
+          type: string
+          enum: [paid, voided, overdue, sent, pending]
+      required:
+        - id
+        - totalAmount
+        - daysOutstanding
+        - bucket
+        - invoiceBadgeStatus
+
+    UnpaidInvoiceList:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnpaidInvoiceRow"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - rows
+        - total
+        - page
+        - limit
+
+    BulkRemindBody:
+      type: object
+      properties:
+        bucket:
+          type: string
+          enum: ["15+"]
+      required:
+        - bucket
+
+    BulkRemindResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        attempted:
+          type: integer
+        sent:
+          type: integer
+        failed:
+          type: integer
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              bookingId:
+                type: integer
+              error:
+                type: string
+            required:
+              - bookingId
+              - error
+      required:
+        - success
+        - attempted
+        - sent
+        - failed
+
+    EventSettings:
+      type: object
+      description: Configurable per-event branding, scheduling and contact details.
+      properties:
+        id:
+          type: integer
+        eventName:
+          type: string
+        eventDate:
+          type: string
+          description: Display label only (shown in emails). Real start and end times live in the eventStartAt and eventEndAt fields.
+        eventVenue:
+          type: string
+        eventVenuePostcode:
+          type: string
+        orgName:
+          type: string
+        orgAddress:
+          type: string
+        orgWebsite:
+          type: string
+        logoDataUrl:
+          type: string
+          nullable: true
+        fromName:
+          type: string
+        fromEmail:
+          type: string
+        attendeeChangesLocked:
+          type: boolean
+        attendeeChangesLockedMessage:
+          type: string
+          nullable: true
+        refPrefix:
+          type: string
+        refOffset:
+          type: integer
+        notifyCompleteSubject:
+          type: string
+          nullable: true
+        notifyIncompleteSubject:
+          type: string
+          nullable: true
+        notifyAttendeeSubject:
+          type: string
+          nullable: true
+        eventStartAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO-8601 UTC start of the main event. Used for calendar links.
+        eventEndAt:
+          type: string
+          format: date-time
+          nullable: true
+        eventTimezone:
+          type: string
+          description: IANA timezone identifier, default Europe London.
+        eventDescription:
+          type: string
+          nullable: true
+        socialEnabled:
+          type: boolean
+          description: When false the social block in emails reads as a placeholder note (details to follow).
+        socialName:
+          type: string
+          nullable: true
+        socialStartAt:
+          type: string
+          format: date-time
+          nullable: true
+        socialEndAt:
+          type: string
+          format: date-time
+          nullable: true
+        socialVenue:
+          type: string
+          nullable: true
+        socialDescription:
+          type: string
+          nullable: true
+        invoiceHelpContent:
+          type: string
+          nullable: true
+          description: Admin-editable how-invoicing-works copy shown on Step 4 (Pay by Invoice) and embedded into invoice confirmation emails. Null means use the built-in default.
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - eventName
+        - eventDate
+        - eventVenue
+        - eventVenuePostcode
+        - orgName
+        - orgAddress
+        - orgWebsite
+        - fromName
+        - fromEmail
+        - attendeeChangesLocked
+        - refPrefix
+        - refOffset
+        - eventTimezone
+        - socialEnabled
+        - updatedAt
+
+    PublicEventSettings:
+      type: object
+      description: Public subset of event settings exposed to the checkout UI.
+      properties:
+        invoiceHelpContent:
+          type: string
+          description: Plain-text how-invoicing-works copy. Always populated (default fallback applied server-side).
+      required:
+        - invoiceHelpContent
+
+    EventSettingsUpdate:
+      type: object
+      description: |
+        Partial-update payload. Any field omitted is left unchanged. Datetime
+        fields accept ISO-8601 strings, `null`, or empty strings (treated as
+        null).
+      properties:
+        eventName: { type: string }
+        eventDate: { type: string }
+        eventVenue: { type: string }
+        eventVenuePostcode: { type: string }
+        orgName: { type: string }
+        orgAddress: { type: string }
+        orgWebsite: { type: string }
+        logoDataUrl: { type: string, nullable: true }
+        fromName: { type: string }
+        fromEmail: { type: string }
+        attendeeChangesLocked: { type: boolean }
+        attendeeChangesLockedMessage: { type: string, nullable: true }
+        refPrefix: { type: string }
+        refOffset: { type: integer }
+        notifyCompleteSubject: { type: string, nullable: true }
+        notifyIncompleteSubject: { type: string, nullable: true }
+        notifyAttendeeSubject: { type: string, nullable: true }
+        eventStartAt: { type: string, format: date-time, nullable: true }
+        eventEndAt: { type: string, format: date-time, nullable: true }
+        eventTimezone: { type: string }
+        eventDescription: { type: string, nullable: true }
+        socialEnabled: { type: boolean }
+        socialName: { type: string, nullable: true }
+        socialStartAt: { type: string, format: date-time, nullable: true }
+        socialEndAt: { type: string, format: date-time, nullable: true }
+        socialVenue: { type: string, nullable: true }
+        socialDescription: { type: string, nullable: true }
+        invoiceHelpContent: { type: string, nullable: true }
+
+    AdminStats:
+      type: object
+      properties:
+        totalRegistrations:
+          type: integer
+        completedRegistrations:
+          type: integer
+        partialRegistrations:
+          type: integer
+        totalRevenue:
+          type: number
+        totalVat:
+          type: number
+        passCounts:
+          type: object
+          properties:
+            single:
+              type: integer
+            business:
+              type: integer
+          required:
+            - single
+            - business
+        paymentMethodCounts:
+          type: object
+          properties:
+            card:
+              type: integer
+            invoice:
+              type: integer
+          required:
+            - card
+            - invoice
+        recentRegistrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RegistrationSummary"
+      required:
+        - totalRegistrations
+        - completedRegistrations
+        - partialRegistrations
+        - totalRevenue
+        - totalVat
+        - passCounts
+        - paymentMethodCounts
+        - recentRegistrations

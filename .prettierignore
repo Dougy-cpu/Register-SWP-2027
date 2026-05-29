@@ -1,0 +1,25 @@
+node_modules
+dist
+build
+out-tsc
+*.tsbuildinfo
+.expo
+.expo-shared
+.cache
+.local
+coverage
+pnpm-lock.yaml
+.git
+attached_assets
+artifacts/**/dist
+artifacts/**/build
+artifacts/**/.expo
+
+# Generated code
+**/generated/**
+**/.generated/**
+lib/api-client-react/src/generated
+lib/api-zod/src/generated
+
+# shadcn/ui components (vendored, kept as-is)
+artifacts/mockup-sandbox/src/components/ui
