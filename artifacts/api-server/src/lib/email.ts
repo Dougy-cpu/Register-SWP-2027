@@ -416,7 +416,7 @@ async function buildConfirmationEmailHtml(
       ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/${booking.managementToken}/billing`
       : "";
   const billingEditLinkHtml = billingEditUrl
-    ? `<p style="margin:14px 0 0;font-size:14px;"><a href="${billingEditUrl}" style="color:#004eb9;font-weight:600;text-decoration:underline;">${booking.poNumber ? "Update PO number or billing details" : "Add a PO number / update billing details"}</a></p>`
+    ? `<p style="margin:14px 0 0;font-size:14px;"><a href="${billingEditUrl}" style="color:#004eb9;font-weight:600;text-decoration:underline;">${booking.poNumber ? "Update PO number or billing details" : "Add PO number or update billing"}</a></p>`
     : "";
   // Inline form: leading <br> renders as a new line both inside the info-box
   // (where neighbouring fields use <br> separators) and in the standalone
@@ -426,7 +426,7 @@ async function buildConfirmationEmailHtml(
     : "";
 
   const invoicePaymentButtonHtml = booking.stripeInvoicePaymentUrl
-    ? `<p style="margin-top:16px;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;">Download Invoice / Pay Online</a></p>`
+    ? `<p style="margin-top:16px;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;font-size:15px;">Pay invoice online</a></p>`
     : "";
 
   const invoiceConfirmationHtml =
@@ -1817,7 +1817,7 @@ function buildManageLinkSection(manageUrl: string): string {
         </ul>
         <p style="text-align: center; margin: 20px 0 16px;">
           <a href="${manageUrl}" style="display: inline-block; background: #004eb9; color: #fff; padding: 13px 32px; border-radius: 300px; text-decoration: none; font-weight: 700; font-size: 15px;">
-            Manage Attendees
+            Manage attendees
           </a>
         </p>
         <p style="margin: 0 0 6px; font-size: 13px; color: #888; text-align: center;">Or copy this link:</p>
@@ -2197,7 +2197,7 @@ export async function sendInvoicePaymentFailedEmail(
         ? `
     <p style="text-align:center;margin:32px 0;">
       <a href="${paymentUrl}" class="cta-btn" style="display:inline-block;background:#004eb9;color:#fff;padding:12px 28px;border-radius:300px;text-decoration:none;font-weight:600;">
-        Pay Invoice Now
+        Pay invoice online
       </a>
     </p>
     `
@@ -2343,7 +2343,7 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     .from(emailTemplatesTable)
     .where(eq(emailTemplatesTable.type, "invoice_reminder"));
   const payOnlineButton = booking.stripeInvoicePaymentUrl
-    ? `<p style="margin:24px 0;text-align:center;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online</a></p>`
+    ? `<p style="margin:24px 0;text-align:center;"><a href="${booking.stripeInvoicePaymentUrl}" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay invoice online</a></p>`
     : "";
 
   // Body-vars are HTML-escaped (these are inserted into HTML email content),

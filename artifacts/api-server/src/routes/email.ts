@@ -389,7 +389,7 @@ async function buildSampleVars(
           "{{recipientName}}": toName || "Test User",
           "{{orderReference}}": "SWP27-TEST-001",
           "{{dueDate}}": "30 April 2027",
-          "{{payOnlineButton}}": `<p style="margin:24px 0;text-align:center;"><a href="#" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay Invoice Online</a></p>`,
+          "{{payOnlineButton}}": `<p style="margin:24px 0;text-align:center;"><a href="#" style="display:inline-block;background:#004eb9;color:#fff;padding:14px 32px;text-decoration:none;font-weight:bold;font-size:15px;border-radius:4px;">Pay invoice online</a></p>`,
           "{{payOnlineUrl}}": "#",
         }
       : {
@@ -522,7 +522,7 @@ router.post("/email-templates/:type/preview", adminAuth, async (req, res): Promi
   if (type === "welcome") {
     vars["{{managementLink}}"] =
       vars["{{managementLink}}"] ||
-      `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;"><p style="margin:0;text-align:center;color:#004eb9;font-weight:700;">[SAMPLE - Manage Attendees button appears here in real emails]</p></div>`;
+      `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;"><p style="margin:0;text-align:center;color:#004eb9;font-weight:700;">[SAMPLE - Manage attendees button appears here in real emails]</p></div>`;
   }
 
   let personalised = String(htmlBody);

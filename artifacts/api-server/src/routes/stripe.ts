@@ -199,9 +199,9 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
   }
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass - SWP Summit 2027",
-    team: "Team Pass (3 Seats) - SWP Summit 2027",
-    business: "Business Pass - SWP Summit 2027",
+    single: "HR Professional Pass, SWP Summit 2027",
+    team: "Team Pass, SWP Summit 2027",
+    business: "Business Pass, SWP Summit 2027",
   };
 
   const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
@@ -213,7 +213,7 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
         currency: "gbp",
         product_data: {
           name: passLabels[booking.passType] || booking.passType,
-          description: `Wednesday, 3 March 2027 - 1 Basinghall Avenue, London - ${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}`,
+          description: `Wednesday, 3 March 2027, 1 Basinghall Avenue, London, ${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}`,
         },
         unit_amount: Math.round(subtotalAfterDiscounts * 100),
       },

@@ -7,9 +7,9 @@ import type { DbExecutor } from "./pricing";
 import { defaultOrderRef } from "./order-reference";
 
 const PASS_LABELS: Record<string, string> = {
-  single: "HR Professional Pass - SWP Summit 2027",
-  team: "Team Pass (3 Seats) - SWP Summit 2027",
-  business: "Business Pass - SWP Summit 2027",
+  single: "HR Professional Pass, SWP Summit 2027",
+  team: "Team Pass, SWP Summit 2027",
+  business: "Business Pass, SWP Summit 2027",
 };
 
 const INVOICE_FOOTER = [
@@ -322,7 +322,7 @@ export async function reissueBookingInvoice(
     customer: customer.id,
     collection_method: "send_invoice",
     days_until_due: 14,
-    description: `SWP Summit 2027 - ${orderRef}`,
+    description: `SWP Summit 2027, ${orderRef}`,
     footer: INVOICE_FOOTER,
     custom_fields: baseCustomFields,
     metadata: {
@@ -336,7 +336,7 @@ export async function reissueBookingInvoice(
   await stripe.invoiceItems.create({
     customer: customer.id,
     invoice: invoiceObj.id,
-    description: `${PASS_LABELS[booking.passType] || booking.passType} x ${booking.quantity}`,
+    description: `${PASS_LABELS[booking.passType] || booking.passType}, quantity ${booking.quantity}`,
     amount: Math.round(baseAmount * 100),
     currency: "gbp",
     ...vatParams,

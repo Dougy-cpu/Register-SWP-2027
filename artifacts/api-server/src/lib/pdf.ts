@@ -37,9 +37,9 @@ interface AttendeeForPdf {
 }
 
 const passLabels: Record<string, string> = {
-  single: "HR Professional Pass - SWP Summit",
-  team: "Team Pass (3 Seats) - SWP Summit",
-  business: "Business Pass - SWP Summit",
+  single: "HR Professional Pass, SWP Summit",
+  team: "Team Pass, SWP Summit",
+  business: "Business Pass, SWP Summit",
 };
 
 export function generatePdfReceipt(
@@ -54,7 +54,7 @@ export function generatePdfReceipt(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const formatCurrency = (n: number) => `\u00a3${n.toFixed(2)}`;
+    const formatCurrency = (n: number) => `GBP ${n.toFixed(2)}`;
 
     const lead = attendees.find((a) => a.isLead) || attendees[0];
     const dateStr = new Date().toLocaleDateString("en-GB", {
