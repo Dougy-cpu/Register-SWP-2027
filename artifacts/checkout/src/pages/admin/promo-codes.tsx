@@ -122,7 +122,7 @@ function restrictionBadges(promo: PromoCode) {
   if (promo.oncePerCustomer) items.push({ key: "once", label: "1/customer" });
   if (promo.minQuantity) items.push({ key: "min", label: `min ${promo.minQuantity}` });
   if (promo.discountType === "percentage" && promo.maxDiscountAmount) {
-    items.push({ key: "cap", label: `cap Â£${promo.maxDiscountAmount}` });
+    items.push({ key: "cap", label: `cap \u00a3${promo.maxDiscountAmount}` });
   }
   if (items.length === 0) return null;
   return (
@@ -219,8 +219,8 @@ function PromoFormDialog({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="percentage">Percentage (%)</SelectItem>
-                        <SelectItem value="fixed">Fixed Amount (Â£)</SelectItem>
-                        <SelectItem value="per_ticket">Per Ticket (Â£ per ticket)</SelectItem>
+                        <SelectItem value="fixed">Fixed Amount (GBP)</SelectItem>
+                        <SelectItem value="per_ticket">Per Ticket (GBP per ticket)</SelectItem>
                         <SelectItem value="complimentary">Complimentary (free ticket)</SelectItem>
                       </SelectContent>
                     </Select>
@@ -292,7 +292,7 @@ function PromoFormDialog({
               name="maxDiscountAmount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Max Discount Cap (Â£, percentage codes only)</FormLabel>
+                  <FormLabel>Max Discount Cap (GBP, percentage codes only)</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -307,7 +307,7 @@ function PromoFormDialog({
                     />
                   </FormControl>
                   <p className="text-xs text-muted-foreground">
-                    Caps the Â£ saving from a percentage code. Leave blank for no cap.
+                    Caps the GBP saving from a percentage code. Leave blank for no cap.
                   </p>
                   <FormMessage />
                 </FormItem>
@@ -551,13 +551,13 @@ export default function AdminPromoCodes() {
                       {promo.discountType === "percentage" ? (
                         `${promo.discountValue}%`
                       ) : promo.discountType === "per_ticket" ? (
-                        `Â£${promo.discountValue}/ticket`
+                        `\u00a3${promo.discountValue}/ticket`
                       ) : promo.discountType === "complimentary" ? (
                         <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
                           Free ticket
                         </Badge>
                       ) : (
-                        `Â£${promo.discountValue}`
+                        `\u00a3${promo.discountValue}`
                       )}
                     </TableCell>
                     <TableCell>{passTypeBadges(promo.applicablePassTypes)}</TableCell>
@@ -574,7 +574,7 @@ export default function AdminPromoCodes() {
                           </TooltipContent>
                         </Tooltip>
                       ) : (
-                        <span className="text-xs text-muted-foreground/50">â€”</span>
+                        <span className="text-xs text-muted-foreground/50">-</span>
                       )}
                     </TableCell>
                     <TableCell>

@@ -49,23 +49,23 @@ interface EventSettings {
 }
 
 // Built-in default copy for the "How invoicing works" help block. Mirrors the
-// server-side DEFAULT_INVOICE_HELP_CONTENT constant in api-server/src/lib/email.ts —
+// server-side DEFAULT_INVOICE_HELP_CONTENT constant in api-server/src/lib/email.ts -
 // shown as the placeholder when an admin hasn't overridden the copy.
 const DEFAULT_INVOICE_HELP_CONTENT = `When will I receive the invoice?
-We email a VAT invoice to the billing address you provide as soon as your registration is confirmed — usually within a few minutes.
+We email a VAT invoice to the billing address you provide as soon as your registration is confirmed, usually within a few minutes.
 
 What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
 
 How can I pay?
-- Card or bank transfer using the secure "Pay Online" link on the invoice.
-- BACS / wire transfer to the bank account printed at the bottom of the invoice (please quote your booking reference).
+The invoice email includes company information, bank details and payment instructions.
+Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.
 
 Where do I send remittance advice?
 Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
 
 Need a PO number on the invoice?
-You can add or update a PO number — and edit any billing field — at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
+You can add or update a PO number before payment using the secure billing link in your confirmation email. We will re-issue the invoice automatically after billing or PO updates.
 
 Questions?
 Email douglas@peoplestrategyhub.com and we'll come back to you within one working day.`;

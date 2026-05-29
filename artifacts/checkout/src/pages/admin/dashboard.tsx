@@ -25,9 +25,9 @@ type RegRow = {
 };
 
 function fmtDate(iso: string | null | undefined) {
-  if (!iso) return "â€”";
+  if (!iso) return "-";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "â€”";
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
@@ -67,7 +67,7 @@ function CompletedTable({ rows }: { rows: RegRow[] }) {
           <tbody className="divide-y divide-border bg-white">
             {rows.map((reg) => (
               <tr key={reg.id} className="hover:bg-muted/50 transition-colors">
-                <td className="px-6 py-4 font-mono font-medium">{reg.orderReference || "â€”"}</td>
+                <td className="px-6 py-4 font-mono font-medium">{reg.orderReference || "-"}</td>
                 <td className="px-6 py-4">
                   <p className="font-bold">{reg.leadName || reg.billingName || "Unknown"}</p>
                   <p className="text-xs text-muted-foreground">
@@ -76,10 +76,11 @@ function CompletedTable({ rows }: { rows: RegRow[] }) {
                 </td>
                 <td className="px-6 py-4">
                   <span className="capitalize">{reg.passType}</span>
-                  <span className="text-muted-foreground ml-1">(Ã—{reg.quantity})</span>
+                  <span className="text-muted-foreground ml-1">(x{reg.quantity})</span>
                 </td>
                 <td className="px-6 py-4 font-medium">
-                  Â£{Number(reg.totalAmount).toLocaleString()}
+                  {"\u00a3"}
+                  {Number(reg.totalAmount).toLocaleString()}
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={reg.status} />
@@ -120,9 +121,9 @@ function PartialsTable({ rows }: { rows: RegRow[] }) {
           </thead>
           <tbody className="divide-y divide-border bg-white">
             {rows.map((reg) => {
-              const name = reg.leadName || reg.billingName || "â€”";
-              const jobTitle = reg.leadJobTitle || "â€”";
-              const company = reg.leadCompany || reg.billingCompany || "â€”";
+              const name = reg.leadName || reg.billingName || "-";
+              const jobTitle = reg.leadJobTitle || "-";
+              const company = reg.leadCompany || reg.billingCompany || "-";
               const email = reg.leadEmail || reg.billingEmail || null;
               const phone = reg.leadPhone || reg.billingPhone || null;
               return (
@@ -133,12 +134,12 @@ function PartialsTable({ rows }: { rows: RegRow[] }) {
                   <td className="px-6 py-4">
                     {email && <p className="text-xs">{email}</p>}
                     {phone && <p className="text-xs text-muted-foreground">{phone}</p>}
-                    {!email && !phone && <span className="text-muted-foreground">â€”</span>}
+                    {!email && !phone && <span className="text-muted-foreground">-</span>}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="capitalize">{reg.passType || "â€”"}</span>
+                    <span className="capitalize">{reg.passType || "-"}</span>
                     {reg.quantity > 0 && (
-                      <span className="text-muted-foreground ml-1">(Ã—{reg.quantity})</span>
+                      <span className="text-muted-foreground ml-1">(x{reg.quantity})</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
@@ -190,14 +191,18 @@ export default function AdminDashboard() {
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                 Total Revenue
               </p>
-              <h2 className="text-3xl font-bold">Â£{stats.totalRevenue.toLocaleString()}</h2>
+              <h2 className="text-3xl font-bold">
+                {"\u00a3"}
+                {stats.totalRevenue.toLocaleString()}
+              </h2>
             </div>
             <div className="p-2 bg-primary/10 rounded-full">
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-3">
-            + Â£{stats.totalVat.toLocaleString()} VAT
+            + {"\u00a3"}
+            {stats.totalVat.toLocaleString()} VAT
           </p>
         </Card>
 

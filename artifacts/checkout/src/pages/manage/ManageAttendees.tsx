@@ -145,7 +145,7 @@ function AttendeeCard({
             ) : attendee.isTbc ? (
               <>
                 <p className="font-bold text-amber-700">
-                  Attendee {attendee.seatIndex} â€” Details Needed
+                  Attendee {attendee.seatIndex} - Details Needed
                 </p>
                 <p className="text-xs text-amber-600 font-medium">No details entered yet</p>
               </>
@@ -326,7 +326,7 @@ function AttendeeCard({
                 {mutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Savingâ€¦
+                    Saving...
                   </>
                 ) : (
                   "Save Attendee Details"
@@ -438,7 +438,7 @@ export default function ManageAttendees() {
               <span className="font-mono font-semibold text-foreground">
                 {booking.orderReference || "PENDING"}
               </span>
-              {" Â· "}
+              {" - "}
               {booking.quantity}{" "}
               {booking.passType === "single" ? "HR Professional Pass" : "Business Pass"}
               {booking.quantity !== 1 ? "es" : ""}
@@ -514,7 +514,7 @@ export default function ManageAttendees() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-8 text-center">
-          SWP Summit Â· Wednesday, 3 March 2027 Â· 1 Basinghall Avenue, London
+          SWP Summit - Wednesday, 3 March 2027 - 1 Basinghall Avenue, London
           <br />
           Questions? Email{" "}
           <a href="mailto:douglas@peoplestrategyhub.com" className="underline">

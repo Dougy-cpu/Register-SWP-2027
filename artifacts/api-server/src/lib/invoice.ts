@@ -7,9 +7,9 @@ import type { DbExecutor } from "./pricing";
 import { defaultOrderRef } from "./order-reference";
 
 const PASS_LABELS: Record<string, string> = {
-  single: "HR Professional Pass â€” SWP Summit 2027",
-  team: "Team Pass (3 Seats) â€” SWP Summit 2027",
-  business: "Business Pass â€” SWP Summit 2027",
+  single: "HR Professional Pass - SWP Summit 2027",
+  team: "Team Pass (3 Seats) - SWP Summit 2027",
+  business: "Business Pass - SWP Summit 2027",
 };
 
 const INVOICE_FOOTER = [
@@ -28,7 +28,7 @@ export type InvoicePaidStatus = "paid" | "uncollectible" | "void";
 
 let cachedVatRateId: string | null = null;
 /**
- * Look up â€” or create on first use â€” the standard UK VAT 20% tax rate
+ * Look up - or create on first use - the standard UK VAT 20% tax rate
  * in the connected Stripe account. Both the initial /stripe/create-invoice
  * route and the re-issue path go through here, so a brand-new Stripe
  * environment is auto-bootstrapped on the first invoice.
@@ -83,7 +83,7 @@ const STALE_INVOICE_STATUS_MS = 5 * 60 * 1000;
 /**
  * Fetch the live Stripe invoice and refresh our cached PDF URL, hosted
  * payment URL, and status. Unlike the staleness-gated status helper, this
- * always pulls fresh data â€” call it from user-facing download/resend paths
+ * always pulls fresh data - call it from user-facing download/resend paths
  * where serving a stale PDF URL is unacceptable. Errors are swallowed.
  */
 export async function refreshStripeInvoiceUrls(
@@ -142,7 +142,7 @@ export async function refreshStripeInvoiceStatusIfStale(
       updates.status = "paid";
       updates.paidAt = booking.paidAt ?? new Date();
     } else if (status === "void") {
-      // Invoice voided in Stripe â€” reflect by cancelling the booking.
+      // Invoice voided in Stripe - reflect by cancelling the booking.
       updates.status = "cancelled";
     }
 
@@ -201,7 +201,7 @@ export async function applyReissueInvoiceResultTx(
  *
  * Performs the external Stripe operations only (customer sync, invoice
  * create/finalize/send, optional voiding of the previous open invoice). The
- * resulting booking-row writes are NOT applied here â€” instead the result is
+ * resulting booking-row writes are NOT applied here - instead the result is
  * returned so the caller can persist it via `applyReissueInvoiceResultTx`
  * inside the same transaction as any related promo-counter increment. This
  * is what guarantees that `bookings.status` and `promoCodes.usedCount` can
@@ -237,7 +237,7 @@ export async function reissueBookingInvoice(
       } catch (err) {
         logger.warn(
           { err, invoiceId: booking.stripeInvoiceId, bookingId },
-          "Failed to void/delete previous Stripe invoice while re-issuing â€” continuing",
+          "Failed to void/delete previous Stripe invoice while re-issuing - continuing",
         );
       }
     }
@@ -299,10 +299,10 @@ export async function reissueBookingInvoice(
     });
   }
 
-  // Look up â€” or bootstrap â€” the UK VAT 20% Stripe tax rate
+  // Look up - or bootstrap - the UK VAT 20% Stripe tax rate
   const vatRateId = await getOrCreateVatRate(stripe);
   if (!vatRateId) {
-    throw new Error("Could not establish UK VAT 20% tax rate in Stripe â€” invoice not issued");
+    throw new Error("Could not establish UK VAT 20% tax rate in Stripe - invoice not issued");
   }
   const vatParams = { tax_rates: [vatRateId] };
 
@@ -322,7 +322,7 @@ export async function reissueBookingInvoice(
     customer: customer.id,
     collection_method: "send_invoice",
     days_until_due: 14,
-    description: `SWP Summit 2027 â€” ${orderRef}`,
+    description: `SWP Summit 2027 - ${orderRef}`,
     footer: INVOICE_FOOTER,
     custom_fields: baseCustomFields,
     metadata: {
@@ -336,7 +336,7 @@ export async function reissueBookingInvoice(
   await stripe.invoiceItems.create({
     customer: customer.id,
     invoice: invoiceObj.id,
-    description: `${PASS_LABELS[booking.passType] || booking.passType} Ã— ${booking.quantity}`,
+    description: `${PASS_LABELS[booking.passType] || booking.passType} x ${booking.quantity}`,
     amount: Math.round(baseAmount * 100),
     currency: "gbp",
     ...vatParams,

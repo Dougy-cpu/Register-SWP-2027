@@ -17,7 +17,7 @@ export async function runMigrations() {
   }
 }
 
-const DEFAULT_CONFIRMATION_SUBJECT = "Booking Confirmed — {{orderReference}} — SWP Summit 2027";
+const DEFAULT_CONFIRMATION_SUBJECT = "Booking Confirmed - {{orderReference}} - SWP Summit 2027";
 
 const DEFAULT_CONFIRMATION_BODY = `
 <h2>Booking Confirmed!</h2>
@@ -47,28 +47,32 @@ const DEFAULT_CONFIRMATION_BODY = `
 {{socialCalendarLinks}}
 
 <h3 style="margin-top: 28px; margin-bottom: 12px; color: #000;">Update Attendee Details Anytime</h3>
-<p style="margin: 0 0 16px; color: #444; line-height: 1.6;">You have a secure self-service link to manage all your attendee information. You can fill in placeholder seats, update existing details, add dietary requirements — all without logging in. Need to share registration with colleagues? Forward them the link to enter their own details.</p>
+<p style="margin: 0 0 16px; color: #444; line-height: 1.6;">You have a secure self-service link to manage all your attendee information. You can fill in placeholder seats, update existing details and add dietary requirements without logging in. Need to share registration with colleagues? Forward them the link to enter their own details.</p>
 
 {{managementLink}}
 
 <p>A PDF VAT receipt is attached to this email for your records.</p>
+{{invoiceConfirmation}}
 {{invoicePaymentButton}}
+{{billingEditLink}}
+{{invoiceHelp}}
+{{emailDeliveryReminder}}
 <p>We look forward to seeing you at the SWP Summit!</p>
 `;
 
-const DEFAULT_WELCOME_SUBJECT = "Welcome to SWP Summit 2027 — We Can't Wait to See You!";
+const DEFAULT_WELCOME_SUBJECT = "Welcome to SWP Summit 2027 - We Can't Wait to See You!";
 
 const DEFAULT_WELCOME_BODY = `
 <h2>Welcome, {{firstName}}!</h2>
 
-<p>We're absolutely thrilled to have you joining us at the <strong>SWP Summit 2027</strong> — the UK's leading event for HR leaders, people analytics practitioners, and business innovators who are shaping the future of work.</p>
+<p>We're absolutely thrilled to have you joining us at the <strong>SWP Summit 2027</strong>, the UK's leading event for HR leaders, people analytics practitioners, and business innovators who are shaping the future of work.</p>
 
 <p>Here's what to look forward to on <strong>Wednesday, 3 March 2027</strong> at <strong>1 Basinghall Avenue, London</strong>:</p>
 
 <ul>
   <li><strong>Inspiring keynotes</strong> from world-class HR and analytics leaders</li>
   <li><strong>Practical breakout sessions</strong> covering the latest in people data, AI in HR, and workforce planning</li>
-  <li><strong>Networking opportunities</strong> throughout the day — meet your peers, discover new solutions</li>
+  <li><strong>Networking opportunities</strong> throughout the day, meet your peers and discover new solutions</li>
   <li><strong>Happy Hour with entertainment</strong> to close out the day</li>
   <li><strong>Award-winning food & drink</strong> served throughout</li>
 </ul>

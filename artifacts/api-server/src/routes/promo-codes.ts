@@ -45,7 +45,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
     if (promo.discountType === "complimentary") {
       res
         .status(400)
-        .json({ error: "This complimentary code has been fully redeemed â€” no tickets remain" });
+        .json({ error: "This complimentary code has been fully redeemed - no tickets remain" });
     } else {
       res.status(400).json({ error: "This promo code has already been used up" });
     }
@@ -112,7 +112,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
       if (remainingSeats === 0) {
         res
           .status(400)
-          .json({ error: "This complimentary code has been fully redeemed â€” no tickets remain" });
+          .json({ error: "This complimentary code has been fully redeemed - no tickets remain" });
         return;
       }
     }
