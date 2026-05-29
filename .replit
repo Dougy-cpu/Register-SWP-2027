@@ -110,7 +110,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=5000 pnpm --filter @workspace/checkout dev"
+args = "PORT=5000 pnpm --filter @workspace/checkout run dev"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
