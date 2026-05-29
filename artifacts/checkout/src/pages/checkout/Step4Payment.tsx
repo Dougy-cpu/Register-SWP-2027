@@ -22,7 +22,21 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Check, Link2, Link2Off, CreditCard, FileText, Building2, Download } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Link2,
+  Link2Off,
+  CreditCard,
+  FileText,
+  Building2,
+  Download,
+  Mail,
+  Landmark,
+  ReceiptText,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import type { BookingWithAttendees } from "@/types/booking";
 
 // Fields on the billing form that can be auto-linked to the lead attendee.
@@ -194,6 +208,28 @@ function NextStep({ value, children }: { value: number; children: ReactNode }) {
         {value}
       </span>
       <span>{children}</span>
+    </li>
+  );
+}
+
+function InvoiceProcessStep({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="grid grid-cols-[auto_1fr] gap-3 rounded-lg border border-primary/10 bg-white/85 p-3 shadow-[0_10px_25px_rgba(0,78,185,0.04)]">
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-sm font-bold text-foreground">{title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{children}</p>
+      </div>
     </li>
   );
 }
@@ -390,6 +426,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
       poNumber: booking.poNumber || "",
     },
   });
+  const watchedPoNumber = form.watch("poNumber")?.trim();
 
   const onSubmit = async (data?: z.infer<typeof invoiceSchema>) => {
     setIsProcessing(true);
@@ -615,7 +652,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
       ? "Processing..."
       : paymentMethod === "card"
         ? "Proceed to secure card payment"
-        : "Issue Invoice & Confirm Registration";
+        : "Confirm registration and email invoice";
 
     return (
       <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -685,7 +722,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by card now</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Pay securely now via Stripe. Confirmation is immediate after payment.
+                            Pay now by card through Stripe. This is the quickest option if you are
+                            ready to pay today and do not need an invoice raised first.
                           </p>
                         </div>
                       </div>
@@ -714,8 +752,10 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by invoice</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Add billing details now. You can add or update a PO number later from
-                            the confirmation email.
+                            Choose this if your organisation needs an invoice, supplier setup,
+                            finance approval or a PO process before payment. We will email the
+                            invoice immediately with company information, bank details and a secure
+                            payment link.
                           </p>
                         </div>
                       </div>
@@ -748,59 +788,82 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                 </div>
 
                 <div className="space-y-4 p-5">
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                    <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto]">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 bg-white font-bold text-primary">
-                        ?
-                      </span>
-                      <div>
-                        <p className="font-bold text-foreground">How invoicing works</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          We email the invoice as soon as you confirm registration. It includes the
-                          company information PDF, payment options, and a secure link to add or
-                          update a PO number before payment.
+                  <div className="overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(135deg,#f0f6ff_0%,#ffffff_100%)] p-5 shadow-[0_18px_45px_rgba(0,78,185,0.08)]">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="max-w-2xl">
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+                          How invoice payment works
+                        </p>
+                        <h3 className="mt-2 text-xl font-extrabold tracking-[-0.02em] text-foreground">
+                          Built for procurement and finance teams
+                        </h3>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                          Invoice is best for procurement or finance-led bookings. If you are ready
+                          to pay by card now, use the card option above.
                         </p>
                       </div>
-                      {invoiceHelpContent && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="min-h-11 shrink-0 border-primary bg-white px-4 font-bold text-primary hover:bg-primary/5"
+                      >
+                        <a href="/api/company-info" target="_blank" rel="noreferrer">
+                          <Download className="mr-2 h-4 w-4" />
+                          Download company information PDF
+                        </a>
+                      </Button>
+                    </div>
+
+                    <ol className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      <InvoiceProcessStep icon={CheckCircle2} title="Confirm registration">
+                        Your booking is confirmed when the invoice is issued.
+                      </InvoiceProcessStep>
+                      <InvoiceProcessStep icon={Mail} title="Invoice emailed immediately">
+                        The invoice is sent straight to the billing contact.
+                      </InvoiceProcessStep>
+                      <InvoiceProcessStep icon={Building2} title="Supplier details included">
+                        Company information and bank details are included with the email.
+                      </InvoiceProcessStep>
+                      <InvoiceProcessStep icon={ReceiptText} title="PO can be added later">
+                        Use the secure invoice email link if finance needs a PO afterwards.
+                      </InvoiceProcessStep>
+                      <InvoiceProcessStep icon={Landmark} title="Pay later">
+                        Settle by bank transfer or the secure Stripe invoice payment link.
+                      </InvoiceProcessStep>
+                    </ol>
+                  </div>
+
+                  {invoiceHelpContent && (
+                    <div className="rounded-lg border border-border bg-white p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                          <div>
+                            <p className="font-bold">More invoice details</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Extra invoice guidance is available if your finance team needs it.
+                            </p>
+                          </div>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="border-primary bg-white text-primary hover:bg-primary/5"
+                          className="w-full border-primary bg-white text-primary hover:bg-primary/5 sm:w-auto"
                           onClick={() => setHelpExpanded((v) => !v)}
                           aria-expanded={helpExpanded}
                         >
                           {helpExpanded ? "Hide details" : "View full details"}
                         </Button>
+                      </div>
+                      {helpExpanded && (
+                        <div className="mt-4 border-t border-primary/15 pt-4 text-sm leading-relaxed">
+                          <InvoiceHelpRendered text={invoiceHelpContent} />
+                        </div>
                       )}
                     </div>
-                    {invoiceHelpContent && helpExpanded && (
-                      <div className="mt-4 border-t border-primary/15 pt-4 text-sm leading-relaxed">
-                        <InvoiceHelpRendered text={invoiceHelpContent} />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg border border-primary/15 bg-white p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-start gap-3">
-                        <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                        <div>
-                          <p className="font-bold">Need company information for procurement?</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Download Dynamic Business Leaders company details now. The same PDF is
-                            also attached to invoice emails.
-                          </p>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" asChild className="shrink-0">
-                        <a href="/api/company-info" target="_blank" rel="noreferrer">
-                          <Download className="mr-2 h-4 w-4" />
-                          Download PDF
-                        </a>
-                      </Button>
-                    </div>
-                  </div>
+                  )}
 
                   <Form {...form}>
                     <form
@@ -1036,8 +1099,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           <div>
                             <h3 className="font-bold">Invoice references</h3>
                             <p className="text-sm text-muted-foreground">
-                              Add procurement references now, or update them from the secure invoice
-                              link before payment.
+                              Add a PO now if you have one. If not, you can confirm registration and
+                              add it later before payment.
                             </p>
                           </div>
                         </div>
@@ -1084,11 +1147,26 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                                   />
                                 </FormControl>
                                 <FormMessage />
-                                <p className="text-xs text-muted-foreground">
-                                  If your finance team needs a PO on the invoice, add it here. You
-                                  can also add or change it later from the confirmation email; the
-                                  invoice will be re-issued automatically.
-                                </p>
+                                {watchedPoNumber ? (
+                                  <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-primary">
+                                    <p className="font-bold">PO number ready for invoice.</p>
+                                    <p className="mt-1">
+                                      This PO number will appear on the invoice when you confirm
+                                      registration.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-md border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+                                    <p className="font-bold text-foreground">
+                                      No PO number yet? That is fine.
+                                    </p>
+                                    <p className="mt-1">
+                                      You can confirm registration now and add the PO later using
+                                      the secure link in the invoice email. Once added, we will
+                                      automatically email a revised invoice with the PO included.
+                                    </p>
+                                  </div>
+                                )}
                               </FormItem>
                             )}
                           />
@@ -1188,14 +1266,26 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   ) : (
                     <>
                       <NextStep value={1}>
-                        Your registration is submitted when you complete this step.
+                        Registration is confirmed when the invoice is issued.
                       </NextStep>
                       <NextStep value={2}>
-                        The invoice email includes a secure link so PO numbers and billing details
-                        can be added or updated before payment.
+                        The invoice is emailed immediately to the billing contact.
                       </NextStep>
                       <NextStep value={3}>
-                        You can pay the invoice by card or bank transfer within 14 days.
+                        The email includes company information, bank details and invoice payment
+                        instructions.
+                      </NextStep>
+                      <NextStep value={4}>
+                        Finance can settle the invoice by bank transfer or using the secure Stripe
+                        payment link on the invoice.
+                      </NextStep>
+                      <NextStep value={5}>
+                        PO and billing details can be updated later using the secure link in the
+                        email.
+                      </NextStep>
+                      <NextStep value={6}>
+                        If PO or billing details are updated, a revised invoice is emailed
+                        automatically.
                       </NextStep>
                     </>
                   )}
@@ -1205,6 +1295,16 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
             <section className="rounded-md border border-border bg-white p-5">
               <div className="flex flex-col gap-3">
+                {paymentMethod === "invoice" && (
+                  <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+                    <p className="font-bold text-foreground">Ready to issue the invoice?</p>
+                    <p className="mt-1">
+                      This confirms the registration and emails the invoice immediately to the
+                      billing contact. PO and billing details can still be updated before payment
+                      from the secure link in the invoice email.
+                    </p>
+                  </div>
+                )}
                 <Button
                   size="lg"
                   className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
