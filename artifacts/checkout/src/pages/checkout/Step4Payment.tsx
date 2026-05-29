@@ -689,7 +689,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           </div>
         </div>
 
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
             <section className="swp-card rounded-lg">
               <div className="border-b border-border/70 p-5">
@@ -1183,7 +1183,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             )}
           </div>
 
-          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <aside className="swp-checkout-sticky-sidebar space-y-5 md:self-start">
             <section className="rounded-md border border-border bg-white">
               <div className="border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">Order summary</h3>

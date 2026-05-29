@@ -621,16 +621,10 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           {/* ── Header band ── */}
           <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-primary/20 bg-gradient-to-r from-primary to-secondary text-white">
             <div>
-              <p
-                className="mb-1 text-xs font-semibold uppercase tracking-widest"
-                style={{ color: "rgba(255,255,255,0.82)" }}
-              >
+              <p className="swp-blue-header-muted mb-1 text-xs font-semibold uppercase tracking-widest">
                 SWP Summit · 3 Mar 2027, London
               </p>
-              <h3
-                className="font-display text-2xl font-bold leading-tight"
-                style={{ color: "#ffffff" }}
-              >
+              <h3 className="swp-blue-header-title font-display text-2xl font-bold leading-tight">
                 HR Professional Pass
               </h3>
             </div>
@@ -638,14 +632,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <InventoryBadge remaining={inventory.single} />
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="text-3xl font-bold" style={{ color: "#ffffff" }}>
+                  <span className="swp-blue-header-title text-3xl font-bold">
                     £{singleCurrentPrice.toFixed(0)}
                   </span>
                   {singleOriginalPrice > singleCurrentPrice && (
-                    <span
-                      className="text-sm line-through"
-                      style={{ color: "rgba(255,255,255,0.72)" }}
-                    >
+                    <span className="swp-blue-header-muted text-sm line-through">
                       £{singleOriginalPrice.toFixed(0)}
                     </span>
                   )}
@@ -655,7 +646,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     </span>
                   )}
                 </div>
-                <p className="mt-0.5 text-xs" style={{ color: "rgba(255,255,255,0.82)" }}>
+                <p className="swp-blue-header-muted mt-0.5 text-xs">
                   Per ticket, ex VAT · {singlePeriodName}
                 </p>
               </div>
