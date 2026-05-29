@@ -167,6 +167,7 @@ function ExpandedRegistrationDetail({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [billingLinkCopyState, setBillingLinkCopyState] = useState<"idle" | "copied">("idle");
   const [editingBilling, setEditingBilling] = useState(false);
   const [billingForm, setBillingForm] = useState({
     poNumber: "",
@@ -388,9 +389,27 @@ function ExpandedRegistrationDetail({
   }
 
   const isGroup = (data?.attendees?.length ?? 0) > 1;
+  const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const manageUrl = data?.managementToken
-    ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage/${data.managementToken}`
+    ? `${window.location.origin}${appBasePath}/manage/${data.managementToken}`
     : null;
+  const billingUpdateUrl =
+    data?.paymentMethod === "invoice" && data?.managementToken
+      ? `${window.location.origin}${appBasePath}/manage/${data.managementToken}/billing`
+      : null;
+
+  const copyLink = async (url: string, onCopied: () => void, onReset: () => void) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+    onCopied();
+    setTimeout(onReset, 2000);
+  };
 
   return (
     <div className="space-y-6">
@@ -447,18 +466,13 @@ function ExpandedRegistrationDetail({
             </code>
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard
-                  .writeText(manageUrl)
-                  .then(() => {
-                    setCopyState("copied");
-                    setTimeout(() => setCopyState("idle"), 2000);
-                  })
-                  .catch(() => {
-                    setCopyState("copied");
-                    setTimeout(() => setCopyState("idle"), 2000);
-                  });
-              }}
+              onClick={() =>
+                void copyLink(
+                  manageUrl,
+                  () => setCopyState("copied"),
+                  () => setCopyState("idle"),
+                )
+              }
               className="flex-none flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-border bg-slate-50 hover:bg-slate-100 transition-colors whitespace-nowrap"
             >
               {copyState === "copied" ? (
@@ -1002,8 +1016,33 @@ function ExpandedRegistrationDetail({
             )}
           </div>
           {/* Invoice links */}
-          {(data?.stripeInvoicePaymentUrl || data?.stripeInvoicePdfUrl) && (
+          {(data?.stripeInvoicePaymentUrl || data?.stripeInvoicePdfUrl || billingUpdateUrl) && (
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-blue-200">
+              {billingUpdateUrl && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void copyLink(
+                      billingUpdateUrl,
+                      () => setBillingLinkCopyState("copied"),
+                      () => setBillingLinkCopyState("idle"),
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+                >
+                  {billingLinkCopyState === "copied" ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-green-600" />
+                      <span className="text-green-700">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy invoice update link
+                    </>
+                  )}
+                </button>
+              )}
               {data?.stripeInvoicePaymentUrl && (
                 <a
                   href={data.stripeInvoicePaymentUrl}
@@ -1011,7 +1050,7 @@ function ExpandedRegistrationDetail({
                   rel="noreferrer"
                   className="text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
                 >
-                  View Invoice →
+                  View Invoice
                 </a>
               )}
               {data?.stripeInvoicePdfUrl && (
@@ -1021,7 +1060,7 @@ function ExpandedRegistrationDetail({
                   rel="noreferrer"
                   className="text-sm font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900"
                 >
-                  Download PDF →
+                  Download PDF
                 </a>
               )}
             </div>
@@ -1040,7 +1079,7 @@ function ExpandedRegistrationDetail({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
               >
-                View Stripe Invoice →
+                View Stripe Invoice
               </a>
             )}
             {data?.stripeInvoicePdfUrl && (
@@ -1050,7 +1089,7 @@ function ExpandedRegistrationDetail({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-800"
               >
-                Download Invoice PDF →
+                Download Invoice PDF
               </a>
             )}
           </div>
