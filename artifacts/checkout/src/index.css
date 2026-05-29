@@ -93,17 +93,23 @@
 
   .swp-grid-bg {
     position: relative;
-    overflow: hidden;
+    isolation: isolate;
   }
 
   .swp-grid-bg::before {
     content: "";
     position: absolute;
     inset: 0;
+    z-index: 0;
     pointer-events: none;
     background-image: radial-gradient(var(--swp-blue) 1.5px, transparent 1.5px);
     background-size: 30px 30px;
     opacity: 0.04;
+  }
+
+  .swp-grid-bg > * {
+    position: relative;
+    z-index: 1;
   }
 
   .swp-blue-header-title {
