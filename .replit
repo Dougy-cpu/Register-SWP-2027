@@ -41,6 +41,14 @@ args = "test"
 task = "workflow.run"
 args = "format"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "API Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Frontend"
+
 [[workflows.workflow]]
 name = "typecheck"
 author = "agent"
@@ -85,6 +93,30 @@ args = "pnpm run format"
 [workflows.workflow.metadata]
 isValidation = true
 
+[[workflows.workflow]]
+name = "API Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8080 pnpm --filter @workspace/api-server dev"
+waitForPort = 8080
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=5000 pnpm --filter @workspace/checkout dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
@@ -98,19 +130,17 @@ timeoutMs = 20000
 [userenv.development]
 
 [userenv.shared]
-FREEAGENT_CLIENT_ID = "ZuB3ZkYghCkkWqU9aGm45A"
-FREEAGENT_CLIENT_SECRET = "ny0W4D2wIUeo_-6mUcA_lA"
-FREEAGENT_REFRESH_TOKEN = "1hnNsxzTl6IZpYqvrVWNuowYKy02O-brX7gr7jlxu"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = "587"
 SMTP_USER = "douglas@peoplestrategyhub.com"
-SMTP_PASS = "vmoy uean sqxl acoa"
 FROM_EMAIL = "douglas@peoplestrategyhub.com"
 FROM_NAME = "SWP Summit"
-STRIPE_SECRET_KEY = "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"
-STRIPE_WEBHOOK_SECRET = "whsec_YyLH1qLOy9Tvqkudd3LrAwtntU3MArZE"
 APP_BASE_URL = "https://register.swpsummit.com"
 ORGANISER_EMAIL = "(none)"
 
 [nix]
 channel = "stable-25_05"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
