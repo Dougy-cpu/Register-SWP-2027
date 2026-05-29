@@ -112,10 +112,10 @@ const defaultSettings: Omit<EventSettings, "id" | "updatedAt"> = {
 /**
  * Built-in fallback copy for the "How invoicing works" help block. Used
  * whenever an admin has not set `event_settings.invoice_help_content`. Edit
- * via Admin â†’ Settings â†’ Pay-by-Invoice Help.
+ * via Admin > Settings > Pay-by-Invoice Help.
  */
 export const DEFAULT_INVOICE_HELP_CONTENT = `When will I receive the invoice?
-We email a VAT invoice to the billing address you provide as soon as your registration is confirmed â€” usually within a few minutes.
+We email a VAT invoice to the billing address you provide as soon as your registration is confirmed, usually within a few minutes.
 
 What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
@@ -128,7 +128,7 @@ Where do I send remittance advice?
 Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
 
 Need a PO number on the invoice?
-You can add or update a PO number â€” and edit any billing field â€” at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
+You can add or update a PO number, and edit any billing field, at any time before payment using the secure self-service link in your confirmation email. We'll re-issue the invoice automatically.
 
 Questions?
 Email douglas@peoplestrategyhub.com and we'll come back to you within one working day.`;

@@ -776,8 +776,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   <div>
                     <h2 className="text-xl font-bold">Billing details for the invoice</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      These details appear on the invoice. The lead attendee details are pre-filled
-                      where possible.
+                      These details appear on your VAT invoice. You can update billing details or
+                      add a PO number later using the secure link in the invoice email.
                     </p>
                   </div>
                   {billingLead && (
@@ -789,8 +789,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
                 <div className="space-y-4 p-5">
                   <div className="overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(135deg,#f0f6ff_0%,#ffffff_100%)] p-5 shadow-[0_18px_45px_rgba(0,78,185,0.08)]">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="max-w-2xl">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="max-w-3xl">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
                           How invoice payment works
                         </p>
@@ -806,7 +806,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         variant="outline"
                         size="sm"
                         asChild
-                        className="min-h-11 shrink-0 border-primary bg-white px-4 font-bold text-primary hover:bg-primary/5"
+                        className="min-h-11 w-full whitespace-normal border-primary bg-white px-4 text-center font-bold leading-snug text-primary hover:bg-primary/5 sm:w-auto xl:max-w-[280px]"
                       >
                         <a href="/api/company-info" target="_blank" rel="noreferrer">
                           <Download className="mr-2 h-4 w-4" />
@@ -815,7 +815,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                       </Button>
                     </div>
 
-                    <ol className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <ol className="mt-5 grid gap-3 md:grid-cols-2">
                       <InvoiceProcessStep icon={CheckCircle2} title="Confirm registration">
                         Your booking is confirmed when the invoice is issued.
                       </InvoiceProcessStep>
@@ -1193,7 +1193,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             )}
           </div>
 
-          <aside className="space-y-5 lg:sticky lg:top-28">
+          <aside className="space-y-5">
             <section className="rounded-md border border-border bg-white">
               <div className="border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">Order summary</h3>
@@ -1244,6 +1244,65 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               </div>
             </section>
 
+            <section className="rounded-md border border-border bg-white p-5 shadow-[0_16px_35px_rgba(0,78,185,0.06)] lg:sticky lg:top-24">
+              <div className="flex flex-col gap-3">
+                {paymentMethod === "invoice" && (
+                  <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+                    <p className="font-bold text-foreground">Ready to issue the invoice?</p>
+                    <p className="mt-1">
+                      This confirms the registration and emails the invoice immediately to the
+                      billing contact. PO and billing details can still be updated before payment
+                      from the secure link in the invoice email.
+                    </p>
+                  </div>
+                )}
+                <Button
+                  size="lg"
+                  className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
+                  onClick={() => {
+                    if (paymentMethod === "invoice") {
+                      void form.handleSubmit(onSubmit)();
+                    } else {
+                      void onSubmit();
+                    }
+                  }}
+                  disabled={isProcessing}
+                >
+                  {submitLabel}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-12 w-full min-w-0 border-border bg-white px-5 text-sm"
+                  onClick={async () => {
+                    setPaymentError(null);
+                    try {
+                      await updateBooking.mutateAsync({
+                        id: booking.id,
+                        data: { currentStep: 3 },
+                      });
+                      queryClient.invalidateQueries({ queryKey: ["booking"] });
+                    } catch (e) {
+                      const err = e as { data?: { error?: string }; message?: string };
+                      setPaymentError(
+                        err?.data?.error ||
+                          err?.message ||
+                          "We could not return to attendee details. Please try again.",
+                      );
+                    }
+                  }}
+                  disabled={isProcessing}
+                >
+                  Back to attendees
+                </Button>
+                <SaveAndReturnButton
+                  onSave={savePaymentProgress}
+                  disabled={isProcessing}
+                  buttonClassName="text-base"
+                />
+              </div>
+            </section>
+
             <section className="rounded-md border border-border bg-white">
               <div className="flex items-center justify-between gap-4 border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">What happens next</h3>
@@ -1290,65 +1349,6 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                     </>
                   )}
                 </ol>
-              </div>
-            </section>
-
-            <section className="rounded-md border border-border bg-white p-5">
-              <div className="flex flex-col gap-3">
-                {paymentMethod === "invoice" && (
-                  <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
-                    <p className="font-bold text-foreground">Ready to issue the invoice?</p>
-                    <p className="mt-1">
-                      This confirms the registration and emails the invoice immediately to the
-                      billing contact. PO and billing details can still be updated before payment
-                      from the secure link in the invoice email.
-                    </p>
-                  </div>
-                )}
-                <Button
-                  size="lg"
-                  className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
-                  onClick={() => {
-                    if (paymentMethod === "invoice") {
-                      void form.handleSubmit(onSubmit)();
-                    } else {
-                      void onSubmit();
-                    }
-                  }}
-                  disabled={isProcessing}
-                >
-                  {submitLabel}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="h-12 w-full min-w-0 px-5 border-border bg-white text-sm"
-                  onClick={async () => {
-                    setPaymentError(null);
-                    try {
-                      await updateBooking.mutateAsync({
-                        id: booking.id,
-                        data: { currentStep: 3 },
-                      });
-                      queryClient.invalidateQueries({ queryKey: ["booking"] });
-                    } catch (e) {
-                      const err = e as { data?: { error?: string }; message?: string };
-                      setPaymentError(
-                        err?.data?.error ||
-                          err?.message ||
-                          "We could not return to attendee details. Please try again.",
-                      );
-                    }
-                  }}
-                  disabled={isProcessing}
-                >
-                  Back to attendees
-                </Button>
-                <SaveAndReturnButton
-                  onSave={savePaymentProgress}
-                  disabled={isProcessing}
-                  buttonClassName="text-base"
-                />
               </div>
             </section>
           </aside>
