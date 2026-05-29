@@ -281,15 +281,16 @@ function UpsellNudge({ tiers, passType, quantity, unitLabel }: UpsellNudgeProps)
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
-      className="flex items-start gap-2.5 bg-accent/20 border border-accent px-3 py-2.5 text-xs text-foreground"
+      className="flex items-start gap-2.5 rounded-md border border-primary/15 bg-white px-3 py-2.5 text-xs leading-relaxed text-foreground shadow-[0_8px_20px_rgba(0,78,185,0.04)]"
     >
-      <TrendingUp className="w-3.5 h-3.5 shrink-0 mt-0.5 text-secondary" />
+      <TrendingUp className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
       <span>
         <span className="font-bold">
           Add {needed} more {unitLabel}
           {needed > 1 ? "s" : ""}
         </span>{" "}
-        to unlock <span className="font-bold text-secondary">{nextTier.discountPercent}% off</span>
+        to reach the next group discount:{" "}
+        <span className="font-bold text-primary">{nextTier.discountPercent}% off</span>
         {upliftValue > 0 && (
           <span>
             {" "}
@@ -620,10 +621,10 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           {/* ── Header band ── */}
           <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-primary/20 bg-gradient-to-r from-primary to-secondary text-white">
             <div>
-              <p className="text-xs uppercase tracking-widest text-white/75 mb-1 font-semibold">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-widest !text-white/80">
                 SWP Summit · 3 Mar 2027, London
               </p>
-              <h3 className="text-2xl font-bold text-white font-display leading-tight">
+              <h3 className="font-display text-2xl font-bold leading-tight !text-white">
                 HR Professional Pass
               </h3>
             </div>
@@ -631,11 +632,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <InventoryBadge remaining={inventory.single} />
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="text-3xl font-bold text-white">
+                  <span className="text-3xl font-bold !text-white">
                     £{singleCurrentPrice.toFixed(0)}
                   </span>
                   {singleOriginalPrice > singleCurrentPrice && (
-                    <span className="text-sm text-white/70 line-through">
+                    <span className="text-sm !text-white/70 line-through">
                       £{singleOriginalPrice.toFixed(0)}
                     </span>
                   )}
@@ -645,7 +646,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-white/75 mt-0.5">
+                <p className="mt-0.5 text-xs !text-white/80">
                   Per ticket, ex VAT · {singlePeriodName}
                 </p>
               </div>
@@ -738,18 +739,29 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               </div>
 
               {/* Tier table */}
-              <div className="space-y-1 text-xs">
-                {hrTierRows.map(({ key, label, note, active, isSpecial: _isSpecial }) => (
+              <div className="space-y-1.5 text-xs">
+                {hrTierRows.map(({ key, label, note, active, isSpecial }) => (
                   <div
                     key={key}
-                    className={`flex justify-between px-2 py-1.5 transition-all ${
+                    className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition-all ${
                       active
-                        ? "border-l-4 border-primary bg-primary/10 text-foreground font-semibold pl-2"
-                        : "text-muted-foreground pl-[6px]"
+                        ? "border-primary/40 bg-white text-foreground shadow-[0_8px_22px_rgba(0,78,185,0.08)] ring-1 ring-primary/10"
+                        : "border-primary/10 bg-white/60 text-muted-foreground"
                     }`}
                   >
-                    <span>{label}</span>
-                    <span className={active ? "text-primary font-bold" : ""}>{note}</span>
+                    <span className="flex min-w-0 items-center gap-2 font-semibold">
+                      <span>{label}</span>
+                      {active && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Current
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`text-right ${active || isSpecial ? "font-bold text-primary" : ""}`}
+                    >
+                      {note}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -883,18 +895,27 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               </div>
 
               {/* Business discount tiers */}
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1.5 text-xs">
                 {businessTierRows.map(({ key, label, note, active }) => (
                   <div
                     key={key}
-                    className={`flex justify-between px-2 py-1.5 transition-all ${
+                    className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition-all ${
                       active
-                        ? "border-l-4 border-primary bg-primary/10 text-foreground font-semibold pl-2"
-                        : "text-muted-foreground pl-[6px]"
+                        ? "border-primary/40 bg-white text-foreground shadow-[0_8px_22px_rgba(0,78,185,0.08)] ring-1 ring-primary/10"
+                        : "border-primary/10 bg-white/60 text-muted-foreground"
                     }`}
                   >
-                    <span>{label}</span>
-                    <span className={active ? "text-primary font-bold" : ""}>{note}</span>
+                    <span className="flex min-w-0 items-center gap-2 font-semibold">
+                      <span>{label}</span>
+                      {active && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          Current
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-right ${active ? "font-bold text-primary" : ""}`}>
+                      {note}
+                    </span>
                   </div>
                 ))}
               </div>

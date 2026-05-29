@@ -219,15 +219,17 @@
 .badge-shine {
   background: linear-gradient(
     90deg,
-    hsl(215, 100%, 36%) 0%,
-    hsl(215, 68%, 62%) 30%,
-    hsl(215, 100%, 36%) 50%,
-    hsl(215, 68%, 62%) 80%,
-    hsl(215, 100%, 36%) 100%
+    #fae03c 0%,
+    #fff2a3 30%,
+    #fae03c 52%,
+    #e9c924 80%,
+    #fae03c 100%
   );
   background-size: 200% auto;
   animation: shine 3s ease-in-out infinite;
   color: #000;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .savings-pulse {

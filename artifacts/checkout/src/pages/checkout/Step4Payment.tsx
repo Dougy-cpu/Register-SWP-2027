@@ -30,7 +30,6 @@ import {
   CreditCard,
   FileText,
   Building2,
-  Download,
   Mail,
   Landmark,
   ReceiptText,
@@ -789,7 +788,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
                 <div className="space-y-4 p-5">
                   <div className="overflow-hidden rounded-xl border border-primary/20 bg-[linear-gradient(135deg,#f0f6ff_0%,#ffffff_100%)] p-5 shadow-[0_18px_45px_rgba(0,78,185,0.08)]">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex flex-col gap-4">
                       <div className="max-w-3xl">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
                           How invoice payment works
@@ -802,17 +801,13 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           to pay by card now, use the card option above.
                         </p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                        className="min-h-11 w-full whitespace-normal border-primary bg-white px-4 text-center font-bold leading-snug text-primary hover:bg-primary/5 sm:w-auto xl:max-w-[280px]"
-                      >
-                        <a href="/api/company-info" target="_blank" rel="noreferrer">
-                          <Download className="mr-2 h-4 w-4" />
-                          Download company information PDF
-                        </a>
-                      </Button>
+                      <div className="flex items-start gap-3 rounded-lg border border-primary/15 bg-white/80 p-3 text-sm leading-relaxed text-muted-foreground">
+                        <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <p>
+                          The invoice email includes company information, bank details and payment
+                          instructions for your finance team.
+                        </p>
+                      </div>
                     </div>
 
                     <ol className="mt-5 grid gap-3 md:grid-cols-2">
@@ -1244,113 +1239,115 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               </div>
             </section>
 
-            <section className="rounded-md border border-border bg-white p-5 shadow-[0_16px_35px_rgba(0,78,185,0.06)] lg:sticky lg:top-24">
-              <div className="flex flex-col gap-3">
-                {paymentMethod === "invoice" && (
-                  <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
-                    <p className="font-bold text-foreground">Ready to issue the invoice?</p>
-                    <p className="mt-1">
-                      This confirms the registration and emails the invoice immediately to the
-                      billing contact. PO and billing details can still be updated before payment
-                      from the secure link in the invoice email.
-                    </p>
-                  </div>
-                )}
-                <Button
-                  size="lg"
-                  className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
-                  onClick={() => {
-                    if (paymentMethod === "invoice") {
-                      void form.handleSubmit(onSubmit)();
-                    } else {
-                      void onSubmit();
-                    }
-                  }}
-                  disabled={isProcessing}
-                >
-                  {submitLabel}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="h-12 w-full min-w-0 border-border bg-white px-5 text-sm"
-                  onClick={async () => {
-                    setPaymentError(null);
-                    try {
-                      await updateBooking.mutateAsync({
-                        id: booking.id,
-                        data: { currentStep: 3 },
-                      });
-                      queryClient.invalidateQueries({ queryKey: ["booking"] });
-                    } catch (e) {
-                      const err = e as { data?: { error?: string }; message?: string };
-                      setPaymentError(
-                        err?.data?.error ||
-                          err?.message ||
-                          "We could not return to attendee details. Please try again.",
-                      );
-                    }
-                  }}
-                  disabled={isProcessing}
-                >
-                  Back to attendees
-                </Button>
-                <SaveAndReturnButton
-                  onSave={savePaymentProgress}
-                  disabled={isProcessing}
-                  buttonClassName="text-base"
-                />
-              </div>
-            </section>
-
-            <section className="rounded-md border border-border bg-white">
-              <div className="flex items-center justify-between gap-4 border-b border-border/70 p-5">
-                <h3 className="text-lg font-bold">What happens next</h3>
-                <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
-                  {paymentMethod === "card" ? "Card selected" : "Invoice selected"}
-                </span>
-              </div>
-              <div className="p-5">
-                <ol className="space-y-3">
-                  {paymentMethod === "card" ? (
-                    <>
-                      <NextStep value={1}>You are taken to Stripe to pay securely.</NextStep>
-                      <NextStep value={2}>
-                        Your booking is confirmed after successful payment.
-                      </NextStep>
-                      <NextStep value={3}>
-                        A confirmation email is sent to the lead attendee.
-                      </NextStep>
-                    </>
-                  ) : (
-                    <>
-                      <NextStep value={1}>
-                        Registration is confirmed when the invoice is issued.
-                      </NextStep>
-                      <NextStep value={2}>
-                        The invoice is emailed immediately to the billing contact.
-                      </NextStep>
-                      <NextStep value={3}>
-                        The email includes company information, bank details and invoice payment
-                        instructions.
-                      </NextStep>
-                      <NextStep value={4}>
-                        Finance can settle the invoice by bank transfer or using the secure Stripe
-                        payment link on the invoice.
-                      </NextStep>
-                      <NextStep value={5}>
-                        PO and billing details can be updated later using the secure link in the
-                        email.
-                      </NextStep>
-                      <NextStep value={6}>
-                        If PO or billing details are updated, a revised invoice is emailed
-                        automatically.
-                      </NextStep>
-                    </>
+            <div className="space-y-5 lg:sticky lg:top-24">
+              <section className="rounded-md border border-border bg-white p-5 shadow-[0_16px_35px_rgba(0,78,185,0.06)]">
+                <div className="flex flex-col gap-3">
+                  {paymentMethod === "invoice" && (
+                    <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+                      <p className="font-bold text-foreground">Ready to issue the invoice?</p>
+                      <p className="mt-1">
+                        This confirms the registration and emails the invoice immediately to the
+                        billing contact. PO and billing details can still be updated before payment
+                        from the secure link in the invoice email.
+                      </p>
+                    </div>
                   )}
-                </ol>
-              </div>
-            </section>
+                  <Button
+                    size="lg"
+                    className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
+                    onClick={() => {
+                      if (paymentMethod === "invoice") {
+                        void form.handleSubmit(onSubmit)();
+                      } else {
+                        void onSubmit();
+                      }
+                    }}
+                    disabled={isProcessing}
+                  >
+                    {submitLabel}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="h-12 w-full min-w-0 border-border bg-white px-5 text-sm"
+                    onClick={async () => {
+                      setPaymentError(null);
+                      try {
+                        await updateBooking.mutateAsync({
+                          id: booking.id,
+                          data: { currentStep: 3 },
+                        });
+                        queryClient.invalidateQueries({ queryKey: ["booking"] });
+                      } catch (e) {
+                        const err = e as { data?: { error?: string }; message?: string };
+                        setPaymentError(
+                          err?.data?.error ||
+                            err?.message ||
+                            "We could not return to attendee details. Please try again.",
+                        );
+                      }
+                    }}
+                    disabled={isProcessing}
+                  >
+                    Back to attendees
+                  </Button>
+                  <SaveAndReturnButton
+                    onSave={savePaymentProgress}
+                    disabled={isProcessing}
+                    buttonClassName="text-base"
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-md border border-border bg-white">
+                <div className="flex items-center justify-between gap-4 border-b border-border/70 p-5">
+                  <h3 className="text-lg font-bold">What happens next</h3>
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+                    {paymentMethod === "card" ? "Card selected" : "Invoice selected"}
+                  </span>
+                </div>
+                <div className="p-5">
+                  <ol className="space-y-3">
+                    {paymentMethod === "card" ? (
+                      <>
+                        <NextStep value={1}>You are taken to Stripe to pay securely.</NextStep>
+                        <NextStep value={2}>
+                          Your booking is confirmed after successful payment.
+                        </NextStep>
+                        <NextStep value={3}>
+                          A confirmation email is sent to the lead attendee.
+                        </NextStep>
+                      </>
+                    ) : (
+                      <>
+                        <NextStep value={1}>
+                          Registration is confirmed when the invoice is issued.
+                        </NextStep>
+                        <NextStep value={2}>
+                          The invoice is emailed immediately to the billing contact.
+                        </NextStep>
+                        <NextStep value={3}>
+                          The email includes company information, bank details and invoice payment
+                          instructions.
+                        </NextStep>
+                        <NextStep value={4}>
+                          Finance can settle the invoice by bank transfer or using the secure Stripe
+                          payment link on the invoice.
+                        </NextStep>
+                        <NextStep value={5}>
+                          PO and billing details can be updated later using the secure link in the
+                          email.
+                        </NextStep>
+                        <NextStep value={6}>
+                          If PO or billing details are updated, a revised invoice is emailed
+                          automatically.
+                        </NextStep>
+                      </>
+                    )}
+                  </ol>
+                </div>
+              </section>
+            </div>
           </aside>
         </div>
       </div>
