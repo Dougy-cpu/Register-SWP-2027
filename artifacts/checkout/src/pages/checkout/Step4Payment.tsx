@@ -779,11 +779,6 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                       add a PO number later using the secure link in the invoice email.
                     </p>
                   </div>
-                  {billingLead && (
-                    <span className="w-fit rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
-                      Pre-filled
-                    </span>
-                  )}
                 </div>
 
                 <div className="space-y-4 p-5">
@@ -1188,7 +1183,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             )}
           </div>
 
-          <aside className="space-y-5">
+          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
             <section className="rounded-md border border-border bg-white">
               <div className="border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">Order summary</h3>
@@ -1239,7 +1234,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               </div>
             </section>
 
-            <div className="space-y-5 lg:sticky lg:top-24">
+            <div className="space-y-5">
               <section className="rounded-md border border-border bg-white p-5 shadow-[0_16px_35px_rgba(0,78,185,0.06)]">
                 <div className="flex flex-col gap-3">
                   {paymentMethod === "invoice" && (
