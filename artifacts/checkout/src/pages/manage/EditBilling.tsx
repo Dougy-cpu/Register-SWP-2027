@@ -41,6 +41,57 @@ interface SaveResponse {
   reissue: { reissued?: boolean; alreadyPaid?: boolean; error?: string };
 }
 
+interface BillingForm {
+  poNumber: string;
+  billingName: string;
+  billingCompany: string;
+  billingEmail: string;
+  billingAddressLine1: string;
+  billingAddressLine2: string;
+  billingTown: string;
+  billingRegion: string;
+  billingPostcode: string;
+  billingCountry: string;
+  billingPhone: string;
+  billingVatNumber: string;
+}
+
+const emptyBillingForm: BillingForm = {
+  poNumber: "",
+  billingName: "",
+  billingCompany: "",
+  billingEmail: "",
+  billingAddressLine1: "",
+  billingAddressLine2: "",
+  billingTown: "",
+  billingRegion: "",
+  billingPostcode: "",
+  billingCountry: "United Kingdom",
+  billingPhone: "",
+  billingVatNumber: "",
+};
+
+const billingFormFromResponse = (data: BillingResponse): BillingForm => ({
+  poNumber: data.poNumber ?? "",
+  billingName: data.billingName ?? "",
+  billingCompany: data.billingCompany ?? "",
+  billingEmail: data.billingEmail ?? "",
+  billingAddressLine1: data.billingAddressLine1 ?? "",
+  billingAddressLine2: data.billingAddressLine2 ?? "",
+  billingTown: data.billingTown ?? "",
+  billingRegion: data.billingRegion ?? "",
+  billingPostcode: data.billingPostcode ?? "",
+  billingCountry: data.billingCountry ?? "United Kingdom",
+  billingPhone: data.billingPhone ?? "",
+  billingVatNumber: data.billingVatNumber ?? "",
+});
+
+const formsMatch = (a: BillingForm | null, b: BillingForm) =>
+  !!a &&
+  Object.keys(emptyBillingForm).every(
+    (key) => a[key as keyof BillingForm] === b[key as keyof BillingForm],
+  );
+
 export default function EditBilling() {
   const [, params] = useRoute("/manage/:token/billing");
   const token = params?.token ?? "";
@@ -54,48 +105,30 @@ export default function EditBilling() {
     retry: false,
   });
 
-  const [form, setForm] = useState({
-    poNumber: "",
-    billingName: "",
-    billingCompany: "",
-    billingEmail: "",
-    billingAddressLine1: "",
-    billingAddressLine2: "",
-    billingTown: "",
-    billingRegion: "",
-    billingPostcode: "",
-    billingCountry: "United Kingdom",
-    billingPhone: "",
-    billingVatNumber: "",
-  });
+  const [form, setForm] = useState<BillingForm>(emptyBillingForm);
+  const [lastSavedForm, setLastSavedForm] = useState<BillingForm | null>(null);
   const [saved, setSaved] = useState(false);
+  const [discarded, setDiscarded] = useState(false);
 
   useEffect(() => {
     if (!data) return;
-    setForm({
-      poNumber: data.poNumber ?? "",
-      billingName: data.billingName ?? "",
-      billingCompany: data.billingCompany ?? "",
-      billingEmail: data.billingEmail ?? "",
-      billingAddressLine1: data.billingAddressLine1 ?? "",
-      billingAddressLine2: data.billingAddressLine2 ?? "",
-      billingTown: data.billingTown ?? "",
-      billingRegion: data.billingRegion ?? "",
-      billingPostcode: data.billingPostcode ?? "",
-      billingCountry: data.billingCountry ?? "United Kingdom",
-      billingPhone: data.billingPhone ?? "",
-      billingVatNumber: data.billingVatNumber ?? "",
-    });
+    const loadedForm = billingFormFromResponse(data);
+    setForm(loadedForm);
+    setLastSavedForm(loadedForm);
+    setDiscarded(false);
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: async () =>
+    mutationFn: async (payload: BillingForm) =>
       customFetch<SaveResponse>(`/api/bookings/by-management-token/${token}/billing`, {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       }),
-    onSuccess: () => {
+    onSuccess: (_result, savedForm) => {
+      setForm(savedForm);
+      setLastSavedForm(savedForm);
       setSaved(true);
+      setDiscarded(false);
       queryClient.invalidateQueries({ queryKey: ["booking-billing", token] });
       setTimeout(() => setSaved(false), 6000);
     },
@@ -140,6 +173,16 @@ export default function EditBilling() {
   const isPaid = data.alreadyPaid || data.status === "paid";
   const isInvoice = data.paymentMethod === "invoice";
   const isLocked = !!data.locked;
+  const hasUnsavedChanges = !formsMatch(lastSavedForm, form);
+
+  const handleDiscardChanges = () => {
+    if (!lastSavedForm) return;
+    setForm(lastSavedForm);
+    setSaved(false);
+    setDiscarded(true);
+    mutation.reset();
+    setTimeout(() => setDiscarded(false), 4000);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,7 +296,7 @@ export default function EditBilling() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                mutation.mutate();
+                mutation.mutate(form);
               }}
               className="bg-white border border-primary/15 rounded-2xl p-6 space-y-5 shadow-[0_10px_30px_rgba(0,78,185,0.04)]"
             >
@@ -433,6 +476,13 @@ export default function EditBilling() {
                 </div>
               )}
 
+              {discarded && (
+                <div className="flex items-start gap-2 text-blue-700 bg-[#f0f6ff] border border-primary/15 rounded-sm p-3 text-sm">
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>Unsaved changes discarded.</span>
+                </div>
+              )}
+
               <div className="flex items-center gap-3 pt-2 flex-wrap">
                 <Button
                   type="submit"
@@ -451,27 +501,10 @@ export default function EditBilling() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={mutation.isPending}
-                  onClick={() => {
-                    setForm({
-                      poNumber: data.poNumber ?? "",
-                      billingName: data.billingName ?? "",
-                      billingCompany: data.billingCompany ?? "",
-                      billingEmail: data.billingEmail ?? "",
-                      billingAddressLine1: data.billingAddressLine1 ?? "",
-                      billingAddressLine2: data.billingAddressLine2 ?? "",
-                      billingTown: data.billingTown ?? "",
-                      billingRegion: data.billingRegion ?? "",
-                      billingPostcode: data.billingPostcode ?? "",
-                      billingCountry: data.billingCountry ?? "",
-                      billingPhone: data.billingPhone ?? "",
-                      billingVatNumber: data.billingVatNumber ?? "",
-                    });
-                    setSaved(false);
-                    mutation.reset();
-                  }}
+                  disabled={mutation.isPending || !hasUnsavedChanges}
+                  onClick={handleDiscardChanges}
                 >
-                  Cancel
+                  Discard changes
                 </Button>
                 {data.stripeInvoicePaymentUrl && (
                   <a
