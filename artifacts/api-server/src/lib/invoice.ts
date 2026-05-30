@@ -308,7 +308,7 @@ export async function reissueBookingInvoice(
 
   // Build custom_fields (max 4). When PO is set, replace the "Contact" field.
   const baseCustomFields: Array<{ name: string; value: string }> = [
-    { name: "Booking Reference", value: orderRef },
+    { name: "Booking reference", value: orderRef },
     { name: "Company Number", value: "12252258" },
     { name: "VAT Number", value: "336124621" },
   ];
