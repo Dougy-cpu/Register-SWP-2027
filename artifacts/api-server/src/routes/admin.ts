@@ -29,7 +29,7 @@ import { refreshStripeInvoiceStatusIfStale } from "../lib/invoice";
 import { deriveInvoiceBadge } from "../lib/invoice-status";
 import { deliveryStatusForBooking, runConfirmationSideEffects } from "../lib/booking-confirmation";
 import { getStripe } from "../lib/stripe-client";
-import { generatePdfReceipt } from "../lib/pdf";
+import { getOrCreateArchivedReceiptPdf } from "../lib/receipt-documents";
 
 const router: IRouter = Router();
 
@@ -427,25 +427,31 @@ router.get("/admin/registrations/:id/receipt-pdf", adminAuth, async (req, res): 
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
-  const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-  if (booking.status !== "paid") {
-    res.status(409).json({ error: "VAT receipt is only available after payment is complete" });
+  let receipt: Awaited<ReturnType<typeof getOrCreateArchivedReceiptPdf>>;
+  try {
+    receipt = await getOrCreateArchivedReceiptPdf(id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not generate VAT receipt";
+    if (message === "Booking not found") {
+      res.status(404).json({ error: message });
+      return;
+    }
+    if (message.includes("after payment")) {
+      res.status(409).json({ error: message });
+      return;
+    }
+    logger.error({ err, bookingId: id }, "Admin VAT receipt download failed");
+    res.status(500).json({ error: message });
     return;
   }
 
-  const attendees = await db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, id));
-  const pdfBuffer = await generatePdfReceipt(booking, attendees);
-  const safeRef = (booking.orderReference || String(id)).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeName = receipt.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="receipt-${safeRef}.pdf"`);
-  res.setHeader("Content-Length", pdfBuffer.length.toString());
+  res.setHeader("Content-Type", receipt.contentType);
+  res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+  res.setHeader("Content-Length", receipt.buffer.length.toString());
   res.setHeader("Cache-Control", "private, no-store");
-  res.send(pdfBuffer);
+  res.send(receipt.buffer);
 });
 
 /**

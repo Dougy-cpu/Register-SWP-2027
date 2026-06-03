@@ -141,6 +141,16 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   discount_tiers: ["id", "pass_type", "min_quantity", "discount_percent", "label"],
   email_logs: ["id", "booking_id", "recipient", "type", "status", "error_message", "sent_at"],
   pass_inventory: ["id", "pass_type", "remaining", "updated_at"],
+  booking_documents: [
+    "id",
+    "booking_id",
+    "document_type",
+    "filename",
+    "content_type",
+    "data",
+    "created_at",
+    "updated_at",
+  ],
 };
 
 export async function checkSchemaConsistency(): Promise<boolean> {

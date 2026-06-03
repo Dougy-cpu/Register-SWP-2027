@@ -1,4 +1,5 @@
 export * from "./bookings";
+export * from "./booking-documents";
 export * from "./attendees";
 export * from "./promo-codes";
 export * from "./discount-tiers";

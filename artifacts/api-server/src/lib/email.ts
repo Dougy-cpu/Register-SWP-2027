@@ -18,6 +18,7 @@ import {
 import type { EventSettings } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { generatePdfReceipt } from "./pdf";
+import { archiveGeneratedReceiptForPaidBooking, archiveReceiptPdf } from "./receipt-documents";
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl, type CalendarEvent } from "./ics";
 
 async function downloadHttpsPdf(url: string, redirectsLeft = 5): Promise<Buffer | null> {
@@ -228,6 +229,26 @@ async function logEmail(
     });
   } catch (err) {
     logger.error({ err }, "Failed to log email");
+  }
+}
+
+async function archivePaidReceiptForEmail(
+  booking: typeof bookingsTable.$inferSelect,
+  attendees: Array<typeof attendeesTable.$inferSelect>,
+  pdfBuffer: Buffer | null,
+  pdfFilename: string,
+  pdfIsReceipt: boolean,
+): Promise<void> {
+  if (booking.status !== "paid") return;
+
+  try {
+    if (pdfBuffer && pdfIsReceipt) {
+      await archiveReceiptPdf(booking.id, pdfBuffer, pdfFilename);
+    } else {
+      await archiveGeneratedReceiptForPaidBooking(booking, attendees);
+    }
+  } catch (err) {
+    logger.warn({ err, bookingId: booking.id }, "Could not archive VAT receipt PDF");
   }
 }
 
@@ -690,12 +711,14 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
 
   let pdfBuffer: Buffer | null = null;
   let pdfFilename = `receipt-${booking.orderReference || bookingId}.pdf`;
+  let pdfIsReceipt = true;
   const stripeInvoicePdfUrl = booking.stripeInvoicePdfUrl;
   if (stripeInvoicePdfUrl) {
     try {
       pdfBuffer = await downloadHttpsPdf(stripeInvoicePdfUrl);
       if (pdfBuffer) {
         pdfFilename = `invoice-${booking.orderReference || bookingId}.pdf`;
+        pdfIsReceipt = false;
       }
     } catch (err) {
       logger.warn({ err }, "Could not download Stripe PDF - falling back to custom receipt");
@@ -704,10 +727,13 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
   if (!pdfBuffer) {
     try {
       pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfIsReceipt = true;
     } catch (err) {
       logger.error({ err }, "Failed to generate PDF receipt");
     }
   }
+
+  await archivePaidReceiptForEmail(booking, attendees, pdfBuffer, pdfFilename, pdfIsReceipt);
 
   const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
   if (pdfBuffer) {
@@ -802,12 +828,14 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
   // Prefer Stripe invoice PDF, then fall back to our custom receipt
   let pdfBuffer: Buffer | null = null;
   let pdfFilename = `receipt-${booking.orderReference || bookingId}.pdf`;
+  let pdfIsReceipt = true;
   const stripeInvoicePdfUrl = booking.stripeInvoicePdfUrl;
   if (stripeInvoicePdfUrl) {
     try {
       pdfBuffer = await downloadHttpsPdf(stripeInvoicePdfUrl);
       if (pdfBuffer) {
         pdfFilename = `invoice-${booking.orderReference || bookingId}.pdf`;
+        pdfIsReceipt = false;
         logger.info(
           { bookingId, sizeBytes: pdfBuffer.length },
           "Using Stripe invoice PDF for email attachment",
@@ -822,6 +850,7 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
   if (!pdfBuffer) {
     try {
       pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfIsReceipt = true;
       if (pdfBuffer)
         logger.info(
           { bookingId, sizeBytes: pdfBuffer.length },
@@ -831,6 +860,8 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
       logger.error({ err }, "Failed to generate PDF receipt");
     }
   }
+
+  await archivePaidReceiptForEmail(booking, attendees, pdfBuffer, pdfFilename, pdfIsReceipt);
 
   const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
   if (pdfBuffer) {

@@ -15,6 +15,32 @@ export async function runMigrations() {
   } catch (err) {
     logger.warn({ err }, "Migration: could not ensure hear_about_us column");
   }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS booking_documents (
+        id SERIAL PRIMARY KEY,
+        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        document_type TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        data BYTEA NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS booking_documents_booking_type_uniq
+      ON booking_documents (booking_id, document_type)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS booking_documents_booking_id_idx
+      ON booking_documents (booking_id)
+    `);
+    logger.info("Migration: booking_documents table ensured");
+  } catch (err) {
+    logger.warn({ err }, "Migration: could not ensure booking_documents table");
+  }
 }
 
 const DEFAULT_CONFIRMATION_SUBJECT = "Booking Confirmed - {{orderReference}} - SWP Summit 2027";

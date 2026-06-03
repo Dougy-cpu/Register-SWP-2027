@@ -1199,7 +1199,7 @@ function ExpandedRegistrationDetail({
                 <th className="text-left p-3 font-bold uppercase text-xs tracking-wider text-muted-foreground">
                   GDPR
                 </th>
-                <th className="text-left p-3 font-bold uppercase text-xs tracking-wider text-muted-foreground w-16"></th>
+                <th className="text-left p-3 font-bold uppercase text-xs tracking-wider text-muted-foreground w-24"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -1277,13 +1277,29 @@ function ExpandedRegistrationDetail({
                             <X className="w-4 h-4" />
                           </button>
                         ) : (
-                          <button
-                            onClick={() => startEditing(a)}
-                            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
-                            title="Edit attendee"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {data?.status === "paid" && (
+                              <button
+                                onClick={() => void handleViewReceipt()}
+                                disabled={receiptDownloadState === "loading"}
+                                className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors disabled:pointer-events-none disabled:opacity-60"
+                                title="View/download VAT receipt"
+                              >
+                                {receiptDownloadState === "loading" ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <FileText className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => startEditing(a)}
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+                              title="Edit attendee"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
