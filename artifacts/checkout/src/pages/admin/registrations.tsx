@@ -45,6 +45,7 @@ import {
   Loader2,
   Copy,
   Link,
+  FileText,
 } from "lucide-react";
 import { InvoiceBadge } from "@/components/InvoiceBadge";
 import {
@@ -168,6 +169,9 @@ function ExpandedRegistrationDetail({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [billingLinkCopyState, setBillingLinkCopyState] = useState<"idle" | "copied">("idle");
+  const [receiptDownloadState, setReceiptDownloadState] = useState<"idle" | "loading" | "error">(
+    "idle",
+  );
   const [editingBilling, setEditingBilling] = useState(false);
   const [billingForm, setBillingForm] = useState({
     poNumber: "",
@@ -409,6 +413,36 @@ function ExpandedRegistrationDetail({
     }
     onCopied();
     setTimeout(onReset, 2000);
+  };
+
+  const handleViewReceipt = async () => {
+    setReceiptDownloadState("loading");
+    const receiptWindow = window.open("", "_blank");
+    try {
+      const token = localStorage.getItem("admin_token") || "";
+      const res = await fetch(`/api/admin/registrations/${id}/receipt-pdf`, {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body?.error || "Could not generate VAT receipt");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (receiptWindow) {
+        receiptWindow.location.href = url;
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `receipt-${data?.orderReference || id}.pdf`;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setReceiptDownloadState("idle");
+    } catch {
+      if (receiptWindow) receiptWindow.close();
+      setReceiptDownloadState("error");
+    }
   };
 
   return (
@@ -1094,6 +1128,43 @@ function ExpandedRegistrationDetail({
             )}
           </div>
         )}
+
+      {data?.status === "paid" && (
+        <div className="bg-white border border-border p-3 text-sm">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
+            <FileText className="w-3 h-3" />
+            VAT Receipt
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleViewReceipt()}
+              disabled={receiptDownloadState === "loading"}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80 disabled:pointer-events-none disabled:opacity-60"
+            >
+              {receiptDownloadState === "loading" ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Preparing VAT receipt
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  View/download VAT receipt
+                </>
+              )}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              Includes Dynamic Business Leaders company details and VAT number for expensing.
+            </span>
+          </div>
+          {receiptDownloadState === "error" && (
+            <p className="mt-2 text-xs text-red-600">
+              Could not generate the VAT receipt. Please try again.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Attendee table */}
       <div>
