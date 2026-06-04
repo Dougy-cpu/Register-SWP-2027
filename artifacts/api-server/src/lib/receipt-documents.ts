@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { db, attendeesTable, bookingDocumentsTable, bookingsTable } from "@workspace/db";
 import { generatePdfReceipt } from "./pdf";
 import { logger } from "./logger";
+import { getStripe } from "./stripe-client";
 
 const RECEIPT_DOCUMENT_TYPE = "receipt";
 const RECEIPT_CONTENT_TYPE = "application/pdf";
@@ -16,6 +17,40 @@ type ReceiptDocument = {
 function receiptFilename(bookingId: number, orderReference: string | null): string {
   const ref = (orderReference || String(bookingId)).replace(/[^a-zA-Z0-9._-]/g, "_");
   return `receipt-${ref}.pdf`;
+}
+
+function formatCardBrand(brand: string | null | undefined): string | null {
+  if (!brand) return null;
+  return brand.charAt(0).toUpperCase() + brand.slice(1);
+}
+
+async function getReceiptCardDetails(
+  booking: typeof bookingsTable.$inferSelect,
+): Promise<{ cardBrand?: string | null; cardLast4?: string | null }> {
+  if (booking.paymentMethod !== "card" || !booking.stripePaymentIntentId) return {};
+
+  const stripe = getStripe();
+  if (!stripe) return {};
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(booking.stripePaymentIntentId, {
+      expand: ["latest_charge"],
+    });
+    const latestCharge = paymentIntent.latest_charge;
+    if (!latestCharge || typeof latestCharge === "string") return {};
+
+    const card = latestCharge.payment_method_details?.card;
+    return {
+      cardBrand: formatCardBrand(card?.brand),
+      cardLast4: card?.last4 ?? null,
+    };
+  } catch (err) {
+    logger.warn(
+      { err, bookingId: booking.id, paymentIntentId: booking.stripePaymentIntentId },
+      "Could not load Stripe card details for VAT receipt",
+    );
+    return {};
+  }
 }
 
 async function getArchivedReceipt(bookingId: number): Promise<ReceiptDocument | null> {
@@ -64,13 +99,21 @@ export async function archiveReceiptPdf(
     });
 }
 
+export async function generateReceiptPdfForBooking(
+  booking: typeof bookingsTable.$inferSelect,
+  attendees: Array<typeof attendeesTable.$inferSelect>,
+): Promise<Buffer> {
+  const cardDetails = await getReceiptCardDetails(booking);
+  return generatePdfReceipt({ ...booking, ...cardDetails }, attendees);
+}
+
 export async function archiveGeneratedReceiptForPaidBooking(
   booking: typeof bookingsTable.$inferSelect,
   attendees: Array<typeof attendeesTable.$inferSelect>,
 ): Promise<ReceiptDocument | null> {
   if (booking.status !== "paid") return null;
 
-  const pdfBuffer = await generatePdfReceipt(booking, attendees);
+  const pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
   const filename = receiptFilename(booking.id, booking.orderReference);
   await archiveReceiptPdf(booking.id, pdfBuffer, filename);
 

@@ -17,8 +17,11 @@ import {
 } from "@workspace/db";
 import type { EventSettings } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { generatePdfReceipt } from "./pdf";
-import { archiveGeneratedReceiptForPaidBooking, archiveReceiptPdf } from "./receipt-documents";
+import {
+  archiveGeneratedReceiptForPaidBooking,
+  archiveReceiptPdf,
+  generateReceiptPdfForBooking,
+} from "./receipt-documents";
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl, type CalendarEvent } from "./ics";
 
 async function downloadHttpsPdf(url: string, redirectsLeft = 5): Promise<Buffer | null> {
@@ -726,7 +729,7 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
   }
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
       pdfIsReceipt = true;
     } catch (err) {
       logger.error({ err }, "Failed to generate PDF receipt");
@@ -849,7 +852,7 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
   }
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
       pdfIsReceipt = true;
       if (pdfBuffer)
         logger.info(
@@ -965,7 +968,7 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
   }
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
     } catch (err) {
       logger.warn({ err }, "Failed to generate fallback PDF for re-issued invoice");
     }
@@ -1050,7 +1053,7 @@ export async function resendConfirmationAndReceipt(
   }
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
       if (pdfBuffer)
         logger.info(
           { bookingId, sizeBytes: pdfBuffer.length },
@@ -2488,7 +2491,7 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
   }
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await generatePdfReceipt(booking, attendees);
+      pdfBuffer = await generateReceiptPdfForBooking(booking, attendees);
     } catch (err) {
       logger.warn({ err }, "Could not generate PDF receipt for reminder");
     }
@@ -2561,7 +2564,7 @@ export async function resolveLatestBookingPdf(
   }
   if (!buffer) {
     try {
-      buffer = await generatePdfReceipt(booking, attendees);
+      buffer = await generateReceiptPdfForBooking(booking, attendees);
     } catch (err) {
       logger.error({ err, bookingId }, "Failed to generate fallback PDF receipt");
       return null;

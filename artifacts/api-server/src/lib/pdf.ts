@@ -25,6 +25,10 @@ interface BookingForPdf {
   billingPhone?: string | null;
   billingVatNumber?: string | null;
   poNumber?: string | null;
+  paymentMethod?: string | null;
+  paidAt?: Date | string | null;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
   createdAt: Date;
 }
 
@@ -57,7 +61,9 @@ export function generatePdfReceipt(
     const formatCurrency = (n: number) => `GBP ${n.toFixed(2)}`;
 
     const lead = attendees.find((a) => a.isLead) || attendees[0];
-    const dateStr = new Date().toLocaleDateString("en-GB", {
+    const receiptDate =
+      booking.paymentMethod === "card" && booking.paidAt ? new Date(booking.paidAt) : new Date();
+    const dateStr = receiptDate.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
@@ -99,6 +105,9 @@ export function generatePdfReceipt(
     doc.text(`Receipt Number: ${booking.orderReference || `INV-${booking.id}`}`);
     doc.text(`Date: ${dateStr}`);
     doc.text(`Booking Reference: ${booking.orderReference || `#${booking.id}`}`);
+    if (booking.cardBrand && booking.cardLast4) {
+      doc.text(`Payment Card: ${booking.cardBrand} ending ${booking.cardLast4}`);
+    }
     if (booking.poNumber) {
       doc.text(`PO Number: ${booking.poNumber}`);
     }
