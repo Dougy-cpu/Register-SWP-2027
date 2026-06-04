@@ -106,6 +106,8 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
     "label",
     "notify_complete",
     "notify_incomplete",
+    "notify_checkout_expired",
+    "notify_billing_edit",
     "created_at",
   ],
   pass_config: [

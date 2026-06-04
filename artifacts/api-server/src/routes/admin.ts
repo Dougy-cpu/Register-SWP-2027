@@ -887,7 +887,14 @@ router.get("/admin/notification-emails", adminAuth, async (_req, res): Promise<v
 });
 
 router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<void> => {
-  const { email, label, notifyComplete, notifyIncomplete, notifyBillingEdit } = req.body;
+  const {
+    email,
+    label,
+    notifyComplete,
+    notifyIncomplete,
+    notifyCheckoutExpired,
+    notifyBillingEdit,
+  } = req.body;
   if (!email || typeof email !== "string" || !email.includes("@")) {
     res.status(400).json({ error: "A valid email address is required" });
     return;
@@ -900,6 +907,7 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
         label: label?.trim() || null,
         notifyComplete: notifyComplete !== false,
         notifyIncomplete: notifyIncomplete !== false,
+        notifyCheckoutExpired: notifyCheckoutExpired === true,
         notifyBillingEdit: notifyBillingEdit !== false,
       })
       .returning();
@@ -911,6 +919,7 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
         label: inserted.label,
         notifyComplete: inserted.notifyComplete,
         notifyIncomplete: inserted.notifyIncomplete,
+        notifyCheckoutExpired: inserted.notifyCheckoutExpired,
         notifyBillingEdit: inserted.notifyBillingEdit,
       },
       meta: { notificationEmailId: inserted.id },
@@ -923,10 +932,12 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
 
 router.patch("/admin/notification-emails/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"] as string, 10);
-  const { notifyComplete, notifyIncomplete, notifyBillingEdit } = req.body;
+  const { notifyComplete, notifyIncomplete, notifyCheckoutExpired, notifyBillingEdit } = req.body;
   const updates: Record<string, boolean> = {};
   if (typeof notifyComplete === "boolean") updates.notifyComplete = notifyComplete;
   if (typeof notifyIncomplete === "boolean") updates.notifyIncomplete = notifyIncomplete;
+  if (typeof notifyCheckoutExpired === "boolean")
+    updates.notifyCheckoutExpired = notifyCheckoutExpired;
   if (typeof notifyBillingEdit === "boolean") updates.notifyBillingEdit = notifyBillingEdit;
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "Nothing to update" });
@@ -952,12 +963,14 @@ router.patch("/admin/notification-emails/:id", adminAuth, async (req, res): Prom
       ? {
           notifyComplete: prev.notifyComplete,
           notifyIncomplete: prev.notifyIncomplete,
+          notifyCheckoutExpired: prev.notifyCheckoutExpired,
           notifyBillingEdit: prev.notifyBillingEdit,
         }
       : undefined,
     after: {
       notifyComplete: updated.notifyComplete,
       notifyIncomplete: updated.notifyIncomplete,
+      notifyCheckoutExpired: updated.notifyCheckoutExpired,
       notifyBillingEdit: updated.notifyBillingEdit,
     },
     meta: { notificationEmailId: id },

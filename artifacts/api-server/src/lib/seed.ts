@@ -18,6 +18,16 @@ export async function runMigrations() {
 
   try {
     await db.execute(sql`
+      ALTER TABLE notification_emails
+      ADD COLUMN IF NOT EXISTS notify_checkout_expired BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    logger.info("Migration: notify_checkout_expired column ensured");
+  } catch (err) {
+    logger.warn({ err }, "Migration: could not ensure notify_checkout_expired column");
+  }
+
+  try {
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS booking_documents (
         id SERIAL PRIMARY KEY,
         booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,

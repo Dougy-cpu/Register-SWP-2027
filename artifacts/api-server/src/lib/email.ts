@@ -1675,6 +1675,16 @@ async function getOrganiserEmails(): Promise<string[]> {
   ]);
 }
 
+async function getCheckoutExpiredNotificationEmails(): Promise<string[]> {
+  const storedEmails = await db
+    .select()
+    .from(notificationEmailsTable)
+    .orderBy(notificationEmailsTable.createdAt);
+  return sanitizeRecipients([
+    ...storedEmails.filter((e) => e.notifyCheckoutExpired).map((e) => e.email),
+  ]);
+}
+
 function formatCalendarRangeLabel(start: Date, end: Date, tz: string): string {
   try {
     const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -2097,7 +2107,7 @@ export async function sendCheckoutExpiredEmail(bookingId: number): Promise<void>
   if (!lead) return;
 
   const settings = await getEventSettings();
-  const organisers = await getOrganiserEmails();
+  const checkoutExpiredRecipients = await getCheckoutExpiredNotificationEmails();
 
   const name = `${lead.firstName} ${lead.lastName}`;
   const safeName = escHtml(name);
@@ -2126,12 +2136,15 @@ export async function sendCheckoutExpiredEmail(bookingId: number): Promise<void>
 
   await sendMail({
     to: recipientEmail,
-    bcc: organisers.length > 0 ? organisers : undefined,
+    bcc: checkoutExpiredRecipients.length > 0 ? checkoutExpiredRecipients : undefined,
     subject: `Action Required: Your SWP Summit checkout session expired - ${name}`,
     html,
   });
 
-  logger.info({ bookingId, to: recipientEmail }, "Checkout expired email sent");
+  logger.info(
+    { bookingId, to: recipientEmail, internalCopyCount: checkoutExpiredRecipients.length },
+    "Checkout expired email sent",
+  );
 }
 
 export async function sendRefundConfirmationEmail(
