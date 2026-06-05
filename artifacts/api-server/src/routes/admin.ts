@@ -32,6 +32,25 @@ import { getStripe } from "../lib/stripe-client";
 import { getOrCreateArchivedReceiptPdf } from "../lib/receipt-documents";
 
 const router: IRouter = Router();
+const INVOICE_PAYMENT_TERMS_DAYS = 14;
+
+function getAdminRegistrationDate(booking: typeof bookingsTable.$inferSelect): Date {
+  if (booking.paidAt) {
+    return booking.paidAt;
+  }
+
+  if (booking.paymentMethod === "invoice" && booking.invoiceDueDate) {
+    const invoiceCreatedAt = new Date(booking.invoiceDueDate);
+    invoiceCreatedAt.setDate(invoiceCreatedAt.getDate() - INVOICE_PAYMENT_TERMS_DAYS);
+    return invoiceCreatedAt;
+  }
+
+  if (booking.status === "paid" || booking.status === "invoiced") {
+    return booking.updatedAt ?? booking.createdAt;
+  }
+
+  return booking.createdAt;
+}
 
 function formatBooking(b: typeof bookingsTable.$inferSelect) {
   return {
@@ -309,6 +328,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
   headerRow.height = 22;
 
   for (const booking of bookings) {
+    const registeredAt = getAdminRegistrationDate(booking).toISOString();
     const bookingAttendees = allAttendees
       .filter((a) => a.bookingId === booking.id)
       .sort((a, b) => (a.seatIndex ?? 0) - (b.seatIndex ?? 0));
@@ -336,7 +356,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
         phone: "",
         dietary: "",
         gdpr: "",
-        registeredAt: booking.createdAt.toISOString(),
+        registeredAt,
       });
       continue;
     }
@@ -364,7 +384,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
         phone: a.isTbc ? "" : a.phone || "",
         dietary: a.isTbc ? "" : a.dietaryAccessibility || "",
         gdpr: a.isTbc ? "" : a.gdprConsent ? "Yes" : "No",
-        registeredAt: booking.createdAt.toISOString(),
+        registeredAt,
       });
       if (a.isLead) {
         row.getCell("lead").font = { bold: true, color: { argb: "FF004EB9" } };
