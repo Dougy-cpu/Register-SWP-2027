@@ -30,7 +30,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
         </p>
       </div>
 
-      <div className="bg-white p-8 border border-border text-left mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 relative overflow-hidden">
+      <div className="swp-card relative mt-12 grid grid-cols-1 gap-8 overflow-hidden rounded-2xl p-8 text-left md:grid-cols-2">
         <div className="absolute top-0 right-0 p-8 opacity-5">
           <CheckCircle2 className="w-48 h-48" />
         </div>
@@ -150,27 +150,36 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                     arr.findIndex((b) => b.seatIndex === a.seatIndex && b.isLead === a.isLead) ===
                     idx,
                 ) ?? []
-              ).map((attendee, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-bold">
-                    {attendee.firstName.charAt(0)}
-                    {attendee.lastName.charAt(0)}
+              ).map((attendee, i) => {
+                const isTbc = attendee.isTbc || !attendee.firstName || !attendee.lastName;
+                const attendeeName = isTbc
+                  ? `Attendee ${(attendee.seatIndex ?? i) + 1} (TBC)`
+                  : `${attendee.firstName} ${attendee.lastName}`;
+                const initials = isTbc
+                  ? "TBC"
+                  : `${attendee.firstName.charAt(0)}${attendee.lastName.charAt(0)}`;
+
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                      {initials}
+                    </div>
+                    <div>
+                      <p className="font-bold">{attendeeName}</p>
+                      {attendee.workEmail && (
+                        <p className="text-xs text-muted-foreground">{attendee.workEmail}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold">
-                      {attendee.firstName} {attendee.lastName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{attendee.workEmail}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       {booking.managementToken && (
-        <div className="bg-muted/40 border border-border rounded-sm p-5 text-left">
+        <div className="rounded-xl border border-primary/15 bg-primary/[0.025] p-5 text-left">
           <div className="flex items-start gap-3">
             <ExternalLink className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
             <div>
@@ -197,7 +206,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
         </p>
         <Button
           size="lg"
-          className="px-10 h-14 text-lg bg-primary hover:bg-primary/90 text-white"
+          className="swp-primary-btn h-14 px-10 text-lg"
           onClick={() => (window.location.href = "https://swpsummit.com")}
         >
           Return to Website

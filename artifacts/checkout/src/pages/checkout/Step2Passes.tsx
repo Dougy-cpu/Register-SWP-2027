@@ -578,8 +578,9 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">Select your pass</h1>
+      <div className="space-y-3">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Step 2 of 4</p>
+        <h1 className="text-4xl font-bold md:text-5xl">Select your pass</h1>
         <p className="text-lg text-muted-foreground">
           {isVendor
             ? "Your Business Pass gives you exclusive access and visibility at the summit."
@@ -587,14 +588,14 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="bg-white border border-border p-4">
+      <div className="swp-metric-strip grid grid-cols-1 divide-y divide-primary/10 overflow-hidden md:grid-cols-3 md:divide-x md:divide-y-0">
+        <div className="p-4 md:p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Booking type
           </p>
           <p className="text-lg font-bold mt-1">{audienceLabel}</p>
         </div>
-        <div className="bg-white border border-border p-4">
+        <div className="p-4 md:p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Selected pass
           </p>
@@ -604,7 +605,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           </p>
           <p className="text-sm text-muted-foreground">{passLabel}</p>
         </div>
-        <div className="bg-white border border-border p-4">
+        <div className="p-4 md:p-5">
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Current total
           </p>
@@ -617,7 +618,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
 
       {/* HR: Single pass with quantity picker */}
       {isHR && (
-        <Card className="relative overflow-hidden rounded-lg border-2 border-primary/25 bg-white p-0 shadow-[0_10px_30px_rgba(0,78,185,0.05)]">
+        <Card className="swp-card relative overflow-hidden rounded-2xl border-primary/25 bg-white p-0">
           {/* ── Header band ── */}
           <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-primary/20 bg-gradient-to-r from-primary to-secondary text-white">
             <div>
@@ -687,7 +688,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <button
                 type="button"
                 onClick={() => setQuantity(3)}
-                className={`w-full flex items-center justify-between gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                className={`flex w-full items-center justify-between gap-2 rounded-lg border border-primary/20 px-4 py-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 ${
                   quantity === 3
                     ? "bg-primary text-white shadow-md"
                     : "text-white shadow-md hover:shadow-lg"
@@ -712,6 +713,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <div className="flex items-stretch border border-border bg-white overflow-hidden">
                 <button
                   type="button"
+                  aria-label="Decrease ticket quantity"
                   className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   disabled={quantity <= 1}
@@ -723,6 +725,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                 </div>
                 <button
                   type="button"
+                  aria-label="Increase ticket quantity"
                   className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   onClick={() => setQuantity((q) => Math.min(20, q + 1))}
                 >
@@ -783,14 +786,14 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
       )}
       {/* Vendor: Business Pass with quantity + discounts */}
       {isVendor && (
-        <Card className="relative overflow-hidden rounded-lg border-2 border-primary bg-white p-0 shadow-[0_18px_45px_rgba(0,78,185,0.16)]">
+        <Card className="swp-card relative overflow-hidden rounded-2xl border-primary/35 bg-white p-0">
           {/* ── Header band ── */}
-          <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-border">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-primary/20 bg-gradient-to-r from-primary to-secondary px-6 py-5 text-white md:px-8">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-semibold">
+              <p className="swp-blue-header-muted mb-1 text-xs font-semibold uppercase tracking-widest">
                 SWP Summit · 3 Mar 2027 · Consultants &amp; Vendors
               </p>
-              <h3 className="text-2xl font-bold text-primary font-display leading-tight">
+              <h3 className="swp-blue-header-title font-display text-2xl font-bold leading-tight">
                 Business Pass
               </h3>
             </div>
@@ -798,11 +801,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <InventoryBadge remaining={inventory.business} />
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="text-3xl font-bold text-foreground">
+                  <span className="swp-blue-header-title text-3xl font-bold">
                     £{businessCurrentPrice.toFixed(0)}
                   </span>
                   {businessOriginalPrice > businessCurrentPrice && (
-                    <span className="text-sm text-muted-foreground line-through">
+                    <span className="swp-blue-header-muted text-sm line-through">
                       £{businessOriginalPrice.toFixed(0)}
                     </span>
                   )}
@@ -812,7 +815,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="swp-blue-header-muted mt-0.5 text-xs">
                   Per pass, ex VAT · {businessPeriodName}
                 </p>
               </div>
@@ -838,15 +841,15 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               {/* Exclusive / premium benefits */}
               {businessExtraBenefits.length > 0 && (
                 <div className="border-t border-border pt-3 mt-3 space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-widest text-gold mb-2">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
                     Exclusive to Business Pass
                   </p>
                   {businessExtraBenefits.map((b) => (
                     <div
                       key={b}
-                      className="flex items-start gap-2 text-sm font-semibold border-l-2 border-gold pl-2"
+                      className="flex items-start gap-2 border-l-2 border-primary/35 pl-2 text-sm font-semibold"
                     >
-                      <Star className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+                      <Star className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <span>{b}</span>
                     </div>
                   ))}
@@ -867,6 +870,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <div className="flex items-stretch border border-border bg-white overflow-hidden">
                 <button
                   type="button"
+                  aria-label="Decrease pass quantity"
                   className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   disabled={quantity <= 1}
@@ -878,6 +882,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                 </div>
                 <button
                   type="button"
+                  aria-label="Increase pass quantity"
                   className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
                   onClick={() => setQuantity((q) => Math.min(10, q + 1))}
                   disabled={quantity >= 10}
@@ -936,7 +941,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
         </Card>
       )}
       {/* ── Order Summary ── */}
-      <div className="bg-white border border-border flex flex-col md:flex-row md:items-start justify-between gap-0 md:gap-8 overflow-hidden">
+      <div className="swp-card flex flex-col justify-between gap-0 overflow-hidden rounded-2xl md:flex-row md:items-start md:gap-8">
         {/* Left: selection summary */}
         <div className="flex-1 p-6 md:p-8 space-y-1">
           <h2 className="text-xl font-bold">
@@ -958,21 +963,14 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
 
           {/* How did you hear about us */}
           <div className="pt-4">
-            <style>{`
-              @keyframes hau-glow {
-                0%, 100% { box-shadow: 0 0 0 0 rgba(231,79,62,0); border-color: rgba(231,79,62,0.25); }
-                50% { box-shadow: 0 0 0 3px rgba(231,79,62,0.12); border-color: rgba(231,79,62,0.7); }
-              }
-              .hau-card { animation: hau-glow 3.6s ease-in-out infinite; }
-            `}</style>
-            <div className="hau-card border rounded-none px-4 py-3 space-y-2 transition-colors">
+            <div className="space-y-2 rounded-xl border border-primary/15 bg-primary/[0.025] px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 How did you hear about the event?
               </p>
               <select
                 value={hearAboutUs}
                 onChange={(e) => setHearAboutUs(e.target.value)}
-                className="w-full h-10 border border-input bg-white rounded-none px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">Select an option…</option>
                 {hearOptions.map((opt) => (
@@ -1050,7 +1048,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
         </div>
 
         {/* Right: price breakdown */}
-        <div className="bg-muted p-6 md:p-8 min-w-[280px]">
+        <div className="min-w-[280px] bg-primary/[0.045] p-6 md:p-8">
           <h3 className="text-lg font-bold mb-4">Order Summary</h3>
           {currentPricing ? (
             <div className="space-y-2.5">
@@ -1146,7 +1144,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
         />
         <Button
           size="lg"
-          className="order-1 h-14 w-full px-10 text-lg bg-primary hover:bg-primary/90 text-white border-none md:order-3"
+          className="swp-primary-btn order-1 h-14 w-full min-w-0 px-8 text-lg md:order-3"
           onClick={handleContinue}
           disabled={pricingLoading || !booking.id || compShortfall || updateBooking.isPending}
         >

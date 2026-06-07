@@ -88,7 +88,31 @@
   .swp-card {
     border: 1px solid var(--swp-border);
     background: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 10px 30px rgba(0, 78, 185, 0.04);
+    box-shadow: 0 16px 45px rgba(0, 78, 185, 0.07);
+  }
+
+  .swp-metric-strip {
+    border: 1px solid var(--swp-border);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 12px 34px rgba(0, 78, 185, 0.05);
+  }
+
+  .swp-option-card {
+    border: 1px solid hsl(var(--border));
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(0, 78, 185, 0.03);
+  }
+
+  .swp-option-card:hover {
+    border-color: rgba(0, 78, 185, 0.38);
+    box-shadow: 0 12px 30px rgba(0, 78, 185, 0.08);
+  }
+
+  .swp-option-card:focus-within {
+    outline: 3px solid rgba(0, 78, 185, 0.15);
+    outline-offset: 2px;
   }
 
   .swp-grid-bg {
@@ -139,7 +163,11 @@
     font-size: 18px;
     font-weight: 600;
     letter-spacing: 0.5px;
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease,
+      border-color 0.25s ease,
+      background-color 0.25s ease;
   }
 
   .swp-primary-btn {
@@ -187,7 +215,7 @@
 
   .swp-primary-btn:hover,
   .swp-secondary-btn:hover {
-    transform: translateY(-3px) scale(1.02);
+    transform: translateY(-2px);
   }
 
   .swp-primary-btn:hover {
@@ -215,6 +243,12 @@
   .swp-secondary-btn:hover .swp-btn-arrow {
     transform: translateX(4px);
   }
+
+  .swp-primary-btn:focus-visible,
+  .swp-secondary-btn:focus-visible {
+    outline: 3px solid rgba(0, 78, 185, 0.2);
+    outline-offset: 3px;
+  }
 }
 
 @keyframes shine {
@@ -240,21 +274,24 @@
 }
 
 .badge-shine {
-  background: linear-gradient(
-    90deg,
-    #fae03c 0%,
-    #fff2a3 30%,
-    #fae03c 52%,
-    #e9c924 80%,
-    #fae03c 100%
-  );
-  background-size: 200% auto;
-  animation: shine 3s ease-in-out infinite;
-  color: #000;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+  background: linear-gradient(135deg, #ffffff 0%, var(--swp-blue-wash) 100%);
+  color: var(--swp-blue);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 18px rgba(0, 78, 185, 0.14);
 }
 
 .savings-pulse {
   animation: pulse-glow 2s ease-in-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swp-primary-btn,
+  .swp-secondary-btn,
+  .swp-primary-btn::before,
+  .swp-secondary-btn::before,
+  .swp-btn-arrow,
+  .savings-pulse {
+    animation: none !important;
+    transition: none !important;
+  }
 }
