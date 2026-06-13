@@ -199,7 +199,7 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
   }
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass, SWP Summit 2027",
+    single: "Workforce Pass, SWP Summit 2027",
     team: "Team Pass, SWP Summit 2027",
     business: "Business Pass, SWP Summit 2027",
   };

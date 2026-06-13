@@ -999,8 +999,8 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
           const msg =
             promo?.discountType === "complimentary"
               ? remaining === 0
-                ? "This complimentary code has been fully redeemed — no tickets remain"
-                : `Only ${remaining} complimentary ticket${remaining === 1 ? "" : "s"} remain on this code — please reduce your quantity`
+                ? "This complimentary code has been fully redeemed — no passes remain"
+                : `Only ${remaining} complimentary pass${remaining === 1 ? "" : "es"} remain on this code — please reduce your quantity`
               : "This promo code has already been used up";
           throw new PromoCapExceededError(msg);
         }

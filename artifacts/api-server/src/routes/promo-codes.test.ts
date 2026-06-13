@@ -124,7 +124,7 @@ describe("POST /api/promo-codes/validate — complimentary code shortfall", () =
     expect(body.code).toBe("FREEPASS");
     expect(body.discountType).toBe("complimentary");
     expect(body.remainingSeats).toBe(5);
-    expect(body.discountAmount).toBe(597);
+    expect(body.discountAmount).toBe(747);
   });
 
   it("returns valid + true remaining count when requested qty exceeds remaining (shortfall)", async () => {
@@ -138,7 +138,7 @@ describe("POST /api/promo-codes/validate — complimentary code shortfall", () =
     const body = r.body as Record<string, unknown>;
     expect(body.valid).toBe(true);
     expect(body.remainingSeats).toBe(2);
-    expect(body.discountAmount).toBe(199 * 4);
+    expect(body.discountAmount).toBe(249 * 4);
   });
 
   it("rejects with the new shortfall message when comp code is fully redeemed", async () => {

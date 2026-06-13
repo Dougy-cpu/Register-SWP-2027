@@ -154,6 +154,21 @@ const DEFAULT_DISCOUNT_TIERS = [
   },
 ];
 
+const DEFAULT_PASS_BENEFITS = [
+  "Full summit day",
+  "Main stage keynotes and content forums",
+  "Planning Lab sessions",
+  "PowerPulse and optional Quickfire sessions",
+  "Personalised agenda creator before the event",
+  "Networking breaks, lunch and drinks reception",
+  "Session slides and recordings after the event",
+];
+
+const DEFAULT_BUSINESS_EXTRA_BENEFITS = [
+  "This is an attendee pass, not a sponsorship package.",
+  "Speaking, branding, sponsor visibility and VIP invitations are handled separately.",
+];
+
 function rebrandLegacyText(value: string): string {
   return value
     .replaceAll("HR Analytics Summit 2026", "SWP Summit 2027")
@@ -212,6 +227,52 @@ async function rebrandLegacyDefaults() {
       logger.info({ type: template.type }, "Rebranded legacy email template text");
     }
   }
+
+  const passConfigs = await db.select().from(passConfigTable);
+  for (const config of passConfigs) {
+    const updates: Partial<typeof passConfigTable.$inferInsert> = {};
+    const benefits = Array.isArray(config.benefits) ? config.benefits : [];
+    const extraBenefits = Array.isArray(config.extraBenefits) ? config.extraBenefits : [];
+    const currentPrice = Number(config.currentPrice);
+
+    if (config.passType === "single") {
+      if (currentPrice === 199) updates.currentPrice = "249.00";
+      if (config.pricingPeriodName === "Early Bird")
+        updates.pricingPeriodName = "Super Early Bird";
+      if (
+        benefits.includes("Conference Sessions") ||
+        benefits.includes("Access to Pre-Event Social")
+      ) {
+        updates.benefits = DEFAULT_PASS_BENEFITS;
+      }
+    }
+
+    if (config.passType === "business") {
+      if (currentPrice === 599) updates.currentPrice = "499.00";
+      if (config.pricingPeriodName === "Early Bird")
+        updates.pricingPeriodName = "Super Early Bird";
+      if (
+        benefits.includes("Conference Sessions") ||
+        benefits.includes("Happy Hour with Entertainment")
+      ) {
+        updates.benefits = DEFAULT_PASS_BENEFITS;
+      }
+      if (
+        extraBenefits.includes("Exclusive Attendee Report") ||
+        extraBenefits.includes("Company Branding at the Summit")
+      ) {
+        updates.extraBenefits = DEFAULT_BUSINESS_EXTRA_BENEFITS;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(passConfigTable)
+        .set(updates)
+        .where(eq(passConfigTable.passType, config.passType));
+      logger.info({ passType: config.passType }, "Updated legacy pass config defaults");
+    }
+  }
 }
 
 export async function seed() {
@@ -262,22 +323,10 @@ export async function seed() {
       await db.insert(passConfigTable).values([
         {
           passType: "single",
-          currentPrice: "199.00",
+          currentPrice: "249.00",
           originalPrice: "429.00",
           pricingPeriodName: "Super Early Bird",
-          benefits: [
-            "Conference Sessions",
-            "Networking Sessions",
-            "Happy Hour Networking",
-            "Personalised Agenda",
-            "Access to Pre-Event Social",
-            "Exhibition Hall",
-            "Award-winning Food & Drink",
-            "On-Demand Recordings",
-            "Additional Content Access",
-            "Presentation Slides",
-            "Post-Event Content",
-          ],
+          benefits: DEFAULT_PASS_BENEFITS,
           extraBenefits: [],
         },
         {
@@ -285,18 +334,8 @@ export async function seed() {
           currentPrice: "499.00",
           originalPrice: "999.00",
           pricingPeriodName: "Super Early Bird",
-          benefits: [
-            "Conference Sessions",
-            "Networking Sessions",
-            "Happy Hour with Entertainment",
-            "Exhibition Hall",
-            "Award-winning Food & Drink",
-            "On-Demand Recordings",
-            "Additional Content Access",
-            "Presentation Slides",
-            "Post-Event Content",
-          ],
-          extraBenefits: ["Exclusive Attendee Report", "Company Branding at the Summit"],
+          benefits: DEFAULT_PASS_BENEFITS,
+          extraBenefits: DEFAULT_BUSINESS_EXTRA_BENEFITS,
         },
       ]);
       logger.info("Seeded default pass config");

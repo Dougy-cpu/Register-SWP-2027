@@ -231,10 +231,12 @@ export default function Step1Lead({
                                   <div className="w-2.5 h-2.5 bg-primary rounded-full" />
                                 )}
                               </div>
-                              <span className="font-bold text-lg">HR Professional</span>
+                              <span className="font-bold text-lg">Employer-side attendee</span>
                             </div>
                             <span className="text-sm text-muted-foreground ml-7">
-                              HR Executives, Practitioners, and Business Leaders
+                              In-house HR, strategic workforce planning, people analytics, talent,
+                              skills, organisation design, transformation and business-facing
+                              workforce teams.
                             </span>
                           </label>
                         </FormControl>
@@ -266,10 +268,11 @@ export default function Step1Lead({
                                   <div className="w-2.5 h-2.5 bg-primary rounded-full" />
                                 )}
                               </div>
-                              <span className="font-bold text-lg">Vendor / Consultant</span>
+                              <span className="font-bold text-lg">Commercial attendee</span>
                             </div>
                             <span className="text-sm text-muted-foreground ml-7">
-                              Solution Providers, Recruiters, and Consultants
+                              Vendors, consultants, advisory firms, recruiters, technology
+                              providers and commercial service providers.
                             </span>
                           </label>
                         </FormControl>

@@ -35,7 +35,7 @@ export const eventSettingsTable = pgTable("event_settings", {
   eventEndAt: timestamp("event_end_at", { withTimezone: true }),
   eventTimezone: text("event_timezone").notNull().default("Europe/London"),
   eventDescription: text("event_description"),
-  // Optional pre-event social / community gathering
+  // Optional additional networking social / community gathering
   socialEnabled: boolean("social_enabled").notNull().default(false),
   socialName: text("social_name"),
   socialStartAt: timestamp("social_start_at", { withTimezone: true }),

@@ -125,8 +125,8 @@ What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
 
 How can I pay?
-The invoice email includes company information, bank details and payment instructions.
-Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.
+The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link.
+Your finance team can settle the invoice by bank transfer or through Stripe.
 
 Where do I send remittance advice?
 Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
@@ -378,7 +378,7 @@ async function buildConfirmationEmailHtml(
   settings: EventSettings,
 ): Promise<{ html: string; subject: string }> {
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass",
+    single: "Workforce Pass",
     team: "Team Pass (3 seats)",
     business: "Business Pass",
   };
@@ -458,7 +458,7 @@ async function buildConfirmationEmailHtml(
       ? `<div style="margin:20px 0;padding:16px 20px;background:#f0f6ff;border:1px solid #e2e8f0;border-radius:6px;">
       <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#000000;">Invoice issued</p>
       <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">Your registration is confirmed and the invoice has been emailed to <strong>${escHtml(booking.billingEmail || "the billing contact")}</strong>.</p>
-      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes company information, bank details and payment instructions. Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.</p>
+      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link. Your finance team can settle the invoice by bank transfer or through Stripe.</p>
       <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">Need to add a PO number later? Use the secure billing link in your confirmation email. Once updated, we will automatically re-issue the invoice with the PO included.</p>
       <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">If the billing contact does not see the invoice within a few minutes, please ask them to check their junk or spam folder.</p>
     </div>`
@@ -1134,7 +1134,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
   const lead = attendees.find((a) => a.isLead) || attendees[0];
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass",
+    single: "Workforce Pass",
     team: "Team Pass (3 seats)",
     business: "Business Pass",
   };
@@ -1179,7 +1179,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
       <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Order Reference</td><td style="border-bottom:1px solid #f0f0f0"><strong style="font-family:monospace">${escHtml(booking.orderReference || `#${bookingId}`)}</strong></td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Pass Type</td><td style="border-bottom:1px solid #f0f0f0">${passLabels[booking.passType] || booking.passType}</td></tr>
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity} ${booking.quantity === 1 ? "ticket" : "tickets"}</td></tr>
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Payment Method</td><td style="border-bottom:1px solid #f0f0f0">${booking.paymentMethod === "card" ? "Credit/Debit Card" : booking.paymentMethod === "invoice" ? "Invoice" : "-"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Status</td><td style="border-bottom:1px solid #f0f0f0"><strong style="color:${booking.status === "paid" ? "#16a34a" : "#d97706"}">${booking.status === "paid" ? "Paid" : booking.status === "invoiced" ? "Invoiced (Awaiting Payment)" : escHtml(booking.status)}</strong></td></tr>
       ${booking.promoCode ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Code</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.promoCode)}</td></tr>` : ""}
@@ -1500,9 +1500,9 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
   if (!lead) return;
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass (HR Professional)",
+    single: "Workforce Pass (Employer-side attendee)",
     team: "Team Pass (3 seats)",
-    business: "Business Pass (Vendor/Consultant)",
+    business: "Business Pass (Commercial attendee)",
   };
 
   const submittedAt = booking.updatedAt || booking.createdAt;
@@ -1741,18 +1741,6 @@ function renderCalendarBlockHtml(opts: {
     </div>`;
 }
 
-function renderSocialTbcHtml(): string {
-  return `
-    <div style="margin:24px 0;">
-      <h3 style="margin:0 0 8px;color:#000;">Pre-event social</h3>
-      <div style="border:1px dashed #e2e8f0;border-radius:6px;padding:18px 20px;margin:12px 0;background:#f0f6ff;">
-        <p style="margin:0;font-size:14px;color:#444;line-height:1.5;">
-          Details to follow - we'll be in touch closer to the date with the time, venue, and an invite you can pop in your calendar.
-        </p>
-      </div>
-    </div>`;
-}
-
 export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceholders {
   const appBaseUrl = process.env.APP_BASE_URL || "https://register.swpsummit.com";
   const tz = settings.eventTimezone || "Europe/London";
@@ -1790,7 +1778,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     });
   }
 
-  let socialCalendarLinks = renderSocialTbcHtml();
+  let socialCalendarLinks = "";
   let socialGoogleCalendarUrl = "";
   let socialOutlookCalendarUrl = "";
   let socialIcsCalendarUrl = "";
@@ -1798,7 +1786,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
   if (settings.socialEnabled && settings.socialStartAt && settings.socialEndAt) {
     const start = new Date(settings.socialStartAt);
     const end = new Date(settings.socialEndAt);
-    const name = settings.socialName || "Pre-Event Social";
+    const name = settings.socialName || "Additional Networking Social";
     const ev: CalendarEvent = {
       uid: `event-settings-${settings.id}-social@swpsummit.com`,
       title: name,
@@ -1812,7 +1800,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     socialOutlookCalendarUrl = buildOutlookCalendarUrl(ev);
     socialIcsCalendarUrl = `${appBaseUrl}/api/calendar/social.ics`;
     socialCalendarLinks = renderCalendarBlockHtml({
-      heading: "Pre-event social",
+      heading: "Additional networking social",
       title: name,
       subtitle:
         formatCalendarRangeLabel(start, end, tz) +
@@ -2371,8 +2359,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     : "14 days from invoice issue";
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass - HR Professional",
-    business: "Business Pass - Vendor/Consultant",
+    single: "Workforce Pass - Employer-side attendee",
+    business: "Business Pass - Commercial attendee",
   };
   const passLabel = passLabels[booking.passType] || booking.passType;
   const totalAmount = parseFloat(booking.totalAmount?.toString() || "0").toFixed(2);

@@ -1729,8 +1729,8 @@ export default function AdminRegistrations() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Passes</SelectItem>
-              <SelectItem value="single">Standard Pass (HR)</SelectItem>
-              <SelectItem value="business">Business Pass (Vendor)</SelectItem>
+              <SelectItem value="single">Workforce Pass</SelectItem>
+              <SelectItem value="business">Business Pass (Commercial)</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -1056,6 +1056,9 @@ router.put("/admin/passes/config/:passType", adminAuth, async (req, res): Promis
   if (extraBenefits !== undefined)
     updates.extraBenefits = Array.isArray(extraBenefits) ? extraBenefits : [];
 
+  const defaultCurrentPrice = passType === "business" ? "499" : "249";
+  const defaultOriginalPrice = passType === "business" ? "999" : "429";
+
   const [prev] = await db
     .select()
     .from(passConfigTable)
@@ -1065,9 +1068,9 @@ router.put("/admin/passes/config/:passType", adminAuth, async (req, res): Promis
     .insert(passConfigTable)
     .values({
       passType,
-      currentPrice: updates.currentPrice ?? "199",
-      originalPrice: updates.originalPrice ?? "429",
-      pricingPeriodName: updates.pricingPeriodName ?? "Early Bird",
+      currentPrice: updates.currentPrice ?? defaultCurrentPrice,
+      originalPrice: updates.originalPrice ?? defaultOriginalPrice,
+      pricingPeriodName: updates.pricingPeriodName ?? "Super Early Bird",
       benefits: updates.benefits ?? [],
       extraBenefits: updates.extraBenefits ?? [],
     })

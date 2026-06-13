@@ -209,7 +209,7 @@ const TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
       tag: "{{socialCalendarLinks}}",
       label: "Social Calendar Block",
       description:
-        "Branded block for the pre-event social. Shows 'details to follow' until the admin enables the social and saves its times.",
+        "Branded block for an optional additional networking social. Empty unless the admin enables the social and saves its times.",
     },
     {
       tag: "{{calendarLinks}}",
@@ -258,7 +258,7 @@ const TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
     {
       tag: "{{passLabel}}",
       label: "Pass Label",
-      description: "Pass type name (e.g. HR Professional Pass)",
+      description: "Pass type name (e.g. Workforce Pass)",
     },
     { tag: "{{quantity}}", label: "Quantity", description: "Number of passes booked" },
     {
@@ -317,7 +317,7 @@ const TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
       tag: "{{socialCalendarLinks}}",
       label: "Social Calendar Block",
       description:
-        "Branded block for the pre-event social. Shows 'details to follow' until the admin enables the social and saves its times.",
+        "Branded block for an optional additional networking social. Empty unless the admin enables the social and saves its times.",
     },
     {
       tag: "{{calendarLinks}}",

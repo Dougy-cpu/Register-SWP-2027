@@ -369,9 +369,9 @@ async function buildSampleVars(
     </table>`;
 
   const samplePriceSummary = `
-      <div class="price-row"><span>Subtotal (excl. VAT)</span><span>£199.00</span></div>
-      <div class="price-row"><span>VAT (20%)</span><span>£39.80</span></div>
-      <div class="price-total"><span>Total</span><span>£238.80</span></div>`;
+      <div class="price-row"><span>Subtotal (excl. VAT)</span><span>£249.00</span></div>
+      <div class="price-row"><span>VAT (20%)</span><span>£49.80</span></div>
+      <div class="price-total"><span>Total</span><span>£298.80</span></div>`;
 
   const sampleManagementLink = `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;">
       <p style="margin:0 0 12px;font-weight:700;color:#004eb9;font-size:15px;">Your Attendee Management Link</p>
@@ -396,8 +396,8 @@ async function buildSampleVars(
           "{{firstName}}": toName?.split(" ")[0] || toName || "Test",
           "{{name}}": toName || "Test User",
           "{{orderReference}}": "SWP27-TEST-001",
-          "{{passLabel}}": "HR Professional Pass",
-          "{{passType}}": "HR Professional Pass",
+          "{{passLabel}}": "Workforce Pass",
+          "{{passType}}": "Workforce Pass",
           "{{quantity}}": "1",
           "{{quantityLabel}}": "pass",
           "{{attendeesTable}}": sampleAttendeesTable,
@@ -410,7 +410,7 @@ async function buildSampleVars(
           "{{invoiceConfirmation}}": `<div style="margin:20px 0;padding:16px 20px;background:#f0f6ff;border:1px solid #e2e8f0;border-radius:6px;">
       <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#000000;">Invoice issued</p>
       <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">Your registration is confirmed and the invoice has been emailed to <strong>${toEmail}</strong>.</p>
-      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes company information, bank details and payment instructions. Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.</p>
+      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link. Your finance team can settle the invoice by bank transfer or through Stripe.</p>
       <p style="margin:0;font-size:14px;color:#444;line-height:1.6;">You can add or update a PO number before payment using the secure billing link. We will re-issue the invoice automatically after billing or PO updates.</p>
     </div>`,
           "{{poNumber}}": "PO-2027-001",

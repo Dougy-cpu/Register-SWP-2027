@@ -7,7 +7,7 @@ import type { DbExecutor } from "./pricing";
 import { defaultOrderRef } from "./order-reference";
 
 const PASS_LABELS: Record<string, string> = {
-  single: "HR Professional Pass, SWP Summit 2027",
+  single: "Workforce Pass, SWP Summit 2027",
   team: "Team Pass, SWP Summit 2027",
   business: "Business Pass, SWP Summit 2027",
 };

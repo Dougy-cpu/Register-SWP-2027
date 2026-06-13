@@ -220,8 +220,8 @@ function PromoFormDialog({
                       <SelectContent>
                         <SelectItem value="percentage">Percentage (%)</SelectItem>
                         <SelectItem value="fixed">Fixed Amount (GBP)</SelectItem>
-                        <SelectItem value="per_ticket">Per Ticket (GBP per ticket)</SelectItem>
-                        <SelectItem value="complimentary">Complimentary (free ticket)</SelectItem>
+                        <SelectItem value="per_ticket">Per Pass (GBP per pass)</SelectItem>
+                        <SelectItem value="complimentary">Complimentary (free pass)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -325,8 +325,8 @@ function PromoFormDialog({
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between">
                     <div>
-                      <FormLabel className="font-normal">HR Professional Pass</FormLabel>
-                      <p className="text-xs text-muted-foreground">HR professional ticket</p>
+                      <FormLabel className="font-normal">Workforce Pass</FormLabel>
+                      <p className="text-xs text-muted-foreground">Employer-side attendee pass</p>
                     </div>
                     <FormControl>
                       <Switch
@@ -345,7 +345,7 @@ function PromoFormDialog({
                   <FormItem className="flex items-center justify-between">
                     <div>
                       <FormLabel className="font-normal">Business Pass</FormLabel>
-                      <p className="text-xs text-muted-foreground">Vendor / supplier ticket</p>
+                      <p className="text-xs text-muted-foreground">Commercial attendee pass</p>
                     </div>
                     <FormControl>
                       <Switch
@@ -551,10 +551,10 @@ export default function AdminPromoCodes() {
                       {promo.discountType === "percentage" ? (
                         `${promo.discountValue}%`
                       ) : promo.discountType === "per_ticket" ? (
-                        `\u00a3${promo.discountValue}/ticket`
+                        `\u00a3${promo.discountValue}/pass`
                       ) : promo.discountType === "complimentary" ? (
                         <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                          Free ticket
+                          Free pass
                         </Badge>
                       ) : (
                         `\u00a3${promo.discountValue}`
@@ -580,8 +580,8 @@ export default function AdminPromoCodes() {
                     <TableCell>
                       {promo.discountType === "complimentary"
                         ? promo.maxUses
-                          ? `${promo.usedCount} / ${promo.maxUses} tickets`
-                          : `${promo.usedCount} tickets`
+                          ? `${promo.usedCount} / ${promo.maxUses} passes`
+                          : `${promo.usedCount} passes`
                         : `${promo.usedCount} ${promo.maxUses ? `/ ${promo.maxUses}` : "used"}`}
                     </TableCell>
                     <TableCell>

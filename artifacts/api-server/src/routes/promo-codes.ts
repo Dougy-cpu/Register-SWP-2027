@@ -45,7 +45,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
     if (promo.discountType === "complimentary") {
       res
         .status(400)
-        .json({ error: "This complimentary code has been fully redeemed - no tickets remain" });
+        .json({ error: "This complimentary code has been fully redeemed - no passes remain" });
     } else {
       res.status(400).json({ error: "This promo code has already been used up" });
     }
@@ -54,7 +54,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
 
   if (promo.applicablePassTypes && !promo.applicablePassTypes.includes(passType as string)) {
     const allowed = promo.applicablePassTypes
-      .map((t: string) => (t === "single" ? "HR Professional Pass" : "Business Pass"))
+      .map((t: string) => (t === "single" ? "Workforce Pass" : "Business Pass"))
       .join(" and ");
     res.status(400).json({ error: `This promo code is only valid for ${allowed}` });
     return;
@@ -62,7 +62,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
 
   if (promo.minQuantity !== null && qty < promo.minQuantity) {
     res.status(400).json({
-      error: `This promo code requires a minimum of ${promo.minQuantity} ${promo.minQuantity === 1 ? "ticket" : "tickets"}`,
+      error: `This promo code requires a minimum of ${promo.minQuantity} ${promo.minQuantity === 1 ? "pass" : "passes"}`,
     });
     return;
   }
@@ -112,7 +112,7 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
       if (remainingSeats === 0) {
         res
           .status(400)
-          .json({ error: "This complimentary code has been fully redeemed - no tickets remain" });
+          .json({ error: "This complimentary code has been fully redeemed - no passes remain" });
         return;
       }
     }

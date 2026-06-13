@@ -10,9 +10,9 @@ describe("<CompShortfallPrompt />", () => {
     render(
       <CompShortfallPrompt remaining={2} quantity={5} onReduce={() => {}} onRemove={() => {}} />,
     );
-    expect(screen.getByText(/Only 2 complimentary tickets remain/i)).toBeTruthy();
+    expect(screen.getByText(/Only 2 complimentary passes remain/i)).toBeTruthy();
     expect(screen.getByText(/you've selected 5/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Reduce to 2 tickets/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Reduce to 2 passes/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Keep my quantity \(remove code\)/i })).toBeTruthy();
   });
 
@@ -20,8 +20,8 @@ describe("<CompShortfallPrompt />", () => {
     render(
       <CompShortfallPrompt remaining={1} quantity={4} onReduce={() => {}} onRemove={() => {}} />,
     );
-    expect(screen.getByText(/Only 1 complimentary ticket remains/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Reduce to 1 ticket$/i })).toBeTruthy();
+    expect(screen.getByText(/Only 1 complimentary pass remains/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Reduce to 1 pass$/i })).toBeTruthy();
   });
 
   it("hides the Reduce button when no comp seats remain", () => {
@@ -38,7 +38,7 @@ describe("<CompShortfallPrompt />", () => {
     render(
       <CompShortfallPrompt remaining={2} quantity={5} onReduce={onReduce} onRemove={onRemove} />,
     );
-    screen.getByRole("button", { name: /Reduce to 2 tickets/i }).click();
+    screen.getByRole("button", { name: /Reduce to 2 passes/i }).click();
     expect(onReduce).toHaveBeenCalledTimes(1);
     expect(onRemove).not.toHaveBeenCalled();
   });

@@ -338,7 +338,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
   }, [booking.id, booking.status]);
 
   const currentPricing = calculatePricingMutation.data;
-  const bookingPassLabel = booking.passType === "single" ? "HR Professional Pass" : "Business Pass";
+  const bookingPassLabel = booking.passType === "single" ? "Workforce Pass" : "Business Pass";
   const bookingPassSummary = booking.quantity === 1 ? bookingPassLabel : `${bookingPassLabel}es`;
 
   const billingLead =
@@ -657,8 +657,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Step 4 of 4</p>
           <h1 className="text-4xl md:text-5xl font-bold">Final checkout</h1>
           <p className="max-w-3xl text-lg text-muted-foreground">
-            Choose how to pay, confirm invoice details if required, and finish your SWP Summit
-            registration.
+            Pay securely by card, or request a VAT invoice with supplier details, bank information
+            and payment instructions. VAT and the final total are shown before confirmation.
           </p>
         </div>
 
@@ -748,8 +748,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by invoice</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Receive a VAT invoice with supplier details, bank information and a
-                            secure payment link for your finance team.
+                            Confirm registration and receive a VAT invoice with supplier details,
+                            bank information, payment instructions and a secure Stripe payment link.
                           </p>
                         </div>
                       </div>
@@ -771,7 +771,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                     <h2 className="text-xl font-bold">Billing details for the invoice</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       These details appear on your VAT invoice. You can update billing details or
-                      add a PO number later using the secure link in the invoice email.
+                      add a PO number later using the secure billing link in the invoice email.
                     </p>
                   </div>
                 </div>
@@ -787,28 +787,31 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           Built for procurement and finance teams
                         </h3>
                         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                          Invoice is best for procurement or finance-led bookings. If you are ready
-                          to pay by card now, use the card option above.
+                          Invoice payment is a first-class checkout route for procurement or
+                          finance-led bookings. If you are ready to pay by card now, use the card
+                          option above.
                         </p>
                       </div>
                       <div className="flex items-start gap-3 rounded-lg border border-primary/15 bg-white/80 p-3 text-sm leading-relaxed text-muted-foreground">
                         <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         <p>
-                          The invoice email includes company information, bank details and payment
-                          instructions for your finance team.
+                          The invoice email includes supplier details, bank information, payment
+                          instructions and a secure Stripe payment link for your finance team.
                         </p>
                       </div>
                     </div>
 
                     <ol className="mt-5 grid gap-3 md:grid-cols-3">
                       <InvoiceProcessStep icon={CheckCircle2} title="Confirm and issue">
-                        Your registration is confirmed and the invoice is emailed immediately.
+                        Your registration is confirmed when the invoice is issued and emailed.
                       </InvoiceProcessStep>
                       <InvoiceProcessStep icon={Building2} title="Finance-ready details">
-                        Supplier information, bank details and payment instructions are included.
+                        Supplier details, bank information, payment instructions and a secure
+                        Stripe payment link are included.
                       </InvoiceProcessStep>
                       <InvoiceProcessStep icon={Landmark} title="Pay or update later">
-                        Pay by transfer or Stripe, and add a PO through the secure email link.
+                        Add a PO now, or add it later through the secure billing link before
+                        payment.
                       </InvoiceProcessStep>
                     </ol>
                   </div>
@@ -1079,7 +1082,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <h3 className="font-bold">Invoice references</h3>
                             <p className="text-sm text-muted-foreground">
                               Add a PO now if you have one. If not, you can confirm registration and
-                              add it later before payment.
+                              add it later before payment through the secure billing link.
                             </p>
                           </div>
                         </div>
@@ -1141,8 +1144,9 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                                     </p>
                                     <p className="mt-1">
                                       You can confirm registration now and add the PO later using
-                                      the secure link in the invoice email. Once added, we will
-                                      automatically email a revised invoice with the PO included.
+                                      the secure billing link in the invoice email. Once added, we
+                                      will automatically email a revised invoice with the PO
+                                      included.
                                     </p>
                                   </div>
                                 )}
@@ -1231,8 +1235,9 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                       <p className="font-bold text-foreground">Ready to issue the invoice?</p>
                       <p className="mt-1">
                         This confirms the registration and emails the invoice immediately to the
-                        billing contact. PO and billing details can still be updated before payment
-                        from the secure link in the invoice email.
+                        billing contact. The invoice includes supplier details, bank information,
+                        payment instructions and a secure Stripe payment link. PO and billing
+                        details can still be updated before payment from the secure billing link.
                       </p>
                     </div>
                   )}
@@ -1305,13 +1310,15 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                     ) : (
                       <>
                         <NextStep value={1}>
-                          Registration is confirmed and the invoice is emailed immediately.
+                          Registration is confirmed when the invoice is issued and emailed.
                         </NextStep>
                         <NextStep value={2}>
-                          Supplier details, bank information and payment instructions are included.
+                          Supplier details, bank information, payment instructions and a secure
+                          Stripe payment link are included.
                         </NextStep>
                         <NextStep value={3}>
-                          Pay by bank transfer or Stripe, and update PO or billing details securely.
+                          Pay by bank transfer or Stripe, and update PO or billing details securely
+                          before payment.
                         </NextStep>
                       </>
                     )}

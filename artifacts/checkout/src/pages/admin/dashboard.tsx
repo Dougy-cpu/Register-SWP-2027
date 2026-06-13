@@ -297,7 +297,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="font-bold">HR Professional Pass</span>
+                  <span className="font-bold">Workforce Pass</span>
                   <span className="font-medium">{stats.passCounts.single}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">

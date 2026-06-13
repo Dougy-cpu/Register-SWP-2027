@@ -76,9 +76,9 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                     .
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    The invoice email includes company information, bank details and payment
-                    instructions. Your finance team can settle the invoice by bank transfer or
-                    through the secure Stripe payment link on the invoice.
+                    The invoice email includes supplier details, bank information, payment
+                    instructions and a secure Stripe payment link. Your finance team can settle the
+                    invoice by bank transfer or through Stripe.
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Need to add a PO number later? Use the secure billing link in your confirmation
@@ -133,7 +133,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
             <div className="flex justify-between items-end border-b border-border pb-2 mb-2">
               <span className="font-bold text-lg">
                 {booking.quantity} x{" "}
-                {booking.passType === "single" ? "HR Professional Pass" : "Business Pass"}
+                {booking.passType === "single" ? "Workforce Pass" : "Business Pass"}
               </span>
               <span className="font-bold text-lg">&pound;{booking.totalAmount.toFixed(2)}</span>
             </div>

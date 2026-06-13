@@ -169,7 +169,7 @@ export default function AdminDiscountTiers() {
             value="single"
             className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-full px-8 rounded-none"
           >
-            HR Professional Pass
+            Workforce Pass
           </TabsTrigger>
           <TabsTrigger
             value="business"
