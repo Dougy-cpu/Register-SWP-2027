@@ -20,252 +20,275 @@ import express from "express";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-const { mockDb, getRows, resetStore, makeTable } = vi.hoisted(() => {
-  const stores = new Map<string, Array<Record<string, unknown>>>();
+const { mockDb, getRows, resetStore, makeTable, stripeMock, setStripeAvailable, getStripeMock } =
+  vi.hoisted(() => {
+    const stores = new Map<string, Array<Record<string, unknown>>>();
+    let stripeAvailable = false;
 
-  function getRowsImpl(table: { _name: string }): Array<Record<string, unknown>> {
-    if (!stores.has(table._name)) stores.set(table._name, []);
-    return stores.get(table._name)!;
-  }
-
-  function makeTableImpl(name: string): { _name: string } {
-    return new Proxy(
-      { _name: name },
-      {
-        get(target, prop: string) {
-          if (prop === "_name") return name;
-          if (prop in target) return (target as Record<string, unknown>)[prop];
-          if (prop === "then") return undefined;
-          return { _table: name, _col: prop };
-        },
+    const stripeMockImpl = {
+      invoices: {
+        retrieve: vi.fn(),
+        pay: vi.fn(),
+        voidInvoice: vi.fn(),
       },
-    ) as { _name: string };
-  }
-
-  function resetStoreImpl() {
-    stores.clear();
-  }
-
-  type Pred =
-    | undefined
-    | null
-    | boolean
-    | { op: string; col?: { _col: string }; val?: unknown; preds?: Pred[]; vals?: unknown[] };
-
-  function evalPred(pred: Pred, row: Record<string, unknown>): boolean {
-    if (pred === undefined || pred === null) return true;
-    if (typeof pred === "boolean") return pred;
-    const p = pred as {
-      op: string;
-      col?: { _col: string };
-      val?: unknown;
-      preds?: Pred[];
-      vals?: unknown[];
+      refunds: {
+        create: vi.fn(),
+      },
     };
-    switch (p.op) {
-      case "eq":
-        return row[p.col!._col] === p.val;
-      case "and":
-        return (p.preds ?? []).every((q) => evalPred(q, row));
-      case "or":
-        return (p.preds ?? []).some((q) => evalPred(q, row));
-      case "isNull":
-        return row[p.col!._col] == null;
-      case "inArray":
-        return (p.vals ?? []).includes(row[p.col!._col]);
-      case "notInArray":
-        return !(p.vals ?? []).includes(row[p.col!._col]);
-      default:
-        return true;
+
+    function getRowsImpl(table: { _name: string }): Array<Record<string, unknown>> {
+      if (!stores.has(table._name)) stores.set(table._name, []);
+      return stores.get(table._name)!;
     }
-  }
 
-  function nextId(store: Array<Record<string, unknown>>): number {
-    let max = 0;
-    for (const r of store) {
-      const id = Number(r.id);
-      if (Number.isFinite(id) && id > max) max = id;
+    function makeTableImpl(name: string): { _name: string } {
+      return new Proxy(
+        { _name: name },
+        {
+          get(target, prop: string) {
+            if (prop === "_name") return name;
+            if (prop in target) return (target as Record<string, unknown>)[prop];
+            if (prop === "then") return undefined;
+            return { _table: name, _col: prop };
+          },
+        },
+      ) as { _name: string };
     }
-    return max + 1;
-  }
 
-  const db = {
-    select(cols?: unknown) {
-      let table: { _name: string };
-      let pred: Pred;
-      let limitN: number | undefined;
-      const joins: Array<{ table: { _name: string }; on: Pred }> = [];
-      const builder: Record<string, unknown> = {
-        from(t: { _name: string }) {
-          table = t;
-          return builder;
-        },
-        where(p: Pred) {
-          pred = p;
-          return builder;
-        },
-        orderBy(..._args: unknown[]) {
-          return builder;
-        },
-        limit(n: number) {
-          limitN = n;
-          return builder;
-        },
-        groupBy(..._args: unknown[]) {
-          return builder;
-        },
-        leftJoin(t: { _name: string }, on: Pred) {
-          joins.push({ table: t, on });
-          return builder;
-        },
-        then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
-          try {
-            const baseRows = getRowsImpl(table).filter((r) => evalPred(pred, r));
+    function resetStoreImpl() {
+      stores.clear();
+      stripeAvailable = false;
+      stripeMockImpl.invoices.retrieve.mockReset();
+      stripeMockImpl.invoices.pay.mockReset();
+      stripeMockImpl.invoices.voidInvoice.mockReset();
+      stripeMockImpl.refunds.create.mockReset();
+    }
 
-            // Detect "shape select" — caller passed an object whose values
-            // are table proxies, e.g. db.select({log, attendee, booking}).
-            // In that case we resolve to rows shaped {key: rowFromThatTable}.
-            const isShape =
-              cols &&
-              typeof cols === "object" &&
-              Object.values(cols as Record<string, unknown>).some(
-                (v) => v && typeof v === "object" && "_name" in (v as Record<string, unknown>),
-              );
+    type Pred =
+      | undefined
+      | null
+      | boolean
+      | { op: string; col?: { _col: string }; val?: unknown; preds?: Pred[]; vals?: unknown[] };
 
-            if (isShape) {
-              const shape = cols as Record<string, { _name: string }>;
-              const baseKey = Object.entries(shape).find(
-                ([, v]) => v && (v as { _name?: string })._name === table._name,
-              )?.[0];
-
-              const out = baseRows.map((baseRow) => {
-                const wrapped: Record<string, unknown> = {};
-                if (baseKey) wrapped[baseKey] = { ...baseRow };
-
-                for (const join of joins) {
-                  const joinKey = Object.entries(shape).find(
-                    ([, v]) => v && (v as { _name?: string })._name === join.table._name,
-                  )?.[0];
-                  if (!joinKey) continue;
-                  // Synthetic row exposing fields from BOTH base and join
-                  // candidate so an `eq(activityLog.attendeeId, attendees.id)`
-                  // predicate can resolve in either order.
-                  const candidates = getRowsImpl(join.table);
-                  const matched =
-                    candidates.find((c) => {
-                      const synthetic = { ...baseRow, ...c };
-                      return evalPred(join.on, synthetic);
-                    }) ?? null;
-                  wrapped[joinKey] = matched ? { ...matched } : null;
-                }
-                return wrapped;
-              });
-
-              const sliced = limitN !== undefined ? out.slice(0, limitN) : out;
-              resolve(sliced);
-              return;
-            }
-
-            const rows = limitN !== undefined ? baseRows.slice(0, limitN) : baseRows;
-            resolve(rows.map((r) => ({ ...r })));
-          } catch (e) {
-            reject(e);
-          }
-        },
+    function evalPred(pred: Pred, row: Record<string, unknown>): boolean {
+      if (pred === undefined || pred === null) return true;
+      if (typeof pred === "boolean") return pred;
+      const p = pred as {
+        op: string;
+        col?: { _col: string };
+        val?: unknown;
+        preds?: Pred[];
+        vals?: unknown[];
       };
-      return builder;
-    },
-    insert(table: { _name: string }) {
-      return {
-        values(data: Record<string, unknown> | Array<Record<string, unknown>>) {
-          const rows = Array.isArray(data) ? data : [data];
-          const store = getRowsImpl(table);
-          const inserted: Array<Record<string, unknown>> = [];
-          for (const r of rows) {
-            const row: Record<string, unknown> = {
-              id: nextId(store),
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              ...r,
+      switch (p.op) {
+        case "eq":
+          return row[p.col!._col] === p.val;
+        case "and":
+          return (p.preds ?? []).every((q) => evalPred(q, row));
+        case "or":
+          return (p.preds ?? []).some((q) => evalPred(q, row));
+        case "isNull":
+          return row[p.col!._col] == null;
+        case "inArray":
+          return (p.vals ?? []).includes(row[p.col!._col]);
+        case "notInArray":
+          return !(p.vals ?? []).includes(row[p.col!._col]);
+        default:
+          return true;
+      }
+    }
+
+    function nextId(store: Array<Record<string, unknown>>): number {
+      let max = 0;
+      for (const r of store) {
+        const id = Number(r.id);
+        if (Number.isFinite(id) && id > max) max = id;
+      }
+      return max + 1;
+    }
+
+    const db = {
+      select(cols?: unknown) {
+        let table: { _name: string };
+        let pred: Pred;
+        let limitN: number | undefined;
+        const joins: Array<{ table: { _name: string }; on: Pred }> = [];
+        const builder: Record<string, unknown> = {
+          from(t: { _name: string }) {
+            table = t;
+            return builder;
+          },
+          where(p: Pred) {
+            pred = p;
+            return builder;
+          },
+          orderBy(..._args: unknown[]) {
+            return builder;
+          },
+          limit(n: number) {
+            limitN = n;
+            return builder;
+          },
+          groupBy(..._args: unknown[]) {
+            return builder;
+          },
+          leftJoin(t: { _name: string }, on: Pred) {
+            joins.push({ table: t, on });
+            return builder;
+          },
+          then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+            try {
+              const baseRows = getRowsImpl(table).filter((r) => evalPred(pred, r));
+
+              // Detect "shape select" — caller passed an object whose values
+              // are table proxies, e.g. db.select({log, attendee, booking}).
+              // In that case we resolve to rows shaped {key: rowFromThatTable}.
+              const isShape =
+                cols &&
+                typeof cols === "object" &&
+                Object.values(cols as Record<string, unknown>).some(
+                  (v) => v && typeof v === "object" && "_name" in (v as Record<string, unknown>),
+                );
+
+              if (isShape) {
+                const shape = cols as Record<string, { _name: string }>;
+                const baseKey = Object.entries(shape).find(
+                  ([, v]) => v && (v as { _name?: string })._name === table._name,
+                )?.[0];
+
+                const out = baseRows.map((baseRow) => {
+                  const wrapped: Record<string, unknown> = {};
+                  if (baseKey) wrapped[baseKey] = { ...baseRow };
+
+                  for (const join of joins) {
+                    const joinKey = Object.entries(shape).find(
+                      ([, v]) => v && (v as { _name?: string })._name === join.table._name,
+                    )?.[0];
+                    if (!joinKey) continue;
+                    // Synthetic row exposing fields from BOTH base and join
+                    // candidate so an `eq(activityLog.attendeeId, attendees.id)`
+                    // predicate can resolve in either order.
+                    const candidates = getRowsImpl(join.table);
+                    const matched =
+                      candidates.find((c) => {
+                        const synthetic = { ...baseRow, ...c };
+                        return evalPred(join.on, synthetic);
+                      }) ?? null;
+                    wrapped[joinKey] = matched ? { ...matched } : null;
+                  }
+                  return wrapped;
+                });
+
+                const sliced = limitN !== undefined ? out.slice(0, limitN) : out;
+                resolve(sliced);
+                return;
+              }
+
+              const rows = limitN !== undefined ? baseRows.slice(0, limitN) : baseRows;
+              resolve(rows.map((r) => ({ ...r })));
+            } catch (e) {
+              reject(e);
+            }
+          },
+        };
+        return builder;
+      },
+      insert(table: { _name: string }) {
+        return {
+          values(data: Record<string, unknown> | Array<Record<string, unknown>>) {
+            const rows = Array.isArray(data) ? data : [data];
+            const store = getRowsImpl(table);
+            const inserted: Array<Record<string, unknown>> = [];
+            for (const r of rows) {
+              const row: Record<string, unknown> = {
+                id: nextId(store),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                ...r,
+              };
+              store.push(row);
+              inserted.push(row);
+            }
+            const out: Record<string, unknown> = {
+              returning() {
+                return Promise.resolve(inserted.map((r) => ({ ...r })));
+              },
+              onConflictDoUpdate(_opts: unknown) {
+                return out;
+              },
+              then(resolve: (v: unknown) => void) {
+                resolve(undefined);
+              },
             };
-            store.push(row);
-            inserted.push(row);
-          }
-          const out: Record<string, unknown> = {
-            returning() {
-              return Promise.resolve(inserted.map((r) => ({ ...r })));
-            },
-            onConflictDoUpdate(_opts: unknown) {
-              return out;
-            },
-            then(resolve: (v: unknown) => void) {
-              resolve(undefined);
-            },
-          };
-          return out;
-        },
-      };
-    },
-    update(table: { _name: string }) {
-      let setData: Record<string, unknown> = {};
-      let pred: Pred;
-      const builder: Record<string, unknown> = {
-        set(d: Record<string, unknown>) {
-          setData = d;
-          return builder;
-        },
-        where(p: Pred) {
-          pred = p;
-          return builder;
-        },
-        returning() {
-          const store = getRowsImpl(table);
-          const updated: Array<Record<string, unknown>> = [];
-          for (const r of store) {
-            if (evalPred(pred, r)) {
-              Object.assign(r, setData);
-              updated.push({ ...r });
+            return out;
+          },
+        };
+      },
+      update(table: { _name: string }) {
+        let setData: Record<string, unknown> = {};
+        let pred: Pred;
+        const builder: Record<string, unknown> = {
+          set(d: Record<string, unknown>) {
+            setData = d;
+            return builder;
+          },
+          where(p: Pred) {
+            pred = p;
+            return builder;
+          },
+          returning() {
+            const store = getRowsImpl(table);
+            const updated: Array<Record<string, unknown>> = [];
+            for (const r of store) {
+              if (evalPred(pred, r)) {
+                Object.assign(r, setData);
+                updated.push({ ...r });
+              }
             }
-          }
-          return Promise.resolve(updated);
-        },
-        then(resolve: (v: unknown) => void) {
-          const store = getRowsImpl(table);
-          for (const r of store) {
-            if (evalPred(pred, r)) Object.assign(r, setData);
-          }
-          resolve(undefined);
-        },
-      };
-      return builder;
-    },
-    delete(table: { _name: string }) {
-      let pred: Pred;
-      const builder: Record<string, unknown> = {
-        where(p: Pred) {
-          pred = p;
-          return builder;
-        },
-        then(resolve: (v: unknown) => void) {
-          const store = getRowsImpl(table);
-          for (let i = store.length - 1; i >= 0; i--) {
-            if (evalPred(pred, store[i])) store.splice(i, 1);
-          }
-          resolve(undefined);
-        },
-      };
-      return builder;
-    },
-    transaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> => fn(db),
-  };
+            return Promise.resolve(updated);
+          },
+          then(resolve: (v: unknown) => void) {
+            const store = getRowsImpl(table);
+            for (const r of store) {
+              if (evalPred(pred, r)) Object.assign(r, setData);
+            }
+            resolve(undefined);
+          },
+        };
+        return builder;
+      },
+      delete(table: { _name: string }) {
+        let pred: Pred;
+        const builder: Record<string, unknown> = {
+          where(p: Pred) {
+            pred = p;
+            return builder;
+          },
+          then(resolve: (v: unknown) => void) {
+            const store = getRowsImpl(table);
+            for (let i = store.length - 1; i >= 0; i--) {
+              if (evalPred(pred, store[i])) store.splice(i, 1);
+            }
+            resolve(undefined);
+          },
+        };
+        return builder;
+      },
+      transaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> => fn(db),
+    };
 
-  return {
-    mockDb: db,
-    getRows: getRowsImpl,
-    resetStore: resetStoreImpl,
-    makeTable: makeTableImpl,
-  };
-});
+    return {
+      mockDb: db,
+      getRows: getRowsImpl,
+      resetStore: resetStoreImpl,
+      makeTable: makeTableImpl,
+      stripeMock: stripeMockImpl,
+      setStripeAvailable: (available: boolean) => {
+        stripeAvailable = available;
+      },
+      getStripeMock: () => (stripeAvailable ? stripeMockImpl : null),
+    };
+  });
 
 vi.mock("@workspace/db", () => {
   const tableNames = [
@@ -335,6 +358,10 @@ vi.mock("../lib/invoice", () => ({
   applyReissueInvoiceResultTx: async () => undefined,
   getStripeInvoiceStatus: async () => ({ paid: false }),
   refreshStripeInvoiceUrls: async () => undefined,
+}));
+
+vi.mock("../lib/stripe-client", () => ({
+  getStripe: () => getStripeMock(),
 }));
 
 vi.mock("../middleware/admin-login-throttle", () => ({
@@ -519,6 +546,188 @@ describe("admin audit trail — integration", () => {
     // against the audit row being written from stale data.
     const booking = getRows({ _name: "bookingsTable" })[0];
     expect(booking.status).toBe("paid");
+  });
+
+  it("PATCH /admin/registrations/:id/status marks an open Stripe invoice paid out of band before syncing local status", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      paymentMethod: "invoice",
+      stripeInvoiceId: "in_open_123",
+      stripeInvoiceStatus: "open",
+      stripeInvoicePdfUrl: "https://stripe.test/in_open_123-old.pdf",
+      stripeInvoicePaymentUrl: "https://stripe.test/in_open_123-old",
+    });
+    setStripeAvailable(true);
+    stripeMock.invoices.retrieve.mockResolvedValue({
+      id: "in_open_123",
+      status: "open",
+      invoice_pdf: "https://stripe.test/in_open_123-before-pay.pdf",
+      hosted_invoice_url: "https://stripe.test/in_open_123-before-pay",
+    });
+    stripeMock.invoices.pay.mockResolvedValue({
+      id: "in_open_123",
+      status: "paid",
+      invoice_pdf: "https://stripe.test/in_open_123-paid.pdf",
+      hosted_invoice_url: "https://stripe.test/in_open_123-paid",
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body.stripeAction).toBe("invoice_paid_out_of_band");
+    expect(stripeMock.invoices.retrieve).toHaveBeenCalledWith("in_open_123");
+    expect(stripeMock.invoices.pay).toHaveBeenCalledWith("in_open_123", {
+      paid_out_of_band: true,
+    });
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.status).toBe("paid");
+    expect(booking.paidAt).toBeInstanceOf(Date);
+    expect(booking.stripeInvoiceStatus).toBe("paid");
+    expect(booking.stripeInvoiceStatusSyncedAt).toBeInstanceOf(Date);
+    expect(booking.stripeInvoicePdfUrl).toBe("https://stripe.test/in_open_123-paid.pdf");
+    expect(booking.stripeInvoicePaymentUrl).toBe("https://stripe.test/in_open_123-paid");
+  });
+
+  it("PATCH /admin/registrations/:id/status syncs an already-paid Stripe invoice without paying it again", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      paymentMethod: "invoice",
+      stripeInvoiceId: "in_paid_123",
+      stripeInvoiceStatus: "open",
+    });
+    setStripeAvailable(true);
+    stripeMock.invoices.retrieve.mockResolvedValue({
+      id: "in_paid_123",
+      status: "paid",
+      invoice_pdf: "https://stripe.test/in_paid_123.pdf",
+      hosted_invoice_url: "https://stripe.test/in_paid_123",
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body.stripeAction).toBe("invoice_paid_out_of_band");
+    expect(stripeMock.invoices.retrieve).toHaveBeenCalledWith("in_paid_123");
+    expect(stripeMock.invoices.pay).not.toHaveBeenCalled();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.status).toBe("paid");
+    expect(booking.paidAt).toBeInstanceOf(Date);
+    expect(booking.stripeInvoiceStatus).toBe("paid");
+    expect(booking.stripeInvoiceStatusSyncedAt).toBeInstanceOf(Date);
+    expect(booking.stripeInvoicePdfUrl).toBe("https://stripe.test/in_paid_123.pdf");
+    expect(booking.stripeInvoicePaymentUrl).toBe("https://stripe.test/in_paid_123");
+  });
+
+  it("PATCH /admin/registrations/:id/status returns an error and leaves booking invoiced when Stripe invoice payment fails", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      paymentMethod: "invoice",
+      stripeInvoiceId: "in_open_123",
+      stripeInvoiceStatus: "open",
+      paidAt: null,
+    });
+    setStripeAvailable(true);
+    stripeMock.invoices.retrieve.mockResolvedValue({
+      id: "in_open_123",
+      status: "open",
+    });
+    stripeMock.invoices.pay.mockRejectedValue(new Error("Stripe unavailable"));
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "paid" }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(502);
+    expect(body.stripeAction).toBe("failed");
+    expect(stripeMock.invoices.pay).toHaveBeenCalledWith("in_open_123", {
+      paid_out_of_band: true,
+    });
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.status).toBe("invoiced");
+    expect(booking.paidAt).toBeNull();
+    expect(booking.stripeInvoiceStatus).toBe("open");
+    expect(activityRows()).toHaveLength(0);
+  });
+
+  it("PATCH /admin/registrations/:id/status still voids open invoices when cancelling invoiced bookings", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      paymentMethod: "invoice",
+      stripeInvoiceId: "in_open_123",
+    });
+    setStripeAvailable(true);
+    stripeMock.invoices.voidInvoice.mockResolvedValue({ id: "in_open_123", status: "void" });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body.stripeAction).toBe("invoice_voided");
+    expect(stripeMock.invoices.voidInvoice).toHaveBeenCalledWith("in_open_123");
+    expect(getRows({ _name: "bookingsTable" })[0].status).toBe("cancelled");
+  });
+
+  it("PATCH /admin/registrations/:id/status still issues card refunds when cancelling paid card bookings", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      paymentMethod: "card",
+      stripePaymentIntentId: "pi_123",
+      paidAt: new Date(),
+    });
+    setStripeAvailable(true);
+    stripeMock.refunds.create.mockResolvedValue({ id: "re_123" });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body.stripeAction).toBe("refund_issued");
+    expect(stripeMock.refunds.create).toHaveBeenCalledWith({ payment_intent: "pi_123" });
+    expect(getRows({ _name: "bookingsTable" })[0].status).toBe("refunded");
   });
 
   it("POST /admin/promo-codes records an admin_promo_created row with the new promo's after-state", async () => {

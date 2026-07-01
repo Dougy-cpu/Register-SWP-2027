@@ -8,6 +8,12 @@
 
 export * from "./adminLoginBody";
 export * from "./adminLoginResponse";
+export * from "./adminRegistrationStatusAction";
+export * from "./adminRegistrationStatusErrorResponse";
+export * from "./adminRegistrationStatusErrorResponseStripeAction";
+export * from "./adminRegistrationStatusUpdateBody";
+export * from "./adminRegistrationStatusUpdateBodyStatus";
+export * from "./adminRegistrationStatusUpdateResult";
 export * from "./adminStats";
 export * from "./adminStatsPassCounts";
 export * from "./adminStatsPaymentMethodCounts";

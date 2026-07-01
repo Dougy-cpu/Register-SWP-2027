@@ -14,5 +14,6 @@ export const BookingStatus = {
   paid: "paid",
   invoiced: "invoiced",
   cancelled: "cancelled",
+  refunded: "refunded",
   disputed: "disputed",
 } as const;

@@ -26,6 +26,7 @@ export const BookingStatus = {
   paid: "paid",
   invoiced: "invoiced",
   cancelled: "cancelled",
+  refunded: "refunded",
   disputed: "disputed",
 } as const;
 
@@ -168,6 +169,50 @@ export interface Attendee {
 export type BookingWithAttendees = Booking & {
   attendees: Attendee[];
 };
+
+export type AdminRegistrationStatusUpdateBodyStatus =
+  (typeof AdminRegistrationStatusUpdateBodyStatus)[keyof typeof AdminRegistrationStatusUpdateBodyStatus];
+
+export const AdminRegistrationStatusUpdateBodyStatus = {
+  paid: "paid",
+  invoiced: "invoiced",
+  partial: "partial",
+  pending_payment: "pending_payment",
+  cancelled: "cancelled",
+  refunded: "refunded",
+  disputed: "disputed",
+} as const;
+
+export interface AdminRegistrationStatusUpdateBody {
+  status: AdminRegistrationStatusUpdateBodyStatus;
+}
+
+export type AdminRegistrationStatusAction =
+  (typeof AdminRegistrationStatusAction)[keyof typeof AdminRegistrationStatusAction];
+
+export const AdminRegistrationStatusAction = {
+  refund_issued: "refund_issued",
+  invoice_voided: "invoice_voided",
+  invoice_paid_out_of_band: "invoice_paid_out_of_band",
+  skipped: "skipped",
+  failed: "failed",
+} as const;
+
+export type AdminRegistrationStatusUpdateResult = Booking & {
+  stripeAction: AdminRegistrationStatusAction;
+};
+
+export type AdminRegistrationStatusErrorResponseStripeAction =
+  (typeof AdminRegistrationStatusErrorResponseStripeAction)[keyof typeof AdminRegistrationStatusErrorResponseStripeAction];
+
+export const AdminRegistrationStatusErrorResponseStripeAction = {
+  failed: "failed",
+} as const;
+
+export interface AdminRegistrationStatusErrorResponse {
+  error: string;
+  stripeAction: AdminRegistrationStatusErrorResponseStripeAction;
+}
 
 export type CreateBookingBodyPassType =
   (typeof CreateBookingBodyPassType)[keyof typeof CreateBookingBodyPassType];

@@ -413,8 +413,17 @@ function ExpandedRegistrationDetail({
         headers: { "Content-Type": "application/json", "x-admin-token": token },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error("Status update failed");
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        stripeAction?: string;
+      };
+      if (!res.ok) {
+        if (body.stripeAction === "failed") {
+          setStripeActionResult("failed");
+          return;
+        }
+        throw new Error(body.error || "Status update failed");
+      }
       if (body.stripeAction && body.stripeAction !== "skipped") {
         setStripeActionResult(body.stripeAction);
       }
@@ -647,9 +656,7 @@ function ExpandedRegistrationDetail({
           {stripeActionResult === "failed" ? (
             <>
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>
-                Status updated but the Stripe action failed — please check the Stripe dashboard.
-              </span>
+              <span>Stripe action failed - please check the Stripe dashboard.</span>
             </>
           ) : stripeActionResult === "refund_issued" ? (
             <>
@@ -660,6 +667,11 @@ function ExpandedRegistrationDetail({
             <>
               <Check className="h-4 w-4 mt-0.5 shrink-0" />
               <span>Booking cancelled · Stripe invoice voided</span>
+            </>
+          ) : stripeActionResult === "invoice_paid_out_of_band" ? (
+            <>
+              <Check className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>Stripe invoice marked paid with an external payment.</span>
             </>
           ) : null}
           <button

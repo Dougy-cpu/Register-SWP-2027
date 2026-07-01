@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import type Stripe from "stripe";
 import { eq, desc, asc, or, and, sql, count, notInArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { db } from "@workspace/db";
@@ -33,6 +34,19 @@ import { getOrCreateArchivedReceiptPdf } from "../lib/receipt-documents";
 
 const router: IRouter = Router();
 const INVOICE_PAYMENT_TERMS_DAYS = 14;
+type AdminStatusStripeAction =
+  | "refund_issued"
+  | "invoice_voided"
+  | "invoice_paid_out_of_band"
+  | "skipped"
+  | "failed";
+
+type BookingUpdate = Partial<typeof bookingsTable.$inferInsert>;
+
+function applyStripeInvoiceUrlUpdates(updates: BookingUpdate, invoice: Stripe.Invoice): void {
+  if (invoice.invoice_pdf) updates.stripeInvoicePdfUrl = invoice.invoice_pdf;
+  if (invoice.hosted_invoice_url) updates.stripeInvoicePaymentUrl = invoice.hosted_invoice_url;
+}
 
 function getAdminRegistrationDate(booking: typeof bookingsTable.$inferSelect): Date {
   if (booking.paidAt) {
@@ -539,7 +553,75 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
   }
 
   let finalStatus = status;
-  let stripeAction: "refund_issued" | "invoice_voided" | "skipped" | "failed" = "skipped";
+  let stripeAction: AdminStatusStripeAction = "skipped";
+  const statusUpdateOverrides: BookingUpdate = {};
+
+  if (status === "paid" && existing.paymentMethod === "invoice" && existing.stripeInvoiceId) {
+    const stripe = getStripe();
+    const invoiceId = existing.stripeInvoiceId;
+
+    if (!stripe) {
+      logger.error(
+        { bookingId: id, invoiceId },
+        "Stripe not configured - cannot mark invoice paid from admin status override",
+      );
+      res.status(503).json({
+        error: "Stripe is not configured; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    let paidInvoice: Stripe.Invoice;
+    try {
+      const currentInvoice = await stripe.invoices.retrieve(invoiceId);
+
+      if (currentInvoice.status === "paid") {
+        paidInvoice = currentInvoice;
+      } else if (currentInvoice.status === "open") {
+        paidInvoice = await stripe.invoices.pay(invoiceId, { paid_out_of_band: true });
+      } else {
+        logger.warn(
+          { bookingId: id, invoiceId, stripeInvoiceStatus: currentInvoice.status },
+          "Stripe invoice is not open or paid; admin paid override blocked",
+        );
+        res.status(409).json({
+          error: `Stripe invoice is ${currentInvoice.status ?? "not payable"}; booking status was not changed`,
+          stripeAction: "failed",
+        });
+        return;
+      }
+    } catch (err) {
+      logger.error(
+        { err, bookingId: id, invoiceId },
+        "Failed to mark Stripe invoice paid from admin status override",
+      );
+      res.status(502).json({
+        error: "Failed to mark Stripe invoice paid; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    if (paidInvoice.status !== "paid") {
+      logger.error(
+        { bookingId: id, invoiceId, stripeInvoiceStatus: paidInvoice.status },
+        "Stripe invoice pay call did not return a paid invoice; admin paid override blocked",
+      );
+      res.status(502).json({
+        error: "Stripe invoice was not marked paid; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    const syncedAt = new Date();
+    stripeAction = "invoice_paid_out_of_band";
+    statusUpdateOverrides.paidAt = existing.paidAt ?? syncedAt;
+    statusUpdateOverrides.stripeInvoiceStatus = "paid";
+    statusUpdateOverrides.stripeInvoiceStatusSyncedAt = syncedAt;
+    applyStripeInvoiceUrlUpdates(statusUpdateOverrides, paidInvoice);
+  }
 
   if (status === "cancelled") {
     const stripe = getStripe();
@@ -577,7 +659,11 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
 
   const [updated] = await db
     .update(bookingsTable)
-    .set({ status: finalStatus as typeof existing.status, updatedAt: new Date() })
+    .set({
+      status: finalStatus as typeof existing.status,
+      updatedAt: new Date(),
+      ...statusUpdateOverrides,
+    })
     .where(eq(bookingsTable.id, id))
     .returning();
 
