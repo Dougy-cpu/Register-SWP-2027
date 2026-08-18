@@ -87,6 +87,9 @@ export const bookingsTable = pgTable(
     // panel as a "needs attention" badge so a stuck delivery is visible.
     confirmationEmailSent: boolean("confirmation_email_sent").notNull().default(false),
     welcomeEmailsSent: boolean("welcome_emails_sent").notNull().default(false),
+    // Manual campaign flag. This is deliberately not part of automatic
+    // confirmation delivery or the "needs attention" calculation.
+    communitySocialEmailSent: boolean("community_social_email_sent").notNull().default(false),
     organiserNotified: boolean("organiser_notified").notNull().default(false),
     sheetsSynced: boolean("sheets_synced").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

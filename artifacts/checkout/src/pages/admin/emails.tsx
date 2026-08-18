@@ -42,6 +42,15 @@ import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = `${import.meta.env.BASE_URL}api`;
 
+const EMAIL_LOG_TYPE_LABELS: Record<string, string> = {
+  confirmation: "Confirmation",
+  receipt: "Receipt",
+  welcome: "Welcome",
+  invoice: "Invoice",
+  community_social: "Community Social",
+  test: "Test",
+};
+
 function getAdminToken() {
   return localStorage.getItem("admin_token") || "";
 }
@@ -176,11 +185,12 @@ function TipTapToolbar({
 
 // ─── Template Editor ──────────────────────────────────────────────────────────
 
-type TemplateType = "welcome" | "confirmation" | "invoice_reminder";
+type TemplateType = "welcome" | "confirmation" | "community_social" | "invoice_reminder";
 
 const TEMPLATE_LABELS: Record<TemplateType, string> = {
   welcome: "Welcome Email",
   confirmation: "Booking Confirmation",
+  community_social: "Community Social",
   invoice_reminder: "Invoice Reminder",
 };
 
@@ -356,6 +366,54 @@ const TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
       description: "Public download URL for the social .ics file (empty until enabled)",
     },
   ],
+  community_social: [
+    { tag: "{{firstName}}", label: "First Name", description: "Attendee's first name" },
+    {
+      tag: "{{eventName}}",
+      label: "Event Name",
+      description: "Event name from Event Settings",
+    },
+    {
+      tag: "{{socialName}}",
+      label: "Social Name",
+      description: "Community Social name from Event Settings",
+    },
+    {
+      tag: "{{socialVenue}}",
+      label: "Social Venue",
+      description: "Community Social venue and address from Event Settings",
+    },
+    {
+      tag: "{{socialDate}}",
+      label: "Social Date",
+      description: "Community Social date from Event Settings",
+    },
+    {
+      tag: "{{socialTime}}",
+      label: "Social Time",
+      description: "Community Social start time from Event Settings",
+    },
+    {
+      tag: "{{socialDescription}}",
+      label: "Social Description",
+      description: "Community Social description from Event Settings",
+    },
+    {
+      tag: "{{socialDetailsUrl}}",
+      label: "Event Website URL",
+      description: "SWP Summit website URL from Event Settings",
+    },
+    {
+      tag: "{{socialMapUrl}}",
+      label: "Venue Map URL",
+      description: "Google Maps link generated from the Community Social venue",
+    },
+    {
+      tag: "{{socialCalendarLinks}}",
+      label: "Social Calendar Block",
+      description: "Google, Outlook and calendar download links when the social is enabled",
+    },
+  ],
   invoice_reminder: [
     { tag: "{{firstName}}", label: "First Name", description: "Recipient's first name" },
     { tag: "{{recipientName}}", label: "Full Name", description: "Recipient's full name" },
@@ -377,6 +435,8 @@ const TEMPLATE_DESCRIPTIONS: Record<TemplateType, string> = {
   welcome: "Sent as a personal follow-up after registration. Use this for a warm welcome message.",
   confirmation:
     "Sent automatically after every successful booking (card or invoice). Contains the attendee's order details.",
+  community_social:
+    "Sent manually from Registrations to every known non-TBC attendee on a confirmed booking. It is never sent automatically. Replies go to the configured From email address.",
   invoice_reminder:
     "Sent manually from the Registrations panel when clicking 'Send Reminder' on an invoiced booking. The order summary table, payment button, and bank transfer details are automatically appended — edit only the intro message here. The subject supports {{orderReference}}.",
 };
@@ -384,6 +444,7 @@ const TEMPLATE_DESCRIPTIONS: Record<TemplateType, string> = {
 const TEMPLATE_ATTACHMENTS: Record<TemplateType, string[]> = {
   welcome: [],
   confirmation: ["PDF VAT receipt (covers all attendees on the booking)"],
+  community_social: [],
   invoice_reminder: ["Invoice PDF (itemised, with bank transfer and company details)"],
 };
 
@@ -1132,7 +1193,7 @@ export default function AdminEmails() {
   const [sendingLogIds, setSendingLogIds] = useState<Set<number>>(new Set());
   const [sentLogIds, setSentLogIds] = useState<Set<number>>(new Set());
 
-  const handleResend = async (logId: number, bookingId: number) => {
+  const handleResend = async (logId: number, bookingId: number, type: string) => {
     if (sendingLogIds.has(logId)) return;
     setSendingLogIds((prev) => new Set(prev).add(logId));
     setSentLogIds((prev) => {
@@ -1141,11 +1202,28 @@ export default function AdminEmails() {
       return s;
     });
     try {
-      await resendEmails.mutateAsync({ bookingId });
+      if (type === "community_social") {
+        const response = await fetch(
+          `${API_BASE}/admin/registrations/${bookingId}/send-community-social-email`,
+          {
+            method: "POST",
+            headers: { "x-admin-token": getAdminToken() },
+          },
+        );
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || "Community Social email could not be sent");
+        }
+      } else {
+        await resendEmails.mutateAsync({ bookingId });
+      }
       setSentLogIds((prev) => new Set(prev).add(logId));
       toast({
-        title: "Emails resent",
-        description: `Confirmation emails for booking #${bookingId} have been resent.`,
+        title: type === "community_social" ? "Community Social email sent" : "Emails resent",
+        description:
+          type === "community_social"
+            ? `Community Social emails for booking #${bookingId} have been sent.`
+            : `Confirmation emails for booking #${bookingId} have been resent.`,
       });
       setTimeout(
         () =>
@@ -1156,10 +1234,11 @@ export default function AdminEmails() {
           }),
         3000,
       );
-    } catch {
+    } catch (error) {
       toast({
         title: "Failed to resend",
-        description: "Something went wrong. Please try again.",
+        description:
+          error instanceof Error ? error.message : "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -1194,6 +1273,12 @@ export default function AdminEmails() {
             Booking Confirmation
           </TabsTrigger>
           <TabsTrigger
+            value="community_social"
+            className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-full px-6 rounded-none whitespace-nowrap"
+          >
+            Community Social
+          </TabsTrigger>
+          <TabsTrigger
             value="invoice_reminder"
             className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary h-full px-6 rounded-none whitespace-nowrap"
           >
@@ -1217,6 +1302,10 @@ export default function AdminEmails() {
 
         <TabsContent value="confirmation">
           <TemplateEditor type="confirmation" />
+        </TabsContent>
+
+        <TabsContent value="community_social">
+          <TemplateEditor type="community_social" />
         </TabsContent>
 
         <TabsContent value="invoice_reminder">
@@ -1248,7 +1337,7 @@ export default function AdminEmails() {
                         <TableCell className="text-sm">
                           {new Date(log.sentAt).toLocaleString()}
                         </TableCell>
-                        <TableCell className="capitalize">{log.type}</TableCell>
+                        <TableCell>{EMAIL_LOG_TYPE_LABELS[log.type] || log.type}</TableCell>
                         <TableCell>{log.recipient}</TableCell>
                         <TableCell>{log.bookingId || "-"}</TableCell>
                         <TableCell>
@@ -1270,7 +1359,7 @@ export default function AdminEmails() {
                             <Button
                               variant={sentLogIds.has(log.id) ? "default" : "outline"}
                               size="sm"
-                              onClick={() => handleResend(log.id, log.bookingId!)}
+                              onClick={() => handleResend(log.id, log.bookingId!, log.type)}
                               disabled={sendingLogIds.has(log.id)}
                               className={`h-8 px-3 min-w-[100px] transition-all ${sentLogIds.has(log.id) ? "bg-green-600 hover:bg-green-700 text-white border-green-600" : ""}`}
                             >

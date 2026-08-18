@@ -5,6 +5,7 @@ import { attendeesTable, bookingsTable, eventSettingsTable, activityLogTable } f
 import { verifyAdminToken, getAdminPassword } from "../middleware/admin-auth";
 import { sendAttendeeChangeNotification, sendWelcomeEmail } from "../lib/email";
 import { logAdminAction } from "../lib/audit";
+import { createAttendeeChangeSnapshot, getAttendeeFieldChanges } from "../lib/attendee-changes";
 
 const router: IRouter = Router();
 
@@ -315,6 +316,7 @@ router.patch("/attendees/:id/managed", async (req, res): Promise<void> => {
   }
 
   const wasTbc = attendee.isTbc;
+  const previousDetails = createAttendeeChangeSnapshot(attendee);
 
   const [updated] = await db
     .update(attendeesTable)
@@ -332,6 +334,8 @@ router.patch("/attendees/:id/managed", async (req, res): Promise<void> => {
     })
     .where(eq(attendeesTable.id, attendeeId))
     .returning();
+  const currentDetails = createAttendeeChangeSnapshot(updated);
+  const attendeeChanges = getAttendeeFieldChanges(previousDetails, currentDetails);
 
   res.json(formatAttendee(updated));
 
@@ -348,14 +352,14 @@ router.patch("/attendees/:id/managed", async (req, res): Promise<void> => {
   // Send welcome email to the attendee who just registered/updated
   sendWelcomeEmail(booking.id, firstName, workEmail).catch(() => {});
 
-  // Fire and forget — notify organisers that an attendee updated their details
-  sendAttendeeChangeNotification(booking.id, attendeeId, {
-    firstName,
-    lastName,
-    jobTitle,
-    company,
-    workEmail,
-  }).catch(() => {});
+  // Fire and forget. A no-change save should not create an organiser notification.
+  if (attendeeChanges.length > 0) {
+    sendAttendeeChangeNotification(booking.id, attendeeId, {
+      previous: previousDetails,
+      current: currentDetails,
+      changes: attendeeChanges,
+    }).catch(() => {});
+  }
 });
 
 export default router;

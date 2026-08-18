@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { escHtml, wrapInBrandedLayout } from "./email";
+import {
+  escHtml,
+  getCommunitySocialTemplateVars,
+  renderAttendeeChangeTableHtml,
+  wrapInBrandedLayout,
+} from "./email";
 
 describe("escHtml", () => {
   it("escapes the five HTML-significant characters", () => {
@@ -107,5 +112,59 @@ describe("wrapInBrandedLayout", () => {
 
     expect(html).toContain('alt="People &quot;Strategy&quot; Hub"');
     expect(html).not.toContain('onerror="alert(1)"');
+  });
+});
+
+describe("Community Social email variables", () => {
+  it("uses existing SWP settings and does not invent event details", () => {
+    const settings = {
+      id: 1,
+      eventName: "SWP Summit",
+      eventStartAt: null,
+      eventEndAt: null,
+      eventTimezone: "Europe/London",
+      eventDescription: null,
+      eventVenue: "1 Basinghall Avenue, London",
+      socialEnabled: false,
+      socialName: null,
+      socialStartAt: null,
+      socialEndAt: null,
+      socialVenue: null,
+      socialDescription: null,
+      orgWebsite: "https://swpsummit.com",
+      updatedAt: new Date(),
+    } as Parameters<typeof getCommunitySocialTemplateVars>[0];
+
+    const vars = getCommunitySocialTemplateVars(settings, `<Douglas>`);
+
+    expect(vars["{{firstName}}"]).toBe("&lt;Douglas&gt;");
+    expect(vars["{{eventName}}"]).toBe("SWP Summit");
+    expect(vars["{{socialName}}"]).toBe("SWP Summit Community Social");
+    expect(vars["{{socialVenue}}"]).toBe("To be confirmed");
+    expect(vars["{{socialDate}}"]).toBe("To be confirmed");
+    expect(vars["{{socialTime}}"]).toBe("To be confirmed");
+    expect(vars["{{socialDetailsUrl}}"]).toBe("https://swpsummit.com");
+    expect(vars["{{socialMapUrl}}"]).toBe("https://swpsummit.com");
+    expect(vars["{{socialCalendarLinks}}"]).toBe("");
+  });
+});
+
+describe("renderAttendeeChangeTableHtml", () => {
+  it("renders an email-safe comparison table and escapes attendee-provided values", () => {
+    const html = renderAttendeeChangeTableHtml([
+      {
+        field: "dietaryAccessibility",
+        label: "Dietary / accessibility requirements",
+        previous: "Vegetarian & step-free access",
+        current: `<script>alert("unsafe")</script>`,
+      },
+    ]);
+
+    expect(html).toContain('role="presentation"');
+    expect(html).toContain("Previous details");
+    expect(html).toContain("New details");
+    expect(html).toContain("Vegetarian &amp; step-free access");
+    expect(html).toContain("&lt;script&gt;alert(&quot;unsafe&quot;)&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
   });
 });

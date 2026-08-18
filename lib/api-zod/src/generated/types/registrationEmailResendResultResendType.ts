@@ -6,13 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type EmailLogType = (typeof EmailLogType)[keyof typeof EmailLogType];
+export type RegistrationEmailResendResultResendType =
+  (typeof RegistrationEmailResendResultResendType)[keyof typeof RegistrationEmailResendResultResendType];
 
-export const EmailLogType = {
+export const RegistrationEmailResendResultResendType = {
   confirmation: "confirmation",
-  receipt: "receipt",
   welcome: "welcome",
-  invoice: "invoice",
   community_social: "community_social",
-  test: "test",
 } as const;

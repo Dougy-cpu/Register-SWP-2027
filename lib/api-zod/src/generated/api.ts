@@ -86,6 +86,7 @@ export const GetBookingResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -207,6 +208,7 @@ export const UpdateBookingResponse = zod.object({
   invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
   confirmationEmailSent: zod.boolean().optional(),
   welcomeEmailsSent: zod.boolean().optional(),
+  communitySocialEmailSent: zod.boolean().optional(),
   organiserNotified: zod.boolean().optional(),
   sheetsSynced: zod.boolean().optional(),
   needsAttention: zod.boolean().optional(),
@@ -274,6 +276,7 @@ export const GetBookingBySessionResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -670,6 +673,46 @@ export const SendTestWelcomeEmailResponse = zod.object({
 });
 
 /**
+ * @summary Get the Community Social email template
+ */
+export const GetCommunitySocialEmailTemplateResponse = zod.object({
+  id: zod.number(),
+  type: zod.string(),
+  subject: zod.string(),
+  htmlBody: zod.string(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update the Community Social email template
+ */
+export const UpdateCommunitySocialEmailTemplateBody = zod.object({
+  subject: zod.string(),
+  htmlBody: zod.string(),
+});
+
+export const UpdateCommunitySocialEmailTemplateResponse = zod.object({
+  id: zod.number(),
+  type: zod.string(),
+  subject: zod.string(),
+  htmlBody: zod.string(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Send a test Community Social email
+ */
+export const SendTestCommunitySocialEmailBody = zod.object({
+  toEmail: zod.string(),
+  toName: zod.string().optional(),
+});
+
+export const SendTestCommunitySocialEmailResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});
+
+/**
  * @summary List all email logs (admin)
  */
 export const ListEmailLogsQueryParams = zod.object({
@@ -685,7 +728,7 @@ export const ListEmailLogsResponse = zod.object({
       id: zod.number(),
       bookingId: zod.number().nullish(),
       recipient: zod.string(),
-      type: zod.enum(["confirmation", "receipt", "welcome", "invoice", "test"]),
+      type: zod.enum(["confirmation", "receipt", "welcome", "invoice", "community_social", "test"]),
       status: zod.enum(["sent", "failed", "pending"]),
       errorMessage: zod.string().nullish(),
       sentAt: zod.coerce.date(),
@@ -852,6 +895,12 @@ export const ListRegistrationsResponse = zod.object({
         .boolean()
         .optional()
         .describe("True once welcome emails have been sent to all attendees."),
+      communitySocialEmailSent: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking.",
+        ),
       organiserNotified: zod
         .boolean()
         .optional()
@@ -942,6 +991,7 @@ export const RedeliverRegistrationResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -954,6 +1004,250 @@ export const RedeliverRegistrationResponse = zod
         ran: zod.array(zod.string()),
         skipped: zod.array(zod.string()),
         failed: zod.array(zod.string()),
+      }),
+    }),
+  );
+
+/**
+ * Sends a fresh confirmation and receipt email for a paid or invoiced
+booking. This does not run organiser notification or Sheets sync.
+
+ * @summary Resend the customer confirmation email (admin)
+ */
+export const ResendRegistrationConfirmationEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResendRegistrationConfirmationEmailResponse = zod
+  .object({
+    id: zod.number(),
+    sessionToken: zod.string(),
+    status: zod.enum([
+      "partial",
+      "pending_payment",
+      "paid",
+      "invoiced",
+      "cancelled",
+      "refunded",
+      "disputed",
+    ]),
+    passType: zod.enum(["single", "business"]),
+    attendeeType: zod.enum(["hr_professional", "consultant_vendor"]),
+    quantity: zod.number(),
+    promoCode: zod.string().nullish(),
+    promoDiscountAmount: zod.number().nullish(),
+    groupDiscountAmount: zod.number().nullish(),
+    subtotalAmount: zod.number(),
+    vatAmount: zod.number(),
+    totalAmount: zod.number(),
+    paymentMethod: zod
+      .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
+      .nullish(),
+    stripeSessionId: zod.string().nullish(),
+    stripePaymentIntentId: zod.string().nullish(),
+    stripeInvoiceId: zod.string().nullish(),
+    stripeInvoicePdfUrl: zod.string().nullish(),
+    stripeInvoicePaymentUrl: zod.string().nullish(),
+    orderReference: zod.string().nullish(),
+    currentStep: zod.number(),
+    billingName: zod.string().nullish(),
+    billingCompany: zod.string().nullish(),
+    billingEmail: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+    billingAddressLine1: zod.string().nullish(),
+    billingAddressLine2: zod.string().nullish(),
+    billingTown: zod.string().nullish(),
+    billingRegion: zod.string().nullish(),
+    billingPostcode: zod.string().nullish(),
+    billingCountry: zod.string().nullish(),
+    billingVatNumber: zod.string().nullish(),
+    billingPhone: zod.string().nullish(),
+    poNumber: zod.string().nullish(),
+    managementToken: zod.string().nullish(),
+    invoiceDueDate: zod.coerce.date().nullish(),
+    paidAt: zod.coerce.date().nullish(),
+    stripeInvoiceStatus: zod.string().nullish(),
+    stripeInvoiceStatusSyncedAt: zod.coerce.date().nullish(),
+    invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
+    confirmationEmailSent: zod.boolean().optional(),
+    welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
+    organiserNotified: zod.boolean().optional(),
+    sheetsSynced: zod.boolean().optional(),
+    needsAttention: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      resend: zod.object({
+        type: zod.enum(["confirmation", "welcome", "community_social"]),
+        sent: zod.boolean(),
+        recipients: zod.array(zod.string()),
+        failedRecipients: zod.array(zod.string()),
+      }),
+    }),
+  );
+
+/**
+ * Sends fresh welcome emails to every non-TBC attendee on a paid or
+invoiced booking. This does not run organiser notification or Sheets sync.
+
+ * @summary Resend attendee welcome emails (admin)
+ */
+export const ResendRegistrationWelcomeEmailsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResendRegistrationWelcomeEmailsResponse = zod
+  .object({
+    id: zod.number(),
+    sessionToken: zod.string(),
+    status: zod.enum([
+      "partial",
+      "pending_payment",
+      "paid",
+      "invoiced",
+      "cancelled",
+      "refunded",
+      "disputed",
+    ]),
+    passType: zod.enum(["single", "business"]),
+    attendeeType: zod.enum(["hr_professional", "consultant_vendor"]),
+    quantity: zod.number(),
+    promoCode: zod.string().nullish(),
+    promoDiscountAmount: zod.number().nullish(),
+    groupDiscountAmount: zod.number().nullish(),
+    subtotalAmount: zod.number(),
+    vatAmount: zod.number(),
+    totalAmount: zod.number(),
+    paymentMethod: zod
+      .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
+      .nullish(),
+    stripeSessionId: zod.string().nullish(),
+    stripePaymentIntentId: zod.string().nullish(),
+    stripeInvoiceId: zod.string().nullish(),
+    stripeInvoicePdfUrl: zod.string().nullish(),
+    stripeInvoicePaymentUrl: zod.string().nullish(),
+    orderReference: zod.string().nullish(),
+    currentStep: zod.number(),
+    billingName: zod.string().nullish(),
+    billingCompany: zod.string().nullish(),
+    billingEmail: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+    billingAddressLine1: zod.string().nullish(),
+    billingAddressLine2: zod.string().nullish(),
+    billingTown: zod.string().nullish(),
+    billingRegion: zod.string().nullish(),
+    billingPostcode: zod.string().nullish(),
+    billingCountry: zod.string().nullish(),
+    billingVatNumber: zod.string().nullish(),
+    billingPhone: zod.string().nullish(),
+    poNumber: zod.string().nullish(),
+    managementToken: zod.string().nullish(),
+    invoiceDueDate: zod.coerce.date().nullish(),
+    paidAt: zod.coerce.date().nullish(),
+    stripeInvoiceStatus: zod.string().nullish(),
+    stripeInvoiceStatusSyncedAt: zod.coerce.date().nullish(),
+    invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
+    confirmationEmailSent: zod.boolean().optional(),
+    welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
+    organiserNotified: zod.boolean().optional(),
+    sheetsSynced: zod.boolean().optional(),
+    needsAttention: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      resend: zod.object({
+        type: zod.enum(["confirmation", "welcome", "community_social"]),
+        sent: zod.boolean(),
+        recipients: zod.array(zod.string()),
+        failedRecipients: zod.array(zod.string()),
+      }),
+    }),
+  );
+
+/**
+ * Manually sends the Community Social email to every non-TBC attendee on
+a paid or invoiced booking. This endpoint is not part of automatic
+booking confirmation, redelivery, organiser notification or Sheets sync.
+
+ * @summary Send the Community Social email to attendees (admin)
+ */
+export const SendRegistrationCommunitySocialEmailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const SendRegistrationCommunitySocialEmailResponse = zod
+  .object({
+    id: zod.number(),
+    sessionToken: zod.string(),
+    status: zod.enum([
+      "partial",
+      "pending_payment",
+      "paid",
+      "invoiced",
+      "cancelled",
+      "refunded",
+      "disputed",
+    ]),
+    passType: zod.enum(["single", "business"]),
+    attendeeType: zod.enum(["hr_professional", "consultant_vendor"]),
+    quantity: zod.number(),
+    promoCode: zod.string().nullish(),
+    promoDiscountAmount: zod.number().nullish(),
+    groupDiscountAmount: zod.number().nullish(),
+    subtotalAmount: zod.number(),
+    vatAmount: zod.number(),
+    totalAmount: zod.number(),
+    paymentMethod: zod
+      .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
+      .nullish(),
+    stripeSessionId: zod.string().nullish(),
+    stripePaymentIntentId: zod.string().nullish(),
+    stripeInvoiceId: zod.string().nullish(),
+    stripeInvoicePdfUrl: zod.string().nullish(),
+    stripeInvoicePaymentUrl: zod.string().nullish(),
+    orderReference: zod.string().nullish(),
+    currentStep: zod.number(),
+    billingName: zod.string().nullish(),
+    billingCompany: zod.string().nullish(),
+    billingEmail: zod.string().nullish(),
+    billingAddress: zod.string().nullish(),
+    billingAddressLine1: zod.string().nullish(),
+    billingAddressLine2: zod.string().nullish(),
+    billingTown: zod.string().nullish(),
+    billingRegion: zod.string().nullish(),
+    billingPostcode: zod.string().nullish(),
+    billingCountry: zod.string().nullish(),
+    billingVatNumber: zod.string().nullish(),
+    billingPhone: zod.string().nullish(),
+    poNumber: zod.string().nullish(),
+    managementToken: zod.string().nullish(),
+    invoiceDueDate: zod.coerce.date().nullish(),
+    paidAt: zod.coerce.date().nullish(),
+    stripeInvoiceStatus: zod.string().nullish(),
+    stripeInvoiceStatusSyncedAt: zod.coerce.date().nullish(),
+    invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
+    confirmationEmailSent: zod.boolean().optional(),
+    welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
+    organiserNotified: zod.boolean().optional(),
+    sheetsSynced: zod.boolean().optional(),
+    needsAttention: zod.boolean().optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      resend: zod.object({
+        type: zod.enum(["confirmation", "welcome", "community_social"]),
+        sent: zod.boolean(),
+        recipients: zod.array(zod.string()),
+        failedRecipients: zod.array(zod.string()),
       }),
     }),
   );
@@ -1036,6 +1330,7 @@ export const UpdateRegistrationStatusResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1114,6 +1409,7 @@ export const GetRegistrationResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
+    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1361,6 +1657,12 @@ export const GetAdminStatsResponse = zod.object({
         .boolean()
         .optional()
         .describe("True once welcome emails have been sent to all attendees."),
+      communitySocialEmailSent: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking.",
+        ),
       organiserNotified: zod
         .boolean()
         .optional()

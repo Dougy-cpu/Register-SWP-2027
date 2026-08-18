@@ -30,6 +30,7 @@ export const activityTypeEnum = [
   "admin_hear_about_us_deleted",
   "admin_hear_about_us_moved",
   "admin_booking_redelivered",
+  "admin_community_social_email_sent",
 ] as const;
 
 export type ActivityType = (typeof activityTypeEnum)[number];

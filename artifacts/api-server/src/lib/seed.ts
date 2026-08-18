@@ -10,6 +10,20 @@ import { logger } from "./logger";
 
 export async function runMigrations() {
   try {
+    await db.execute(
+      sql`ALTER TYPE email_template_type ADD VALUE IF NOT EXISTS 'community_social'`,
+    );
+    await db.execute(sql`ALTER TYPE email_log_type ADD VALUE IF NOT EXISTS 'community_social'`);
+    await db.execute(sql`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS community_social_email_sent BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    logger.info("Migration: Community Social email types and delivery flag ensured");
+  } catch (err) {
+    logger.warn({ err }, "Migration: could not ensure Community Social email support");
+  }
+
+  try {
     await db.execute(sql`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hear_about_us TEXT`);
     logger.info("Migration: hear_about_us column ensured");
   } catch (err) {
@@ -136,6 +150,36 @@ const DEFAULT_WELCOME_BODY = `
 <strong>The SWP Summit Team</strong></p>
 `;
 
+const DEFAULT_COMMUNITY_SOCIAL_SUBJECT = "{{socialName}} invitation - {{eventName}}";
+
+const DEFAULT_COMMUNITY_SOCIAL_BODY = `
+<h2>You're invited to the Community Social</h2>
+
+<p>Hi {{firstName}},</p>
+
+<p>We'd like to invite you to <strong>{{socialName}}</strong>, connected with {{eventName}}.</p>
+
+<div class="info-box">
+  <strong>{{socialName}}</strong><br>
+  <strong>Date:</strong> {{socialDate}}<br>
+  <strong>Time:</strong> {{socialTime}}<br>
+  <strong>Venue:</strong> {{socialVenue}}
+</div>
+
+<p>{{socialDescription}}</p>
+
+{{socialCalendarLinks}}
+
+<p style="text-align:center;margin:28px 0;">
+  <a href="{{socialDetailsUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Visit the SWP Summit website</a>
+</p>
+
+<p><a href="{{socialMapUrl}}">View the venue on Google Maps</a></p>
+
+<p>Best,<br>
+<strong>The SWP Summit Team</strong></p>
+`;
+
 const DEFAULT_DISCOUNT_TIERS = [
   { passType: "single" as const, minQuantity: 4, discountPercent: "10", label: "4+ passes" },
   { passType: "single" as const, minQuantity: 8, discountPercent: "15", label: "8+ passes" },
@@ -237,8 +281,7 @@ async function rebrandLegacyDefaults() {
 
     if (config.passType === "single") {
       if (currentPrice === 199) updates.currentPrice = "249.00";
-      if (config.pricingPeriodName === "Early Bird")
-        updates.pricingPeriodName = "Super Early Bird";
+      if (config.pricingPeriodName === "Early Bird") updates.pricingPeriodName = "Super Early Bird";
       if (
         benefits.includes("Conference Sessions") ||
         benefits.includes("Access to Pre-Event Social")
@@ -249,8 +292,7 @@ async function rebrandLegacyDefaults() {
 
     if (config.passType === "business") {
       if (currentPrice === 599) updates.currentPrice = "499.00";
-      if (config.pricingPeriodName === "Early Bird")
-        updates.pricingPeriodName = "Super Early Bird";
+      if (config.pricingPeriodName === "Early Bird") updates.pricingPeriodName = "Super Early Bird";
       if (
         benefits.includes("Conference Sessions") ||
         benefits.includes("Happy Hour with Entertainment")
@@ -310,6 +352,24 @@ export async function seed() {
       logger.info("Seeded confirmation email template");
     } else {
       logger.debug("Confirmation email template already present, skipping seed");
+    }
+
+    // This template is available for manual sends only. It is intentionally
+    // not part of the automatic post-booking email sequence.
+    const existingCommunitySocial = await db
+      .select()
+      .from(emailTemplatesTable)
+      .where(eq(emailTemplatesTable.type, "community_social"));
+
+    if (existingCommunitySocial.length === 0) {
+      await db.insert(emailTemplatesTable).values({
+        type: "community_social",
+        subject: DEFAULT_COMMUNITY_SOCIAL_SUBJECT,
+        htmlBody: DEFAULT_COMMUNITY_SOCIAL_BODY,
+      });
+      logger.info("Seeded Community Social email template");
+    } else {
+      logger.debug("Community Social email template already present, skipping seed");
     }
 
     const existingTiers = await db.select().from(discountTiersTable);

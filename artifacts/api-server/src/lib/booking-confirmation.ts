@@ -193,6 +193,7 @@ export const needsAttentionPredicate = and(
 export function deliveryStatusForBooking(b: typeof bookingsTable.$inferSelect): {
   confirmationEmailSent: boolean;
   welcomeEmailsSent: boolean;
+  communitySocialEmailSent: boolean;
   organiserNotified: boolean;
   sheetsSynced: boolean;
   needsAttention: boolean;
@@ -203,6 +204,7 @@ export function deliveryStatusForBooking(b: typeof bookingsTable.$inferSelect): 
   return {
     confirmationEmailSent: b.confirmationEmailSent,
     welcomeEmailsSent: b.welcomeEmailsSent,
+    communitySocialEmailSent: b.communitySocialEmailSent,
     organiserNotified: b.organiserNotified,
     sheetsSynced: b.sheetsSynced,
     needsAttention: isConfirmed && anyMissing,

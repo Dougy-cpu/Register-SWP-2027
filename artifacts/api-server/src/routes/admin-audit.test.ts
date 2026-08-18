@@ -219,6 +219,9 @@ const { mockDb, getRows, resetStore, makeTable, stripeMock, setStripeAvailable, 
               then(resolve: (v: unknown) => void) {
                 resolve(undefined);
               },
+              catch() {
+                return Promise.resolve(undefined);
+              },
             };
             return out;
           },
@@ -290,6 +293,50 @@ const { mockDb, getRows, resetStore, makeTable, stripeMock, setStripeAvailable, 
     };
   });
 
+const {
+  sendConfirmationAndReceiptEmailMock,
+  sendAttendeeChangeNotificationMock,
+  sendWelcomeEmailMock,
+  sendCommunitySocialEmailMock,
+  getEventSettingsMock,
+  runConfirmationSideEffectsMock,
+  resetDeliveryMocks,
+} = vi.hoisted(() => {
+  const sendConfirmationAndReceiptEmailMock = vi.fn();
+  const sendAttendeeChangeNotificationMock = vi.fn();
+  const sendWelcomeEmailMock = vi.fn();
+  const sendCommunitySocialEmailMock = vi.fn();
+  const getEventSettingsMock = vi.fn();
+  const runConfirmationSideEffectsMock = vi.fn();
+
+  return {
+    sendConfirmationAndReceiptEmailMock,
+    sendAttendeeChangeNotificationMock,
+    sendWelcomeEmailMock,
+    sendCommunitySocialEmailMock,
+    getEventSettingsMock,
+    runConfirmationSideEffectsMock,
+    resetDeliveryMocks: () => {
+      sendConfirmationAndReceiptEmailMock.mockReset();
+      sendConfirmationAndReceiptEmailMock.mockResolvedValue(true);
+      sendAttendeeChangeNotificationMock.mockReset();
+      sendAttendeeChangeNotificationMock.mockResolvedValue(undefined);
+      sendWelcomeEmailMock.mockReset();
+      sendWelcomeEmailMock.mockResolvedValue(true);
+      sendCommunitySocialEmailMock.mockReset();
+      sendCommunitySocialEmailMock.mockResolvedValue(true);
+      getEventSettingsMock.mockReset();
+      getEventSettingsMock.mockResolvedValue({
+        socialEnabled: true,
+        socialStartAt: new Date("2027-03-02T18:00:00Z"),
+        socialVenue: "Configured SWP social venue",
+      });
+      runConfirmationSideEffectsMock.mockReset();
+      runConfirmationSideEffectsMock.mockResolvedValue({ ran: [], skipped: [], failed: [] });
+    },
+  };
+});
+
 vi.mock("@workspace/db", () => {
   const tableNames = [
     "bookingsTable",
@@ -331,13 +378,15 @@ vi.mock("drizzle-orm", () => ({
 // Side-effect-free email + integration helpers — we don't want the test to
 // try to send mail or call Stripe.
 vi.mock("../lib/email", () => ({
-  sendAttendeeChangeNotification: async () => undefined,
-  sendWelcomeEmail: async () => undefined,
+  sendAttendeeChangeNotification: sendAttendeeChangeNotificationMock,
+  sendWelcomeEmail: sendWelcomeEmailMock,
+  sendCommunitySocialEmail: sendCommunitySocialEmailMock,
+  sendConfirmationAndReceiptEmail: sendConfirmationAndReceiptEmailMock,
   sendIncompleteFormNotification: async () => undefined,
   sendReissuedInvoiceEmail: async () => undefined,
   sendBillingEditNotification: async () => undefined,
   diffBillingFields: () => ({}),
-  getEventSettings: async () => null,
+  getEventSettings: getEventSettingsMock,
   resolveLatestBookingPdf: async () => null,
   resendConfirmationAndReceipt: async () => undefined,
 }));
@@ -347,7 +396,7 @@ vi.mock("../lib/google-sheets", () => ({
 }));
 
 vi.mock("../lib/booking-confirmation", () => ({
-  runConfirmationSideEffects: async () => ({ ran: [], failed: [] }),
+  runConfirmationSideEffects: runConfirmationSideEffectsMock,
   deliveryStatusForBooking: () => ({ needsAttention: false }),
   claimBookingConfirmation: async () => null,
 }));
@@ -409,6 +458,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   resetStore();
+  resetDeliveryMocks();
 });
 
 function activityRows(): Array<Record<string, unknown>> {
@@ -441,6 +491,11 @@ function seedBooking(over: Partial<Record<string, unknown>> = {}): Record<string
     billingName: null,
     billingEmail: null,
     billingCompany: null,
+    confirmationEmailSent: false,
+    welcomeEmailsSent: false,
+    communitySocialEmailSent: false,
+    organiserNotified: false,
+    sheetsSynced: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
@@ -730,6 +785,213 @@ describe("admin audit trail — integration", () => {
     expect(getRows({ _name: "bookingsTable" })[0].status).toBe("refunded");
   });
 
+  it("POST /admin/registrations/:id/resend-confirmation-email resends only the confirmation email", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      confirmationEmailSent: true,
+      welcomeEmailsSent: true,
+      organiserNotified: true,
+      sheetsSynced: true,
+      orderReference: "SWP27-12345",
+    });
+    seedAttendee({ bookingId: 101, isLead: true, workEmail: "lead@example.test" });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/resend-confirmation-email`, {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.resend).toEqual({
+      type: "confirmation",
+      sent: true,
+      recipients: ["lead@example.test"],
+      failedRecipients: [],
+    });
+    expect(sendConfirmationAndReceiptEmailMock).toHaveBeenCalledWith(101);
+    expect(sendWelcomeEmailMock).not.toHaveBeenCalled();
+    expect(runConfirmationSideEffectsMock).not.toHaveBeenCalled();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.confirmationEmailSent).toBe(true);
+    expect(booking.welcomeEmailsSent).toBe(true);
+    expect(booking.organiserNotified).toBe(true);
+    expect(booking.sheetsSynced).toBe(true);
+  });
+
+  it("POST /admin/registrations/:id/resend-welcome-emails resends only to non-TBC attendees", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      confirmationEmailSent: true,
+      welcomeEmailsSent: true,
+      organiserNotified: false,
+      sheetsSynced: false,
+      orderReference: "SWP27-12345",
+    });
+    seedAttendee({
+      id: 201,
+      bookingId: 101,
+      isLead: true,
+      firstName: "Alice",
+      workEmail: "alice@example.test",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 101,
+      isLead: false,
+      firstName: "Ben",
+      workEmail: "ben@example.test",
+      seatIndex: 1,
+    });
+    seedAttendee({
+      id: 203,
+      bookingId: 101,
+      isLead: false,
+      firstName: "TBC",
+      workEmail: "tbc@example.test",
+      isTbc: true,
+      seatIndex: 2,
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/resend-welcome-emails`, {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.resend).toEqual({
+      type: "welcome",
+      sent: true,
+      recipients: ["alice@example.test", "ben@example.test"],
+      failedRecipients: [],
+    });
+    expect(sendWelcomeEmailMock).toHaveBeenCalledTimes(2);
+    expect(sendWelcomeEmailMock).toHaveBeenNthCalledWith(1, 101, "Alice", "alice@example.test");
+    expect(sendWelcomeEmailMock).toHaveBeenNthCalledWith(2, 101, "Ben", "ben@example.test");
+    expect(sendConfirmationAndReceiptEmailMock).not.toHaveBeenCalled();
+    expect(runConfirmationSideEffectsMock).not.toHaveBeenCalled();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.confirmationEmailSent).toBe(true);
+    expect(booking.welcomeEmailsSent).toBe(true);
+    expect(booking.organiserNotified).toBe(false);
+    expect(booking.sheetsSynced).toBe(false);
+  });
+
+  it("POST /admin/registrations/:id/send-community-social-email sends only to non-TBC attendees", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      confirmationEmailSent: true,
+      welcomeEmailsSent: true,
+      communitySocialEmailSent: false,
+      organiserNotified: true,
+      sheetsSynced: true,
+    });
+    seedAttendee({
+      id: 201,
+      bookingId: 101,
+      isLead: true,
+      firstName: "Alice",
+      workEmail: "alice@example.test",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 101,
+      isLead: false,
+      firstName: "Ben",
+      workEmail: "ben@example.test",
+      seatIndex: 1,
+    });
+    seedAttendee({
+      id: 203,
+      bookingId: 101,
+      isLead: false,
+      firstName: "TBC",
+      workEmail: "tbc@example.test",
+      isTbc: true,
+      seatIndex: 2,
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/send-community-social-email`, {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.resend).toEqual({
+      type: "community_social",
+      sent: true,
+      recipients: ["alice@example.test", "ben@example.test"],
+      failedRecipients: [],
+    });
+    expect(sendCommunitySocialEmailMock).toHaveBeenCalledTimes(2);
+    expect(sendCommunitySocialEmailMock).toHaveBeenNthCalledWith(
+      1,
+      101,
+      "Alice",
+      "alice@example.test",
+    );
+    expect(sendCommunitySocialEmailMock).toHaveBeenNthCalledWith(2, 101, "Ben", "ben@example.test");
+    expect(sendConfirmationAndReceiptEmailMock).not.toHaveBeenCalled();
+    expect(sendWelcomeEmailMock).not.toHaveBeenCalled();
+    expect(runConfirmationSideEffectsMock).not.toHaveBeenCalled();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.communitySocialEmailSent).toBe(true);
+    expect(booking.organiserNotified).toBe(true);
+    expect(booking.sheetsSynced).toBe(true);
+  });
+
+  it("Community Social send is blocked until its SWP settings are configured", async () => {
+    seedBooking({ id: 101, status: "invoiced", communitySocialEmailSent: false });
+    seedAttendee({ bookingId: 101, firstName: "Alice", workEmail: "alice@example.test" });
+    getEventSettingsMock.mockResolvedValue({
+      socialEnabled: false,
+      socialStartAt: null,
+      socialVenue: null,
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/send-community-social-email`, {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(409);
+    expect(sendCommunitySocialEmailMock).not.toHaveBeenCalled();
+    expect(getRows({ _name: "bookingsTable" })[0].communitySocialEmailSent).toBe(false);
+  });
+
+  it("failed confirmation resend leaves all delivery flags unchanged", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      confirmationEmailSent: false,
+      welcomeEmailsSent: true,
+      organiserNotified: true,
+      sheetsSynced: true,
+    });
+    seedAttendee({ bookingId: 101, isLead: true, workEmail: "lead@example.test" });
+    sendConfirmationAndReceiptEmailMock.mockResolvedValue(false);
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/resend-confirmation-email`, {
+      method: "POST",
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(502);
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.confirmationEmailSent).toBe(false);
+    expect(booking.welcomeEmailsSent).toBe(true);
+    expect(booking.organiserNotified).toBe(true);
+    expect(booking.sheetsSynced).toBe(true);
+  });
+
   it("POST /admin/promo-codes records an admin_promo_created row with the new promo's after-state", async () => {
     const res = await fetch(`${baseUrl}/admin/promo-codes`, {
       method: "POST",
@@ -854,5 +1116,125 @@ describe("admin audit trail — integration", () => {
     const attendee = getRows({ _name: "attendeesTable" })[0];
     expect(attendee.firstName).toBe("Alicia");
     expect(attendee.workEmail).toBe("alicia@acme.test");
+    expect(sendAttendeeChangeNotificationMock).not.toHaveBeenCalled();
+  });
+
+  it("PATCH /attendees/:id/managed sends organisers the stored before-and-after attendee changes", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      quantity: 4,
+      managementToken: "mgmt-101",
+      orderReference: "SWP27-12345",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 101,
+      isLead: false,
+      seatIndex: 2,
+      firstName: "Alice",
+      lastName: "Smith",
+      jobTitle: "Head of People",
+      company: "Acme",
+      workEmail: "alice@acme.test",
+      phone: "+44 7000 000 001",
+      dietaryAccessibility: "Vegetarian",
+      gdprConsent: true,
+      isTbc: false,
+    });
+
+    const res = await fetch(`${baseUrl}/attendees/202/managed`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        managementToken: "mgmt-101",
+        firstName: "Alicia",
+        lastName: "Smith",
+        jobTitle: "Chief People Officer",
+        company: "Acme",
+        workEmail: "alicia@acme.test",
+        phone: "+44 7000 000 002",
+        dietaryAccessibility: "Vegan and step-free access",
+        gdprConsent: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(sendWelcomeEmailMock).toHaveBeenCalledWith(101, "Alicia", "alicia@acme.test");
+      expect(sendAttendeeChangeNotificationMock).toHaveBeenCalledTimes(1);
+    });
+
+    const [bookingId, attendeeId, changeSet] = sendAttendeeChangeNotificationMock.mock.calls[0];
+    expect(bookingId).toBe(101);
+    expect(attendeeId).toBe(202);
+    expect(changeSet.previous).toMatchObject({
+      firstName: "Alice",
+      jobTitle: "Head of People",
+      workEmail: "alice@acme.test",
+      seatIndex: 2,
+    });
+    expect(changeSet.current).toMatchObject({
+      firstName: "Alicia",
+      jobTitle: "Chief People Officer",
+      workEmail: "alicia@acme.test",
+      seatIndex: 2,
+    });
+    expect(changeSet.changes.map((change: { field: string }) => change.field)).toEqual([
+      "firstName",
+      "jobTitle",
+      "workEmail",
+      "phone",
+      "dietaryAccessibility",
+    ]);
+
+    expect(activityRows()[0]?.type).toBe("attendee_change");
+    expect(activityRows()[0]?.attendeeId).toBe(202);
+  });
+
+  it("PATCH /attendees/:id/managed does not notify organisers when stored values are unchanged", async () => {
+    seedBooking({
+      id: 101,
+      status: "invoiced",
+      managementToken: "mgmt-101",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 101,
+      isLead: false,
+      seatIndex: 1,
+      firstName: "Ben",
+      lastName: "Jones",
+      jobTitle: "People Director",
+      company: "Example Ltd",
+      workEmail: "ben@example.test",
+      phone: null,
+      dietaryAccessibility: null,
+      gdprConsent: true,
+      isTbc: false,
+    });
+
+    const res = await fetch(`${baseUrl}/attendees/202/managed`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        managementToken: "mgmt-101",
+        firstName: "Ben",
+        lastName: "Jones",
+        jobTitle: "People Director",
+        company: "Example Ltd",
+        workEmail: "ben@example.test",
+        phone: "",
+        dietaryAccessibility: "",
+        gdprConsent: true,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(sendWelcomeEmailMock).toHaveBeenCalledWith(101, "Ben", "ben@example.test");
+      expect(activityRows()[0]?.type).toBe("attendee_change");
+    });
+    expect(sendAttendeeChangeNotificationMock).not.toHaveBeenCalled();
   });
 });

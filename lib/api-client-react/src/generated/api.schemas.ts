@@ -137,6 +137,7 @@ export interface Booking {
   invoiceBadgeStatus?: BookingInvoiceBadgeStatus;
   confirmationEmailSent?: boolean;
   welcomeEmailsSent?: boolean;
+  communitySocialEmailSent?: boolean;
   organiserNotified?: boolean;
   sheetsSynced?: boolean;
   needsAttention?: boolean;
@@ -665,6 +666,7 @@ export const EmailLogType = {
   receipt: "receipt",
   welcome: "welcome",
   invoice: "invoice",
+  community_social: "community_social",
   test: "test",
 } as const;
 
@@ -747,6 +749,8 @@ export interface RegistrationSummary {
   confirmationEmailSent?: boolean;
   /** True once welcome emails have been sent to all attendees. */
   welcomeEmailsSent?: boolean;
+  /** True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking. */
+  communitySocialEmailSent?: boolean;
   /** True once the organiser has been notified of this booking. */
   organiserNotified?: boolean;
   /** True once this booking has been synced to the Google Sheet. */
@@ -766,6 +770,26 @@ export type RegistrationRedeliveryResultRedelivery = {
 
 export type RegistrationRedeliveryResult = Booking & {
   redelivery: RegistrationRedeliveryResultRedelivery;
+};
+
+export type RegistrationEmailResendResultResendType =
+  (typeof RegistrationEmailResendResultResendType)[keyof typeof RegistrationEmailResendResultResendType];
+
+export const RegistrationEmailResendResultResendType = {
+  confirmation: "confirmation",
+  welcome: "welcome",
+  community_social: "community_social",
+} as const;
+
+export type RegistrationEmailResendResultResend = {
+  type: RegistrationEmailResendResultResendType;
+  sent: boolean;
+  recipients: string[];
+  failedRecipients: string[];
+};
+
+export type RegistrationEmailResendResult = Booking & {
+  resend: RegistrationEmailResendResultResend;
 };
 
 export interface RegistrationList {

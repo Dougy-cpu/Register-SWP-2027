@@ -53,6 +53,7 @@ import type {
   PromoCode,
   PromoCodeValidationResult,
   PublicEventSettings,
+  RegistrationEmailResendResult,
   RegistrationList,
   RegistrationRedeliveryResult,
   StripeSessionResponse,
@@ -1970,6 +1971,247 @@ export const useSendTestWelcomeEmail = <
 };
 
 /**
+ * @summary Get the Community Social email template
+ */
+export const getGetCommunitySocialEmailTemplateUrl = () => {
+  return `/api/email-templates/community_social`;
+};
+
+export const getCommunitySocialEmailTemplate = async (
+  options?: RequestInit,
+): Promise<EmailTemplate> => {
+  return customFetch<EmailTemplate>(getGetCommunitySocialEmailTemplateUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCommunitySocialEmailTemplateQueryKey = () => {
+  return [`/api/email-templates/community_social`] as const;
+};
+
+export const getGetCommunitySocialEmailTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCommunitySocialEmailTemplateQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>> = ({
+    signal,
+  }) => getCommunitySocialEmailTemplate({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCommunitySocialEmailTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>
+>;
+export type GetCommunitySocialEmailTemplateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the Community Social email template
+ */
+
+export function useGetCommunitySocialEmailTemplate<
+  TData = Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCommunitySocialEmailTemplateQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update the Community Social email template
+ */
+export const getUpdateCommunitySocialEmailTemplateUrl = () => {
+  return `/api/email-templates/community_social`;
+};
+
+export const updateCommunitySocialEmailTemplate = async (
+  updateEmailTemplateBody: UpdateEmailTemplateBody,
+  options?: RequestInit,
+): Promise<EmailTemplate> => {
+  return customFetch<EmailTemplate>(getUpdateCommunitySocialEmailTemplateUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateEmailTemplateBody),
+  });
+};
+
+export const getUpdateCommunitySocialEmailTemplateMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
+    TError,
+    { data: BodyType<UpdateEmailTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
+  TError,
+  { data: BodyType<UpdateEmailTemplateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateCommunitySocialEmailTemplate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
+    { data: BodyType<UpdateEmailTemplateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateCommunitySocialEmailTemplate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCommunitySocialEmailTemplateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>
+>;
+export type UpdateCommunitySocialEmailTemplateMutationBody = BodyType<UpdateEmailTemplateBody>;
+export type UpdateCommunitySocialEmailTemplateMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update the Community Social email template
+ */
+export const useUpdateCommunitySocialEmailTemplate = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
+    TError,
+    { data: BodyType<UpdateEmailTemplateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
+  TError,
+  { data: BodyType<UpdateEmailTemplateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateCommunitySocialEmailTemplateMutationOptions(options));
+};
+
+/**
+ * @summary Send a test Community Social email
+ */
+export const getSendTestCommunitySocialEmailUrl = () => {
+  return `/api/email-templates/community_social/test-send`;
+};
+
+export const sendTestCommunitySocialEmail = async (
+  testEmailBody: TestEmailBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getSendTestCommunitySocialEmailUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(testEmailBody),
+  });
+};
+
+export const getSendTestCommunitySocialEmailMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
+    TError,
+    { data: BodyType<TestEmailBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
+  TError,
+  { data: BodyType<TestEmailBody> },
+  TContext
+> => {
+  const mutationKey = ["sendTestCommunitySocialEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
+    { data: BodyType<TestEmailBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return sendTestCommunitySocialEmail(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendTestCommunitySocialEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>
+>;
+export type SendTestCommunitySocialEmailMutationBody = BodyType<TestEmailBody>;
+export type SendTestCommunitySocialEmailMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Send a test Community Social email
+ */
+export const useSendTestCommunitySocialEmail = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
+    TError,
+    { data: BodyType<TestEmailBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
+  TError,
+  { data: BodyType<TestEmailBody> },
+  TContext
+> => {
+  return useMutation(getSendTestCommunitySocialEmailMutationOptions(options));
+};
+
+/**
  * @summary List all email logs (admin)
  */
 export const getListEmailLogsUrl = (params?: ListEmailLogsParams) => {
@@ -2694,6 +2936,265 @@ export const useRedeliverRegistration = <
   TContext
 > => {
   return useMutation(getRedeliverRegistrationMutationOptions(options));
+};
+
+/**
+ * Sends a fresh confirmation and receipt email for a paid or invoiced
+booking. This does not run organiser notification or Sheets sync.
+
+ * @summary Resend the customer confirmation email (admin)
+ */
+export const getResendRegistrationConfirmationEmailUrl = (id: number) => {
+  return `/api/admin/registrations/${id}/resend-confirmation-email`;
+};
+
+export const resendRegistrationConfirmationEmail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<RegistrationEmailResendResult> => {
+  return customFetch<RegistrationEmailResendResult>(getResendRegistrationConfirmationEmailUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResendRegistrationConfirmationEmailMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resendRegistrationConfirmationEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resendRegistrationConfirmationEmail(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendRegistrationConfirmationEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>
+>;
+
+export type ResendRegistrationConfirmationEmailMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resend the customer confirmation email (admin)
+ */
+export const useResendRegistrationConfirmationEmail = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendRegistrationConfirmationEmail>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResendRegistrationConfirmationEmailMutationOptions(options));
+};
+
+/**
+ * Sends fresh welcome emails to every non-TBC attendee on a paid or
+invoiced booking. This does not run organiser notification or Sheets sync.
+
+ * @summary Resend attendee welcome emails (admin)
+ */
+export const getResendRegistrationWelcomeEmailsUrl = (id: number) => {
+  return `/api/admin/registrations/${id}/resend-welcome-emails`;
+};
+
+export const resendRegistrationWelcomeEmails = async (
+  id: number,
+  options?: RequestInit,
+): Promise<RegistrationEmailResendResult> => {
+  return customFetch<RegistrationEmailResendResult>(getResendRegistrationWelcomeEmailsUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResendRegistrationWelcomeEmailsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resendRegistrationWelcomeEmails"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resendRegistrationWelcomeEmails(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendRegistrationWelcomeEmailsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>
+>;
+
+export type ResendRegistrationWelcomeEmailsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resend attendee welcome emails (admin)
+ */
+export const useResendRegistrationWelcomeEmails = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendRegistrationWelcomeEmails>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResendRegistrationWelcomeEmailsMutationOptions(options));
+};
+
+/**
+ * Manually sends the Community Social email to every non-TBC attendee on
+a paid or invoiced booking. This endpoint is not part of automatic
+booking confirmation, redelivery, organiser notification or Sheets sync.
+
+ * @summary Send the Community Social email to attendees (admin)
+ */
+export const getSendRegistrationCommunitySocialEmailUrl = (id: number) => {
+  return `/api/admin/registrations/${id}/send-community-social-email`;
+};
+
+export const sendRegistrationCommunitySocialEmail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<RegistrationEmailResendResult> => {
+  return customFetch<RegistrationEmailResendResult>(
+    getSendRegistrationCommunitySocialEmailUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getSendRegistrationCommunitySocialEmailMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["sendRegistrationCommunitySocialEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return sendRegistrationCommunitySocialEmail(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendRegistrationCommunitySocialEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>
+>;
+
+export type SendRegistrationCommunitySocialEmailMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Send the Community Social email to attendees (admin)
+ */
+export const useSendRegistrationCommunitySocialEmail = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getSendRegistrationCommunitySocialEmailMutationOptions(options));
 };
 
 /**

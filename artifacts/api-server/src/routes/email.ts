@@ -2,7 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { emailTemplatesTable, emailLogsTable, eventSettingsTable } from "@workspace/db";
-import { getEventSettings, DEFAULT_INVOICE_HELP_CONTENT } from "../lib/email";
+import {
+  getEventSettings,
+  DEFAULT_INVOICE_HELP_CONTENT,
+  getCommunitySocialTemplateVars,
+} from "../lib/email";
 import { DEFAULT_REF_PREFIX, DEFAULT_REF_OFFSET } from "../lib/order-reference";
 import { adminAuth } from "../middleware/admin-auth";
 import { logAdminAction } from "../lib/audit";
@@ -237,7 +241,19 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
 // hitting the endpoint with a valid `type`. Now we either return the
 // persisted row or, if absent, the in-memory default - the row is only
 // created when an admin explicitly saves via PUT.
-const TEMPLATE_DEFAULTS: Record<string, { subject: string; htmlBody: string }> = {
+const EDITABLE_TEMPLATE_TYPES = [
+  "welcome",
+  "confirmation",
+  "invoice_reminder",
+  "community_social",
+] as const;
+type EditableTemplateType = (typeof EDITABLE_TEMPLATE_TYPES)[number];
+
+function isEditableTemplateType(value: string): value is EditableTemplateType {
+  return EDITABLE_TEMPLATE_TYPES.includes(value as EditableTemplateType);
+}
+
+const TEMPLATE_DEFAULTS: Record<EditableTemplateType, { subject: string; htmlBody: string }> = {
   welcome: {
     subject: "Welcome to SWP Summit 2027!",
     htmlBody:
@@ -253,11 +269,30 @@ const TEMPLATE_DEFAULTS: Record<string, { subject: string; htmlBody: string }> =
     htmlBody:
       '<p>Dear {{recipientName}},</p><p>This is a friendly reminder that invoice <strong>{{orderReference}}</strong> for your registration to the <strong>SWP Summit 2027</strong> is due on <strong>{{dueDate}}</strong>.</p><p>Please arrange payment at your earliest convenience using the bank transfer details below. A copy of the invoice PDF is attached for your reference.</p>{{payOnlineButton}}<p>If you have already arranged payment, please disregard this email. For any queries, please contact <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>',
   },
+  community_social: {
+    subject: "{{socialName}} invitation - {{eventName}}",
+    htmlBody: `<h2>You're invited to the Community Social</h2>
+<p>Hi {{firstName}},</p>
+<p>We'd like to invite you to <strong>{{socialName}}</strong>, connected with {{eventName}}.</p>
+<div class="info-box">
+  <strong>{{socialName}}</strong><br>
+  <strong>Date:</strong> {{socialDate}}<br>
+  <strong>Time:</strong> {{socialTime}}<br>
+  <strong>Venue:</strong> {{socialVenue}}
+</div>
+<p>{{socialDescription}}</p>
+{{socialCalendarLinks}}
+<p style="text-align:center;margin:28px 0;">
+  <a href="{{socialDetailsUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Visit the SWP Summit website</a>
+</p>
+<p><a href="{{socialMapUrl}}">View the venue on Google Maps</a></p>
+<p>Best,<br><strong>The SWP Summit Team</strong></p>`,
+  },
 };
 
 router.get("/email-templates/:type", adminAuth, async (req, res): Promise<void> => {
-  const type = req.params.type as "welcome" | "confirmation" | "invoice_reminder";
-  if (!["welcome", "confirmation", "invoice_reminder"].includes(type)) {
+  const type = String(req.params.type);
+  if (!isEditableTemplateType(type)) {
     res.status(400).json({ error: "Invalid template type" });
     return;
   }
@@ -290,8 +325,8 @@ router.get("/email-templates/:type", adminAuth, async (req, res): Promise<void> 
 });
 
 router.put("/email-templates/:type", adminAuth, async (req, res): Promise<void> => {
-  const type = req.params.type as "welcome" | "confirmation" | "invoice_reminder";
-  if (!["welcome", "confirmation", "invoice_reminder"].includes(type)) {
+  const type = String(req.params.type);
+  if (!isEditableTemplateType(type)) {
     res.status(400).json({ error: "Invalid template type" });
     return;
   }
@@ -339,7 +374,7 @@ router.put("/email-templates/:type", adminAuth, async (req, res): Promise<void> 
 // exactly what recipients would. Shared by /preview and /test-send so the
 // two stay in lockstep.
 async function buildSampleVars(
-  type: "welcome" | "confirmation" | "invoice_reminder",
+  type: EditableTemplateType,
   toName: string | undefined,
   toEmail: string,
 ): Promise<{ vars: Record<string, string>; subjectVars: Record<string, string> }> {
@@ -438,19 +473,33 @@ async function buildSampleVars(
   vars["{{socialGoogleCalendarUrl}}"] = calPh.socialGoogleCalendarUrl;
   vars["{{socialOutlookCalendarUrl}}"] = calPh.socialOutlookCalendarUrl;
   vars["{{socialIcsCalendarUrl}}"] = calPh.socialIcsCalendarUrl;
+  if (type === "community_social") {
+    Object.assign(
+      vars,
+      getCommunitySocialTemplateVars(settings, toName?.split(" ")[0] || toName || "Test"),
+    );
+  }
 
   const subjectVars: Record<string, string> = {
     "{{orderReference}}": "SWP27-TEST-001",
     "{{recipientName}}": toName || "Test User",
     "{{firstName}}": toName?.split(" ")[0] || "Test",
+    "{{eventName}}": settings.eventName || "SWP Summit",
+    "{{socialName}}":
+      settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
   };
 
   return { vars, subjectVars };
 }
 
 router.post("/email-templates/:type/test-send", adminAuth, async (req, res): Promise<void> => {
-  const type = req.params.type as "welcome" | "confirmation" | "invoice_reminder";
+  const type = String(req.params.type);
   const { toEmail, toName } = req.body;
+
+  if (!isEditableTemplateType(type)) {
+    res.status(400).json({ error: "Invalid template type" });
+    return;
+  }
 
   if (!toEmail) {
     res.status(400).json({ error: "toEmail is required" });
@@ -505,8 +554,8 @@ router.post("/email-templates/:type/test-send", adminAuth, async (req, res): Pro
 // branded layout + sample-variable substitution that test-sends use, so the
 // admin sees exactly what recipients will see.
 router.post("/email-templates/:type/preview", adminAuth, async (req, res): Promise<void> => {
-  const type = req.params.type as "welcome" | "confirmation" | "invoice_reminder";
-  if (!["welcome", "confirmation", "invoice_reminder"].includes(type)) {
+  const type = String(req.params.type);
+  if (!isEditableTemplateType(type)) {
     res.status(400).json({ error: "Invalid template type" });
     return;
   }
