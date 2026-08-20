@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./adminAttendee";
+export * from "./adminBookingWithAttendees";
 export * from "./adminLoginBody";
 export * from "./adminLoginResponse";
 export * from "./adminRegistrationStatusAction";
@@ -61,6 +63,9 @@ export * from "./listUnpaidInvoicesBucket";
 export * from "./listUnpaidInvoicesOrder";
 export * from "./listUnpaidInvoicesParams";
 export * from "./listUnpaidInvoicesSort";
+export * from "./manualRegistrationBody";
+export * from "./manualRegistrationBodyPassType";
+export * from "./manualRegistrationBodyStatus";
 export * from "./pricingBreakdown";
 export * from "./pricingBreakdownPromoDiscountType";
 export * from "./pricingRequest";

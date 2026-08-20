@@ -295,6 +295,7 @@ export default function CheckoutFlow() {
         vatAmount: 0,
         totalAmount: 0,
         paymentMethod: null,
+        manualEntry: false,
         currentStep: 2,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

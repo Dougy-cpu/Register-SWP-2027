@@ -940,6 +940,7 @@ paths:
         - name: search
           in: query
           required: false
+          description: Case-insensitive search across attendee name, email, company, job title, organiser notes, booking reference and applied promo code.
           schema:
             type: string
         - name: needsAttention
@@ -966,6 +967,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RegistrationList"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createManualRegistration
+      tags: [admin]
+      summary: Add a direct-invoice delegate manually (admin)
+      description: |
+        Creates a one-person registration without running the public checkout,
+        creating a Stripe invoice, or sending automatic emails. Current pass
+        pricing and VAT are recorded, and the entry is labelled as manual.
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualRegistrationBody"
+      responses:
+        "201":
+          description: Manual registration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookingWithAttendees"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -1245,7 +1281,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookingWithAttendees"
+                $ref: "#/components/schemas/AdminBookingWithAttendees"
         "404":
           description: Not found
           content:
@@ -1407,7 +1443,8 @@ components:
           type: string
         status:
           type: string
-          enum: [partial, pending_payment, paid, invoiced, cancelled, refunded, disputed]
+          enum:
+            [partial, pending_payment, paid, invoiced, transferred, cancelled, refunded, disputed]
         passType:
           type: string
           enum: [single, business]
@@ -1431,6 +1468,8 @@ components:
         paymentMethod:
           type: ["string", "null"]
           enum: ["card", "invoice", null]
+        manualEntry:
+          type: boolean
         stripeSessionId:
           type: ["string", "null"]
         stripePaymentIntentId:
@@ -1515,6 +1554,7 @@ components:
         - subtotalAmount
         - vatAmount
         - totalAmount
+        - manualEntry
         - currentStep
         - createdAt
         - updatedAt
@@ -1531,12 +1571,25 @@ components:
           required:
             - attendees
 
+    AdminBookingWithAttendees:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            attendees:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminAttendee"
+          required:
+            - attendees
+
     AdminRegistrationStatusUpdateBody:
       type: object
       properties:
         status:
           type: string
-          enum: [paid, invoiced, partial, pending_payment, cancelled, refunded, disputed]
+          enum:
+            [paid, invoiced, transferred, partial, pending_payment, cancelled, refunded, disputed]
       required:
         - status
 
@@ -1570,6 +1623,46 @@ components:
       required:
         - error
         - stripeAction
+
+    ManualRegistrationBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+        jobTitle:
+          type: string
+          minLength: 1
+        company:
+          type: string
+          minLength: 1
+        workEmail:
+          type: string
+          format: email
+        phone:
+          type: ["string", "null"]
+        dietaryAccessibility:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+          maxLength: 4000
+        passType:
+          type: string
+          enum: [single, business]
+          default: single
+        status:
+          type: string
+          enum: [invoiced, paid]
+          default: invoiced
+      required:
+        - firstName
+        - lastName
+        - jobTitle
+        - company
+        - workEmail
 
     CreateBookingBody:
       type: object
@@ -1641,7 +1734,8 @@ components:
           format: date-time
         status:
           type: string
-          enum: [partial, pending_payment, paid, invoiced, cancelled, disputed]
+          enum:
+            [partial, pending_payment, paid, invoiced, transferred, cancelled, refunded, disputed]
         stripeInvoiceId:
           type: ["string", "null"]
         stripeInvoicePdfUrl:
@@ -1702,6 +1796,15 @@ components:
         - createdAt
         - updatedAt
 
+    AdminAttendee:
+      allOf:
+        - $ref: "#/components/schemas/Attendee"
+        - type: object
+          properties:
+            notes:
+              type: ["string", "null"]
+              description: Organiser-only notes. Never returned through public attendee endpoints.
+
     CreateAttendeeBody:
       type: object
       properties:
@@ -1751,6 +1854,10 @@ components:
           type: ["string", "null"]
         gdprConsent:
           type: boolean
+        notes:
+          type: ["string", "null"]
+          maxLength: 4000
+          description: Organiser-only notes. Ignored unless the request is authenticated as an admin.
 
     # ==================== PRICING SCHEMAS ====================
     PricingRequest:
@@ -2235,6 +2342,8 @@ components:
           type: number
         paymentMethod:
           type: ["string", "null"]
+        manualEntry:
+          type: boolean
         leadName:
           type: ["string", "null"]
         leadEmail:
@@ -2289,6 +2398,7 @@ components:
         - attendeeType
         - quantity
         - totalAmount
+        - manualEntry
         - currentStep
         - createdAt
         - updatedAt

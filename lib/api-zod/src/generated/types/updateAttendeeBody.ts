@@ -18,4 +18,10 @@ export interface UpdateAttendeeBody {
   /** @nullable */
   dietaryAccessibility?: string | null;
   gdprConsent?: boolean;
+  /**
+   * Organiser-only notes. Ignored unless the request is authenticated as an admin.
+   * @maxLength 4000
+   * @nullable
+   */
+  notes?: string | null;
 }

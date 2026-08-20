@@ -478,6 +478,7 @@ function seedBooking(over: Partial<Record<string, unknown>> = {}): Record<string
     vatAmount: "39.80",
     totalAmount: "238.80",
     paymentMethod: null,
+    manualEntry: false,
     stripeInvoiceId: null,
     stripePaymentIntentId: null,
     stripeInvoiceStatus: null,
@@ -518,6 +519,7 @@ function seedAttendee(over: Partial<Record<string, unknown>> = {}): Record<strin
     workEmail: "alice@acme.test",
     phone: null,
     dietaryAccessibility: null,
+    notes: null,
     isTbc: false,
     gdprConsent: true,
     gdprConsentAt: new Date(),
@@ -570,6 +572,60 @@ describe("admin audit trail — integration", () => {
     expect(data.failures).toBe(1);
   });
 
+  it("GET /admin/registrations searches company, job title, organiser notes and promo code case-insensitively", async () => {
+    seedBooking({
+      id: 101,
+      orderReference: "SWP-SEARCH-1",
+      promoCode: "VIPTEAM",
+    });
+    seedAttendee({
+      id: 201,
+      bookingId: 101,
+      firstName: "Alex",
+      lastName: "Taylor",
+      workEmail: "alex@example.test",
+      company: "Northwind Foods",
+      jobTitle: "Director of Workforce Strategy",
+      notes: "Transferred from HRAS 2026",
+    });
+    seedBooking({
+      id: 102,
+      orderReference: "SWP-SEARCH-2",
+      promoCode: "EARLYBIRD",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 102,
+      firstName: "Morgan",
+      lastName: "Jones",
+      workEmail: "morgan@example.test",
+      company: "Contoso Retail",
+      jobTitle: "HR Manager",
+    });
+
+    for (const query of [
+      "northwind",
+      "workforce strategy",
+      "transferred from hras",
+      "  vipteam  ",
+    ]) {
+      const res = await fetch(
+        `${baseUrl}/admin/registrations?search=${encodeURIComponent(query)}`,
+        { headers: { "x-admin-token": adminToken } },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        total: number;
+        registrations: Array<{ id: number }>;
+      };
+      expect(body.total, query).toBe(1);
+      expect(
+        body.registrations.map((registration) => registration.id),
+        query,
+      ).toEqual([101]);
+    }
+  });
+
   it("PATCH /admin/registrations/:id/status records a status change with before/after diff", async () => {
     seedBooking({ id: 101, status: "partial", orderReference: "SWP-12345" });
 
@@ -601,6 +657,88 @@ describe("admin audit trail — integration", () => {
     // against the audit row being written from stale data.
     const booking = getRows({ _name: "bookingsTable" })[0];
     expect(booking.status).toBe("paid");
+  });
+
+  it("POST /admin/registrations creates a labelled direct-invoice delegate without Stripe side-effects", async () => {
+    const res = await fetch(`${baseUrl}/admin/registrations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({
+        firstName: "Jane",
+        lastName: "Invoice",
+        jobTitle: "People Director",
+        company: "Example Ltd",
+        workEmail: "Jane.Invoice@Example.test",
+        phone: "+44 7700 900000",
+        notes: "Invoice requested directly from the organiser",
+        passType: "single",
+        status: "invoiced",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.manualEntry).toBe(true);
+    expect(body.status).toBe("invoiced");
+    expect(body.paymentMethod).toBe("invoice");
+    expect(body.orderReference).toBe("SWP27-6542");
+    expect(body.stripeInvoiceId).toBeUndefined();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.manualEntry).toBe(true);
+    expect(booking.status).toBe("invoiced");
+    expect(booking.invoiceDueDate).toBeInstanceOf(Date);
+    expect(booking.totalAmount).toBe("298.80");
+
+    const attendee = getRows({ _name: "attendeesTable" })[0];
+    expect(attendee.firstName).toBe("Jane");
+    expect(attendee.workEmail).toBe("jane.invoice@example.test");
+    expect(attendee.notes).toBe("Invoice requested directly from the organiser");
+
+    expect(stripeMock.invoices.pay).not.toHaveBeenCalled();
+    expect(stripeMock.invoices.voidInvoice).not.toHaveBeenCalled();
+    expect(stripeMock.refunds.create).not.toHaveBeenCalled();
+
+    const [audit] = activityRows();
+    expect(audit.type).toBe("admin_attendee_added");
+    const auditData = audit.data as Record<string, unknown>;
+    expect(auditData.summary).toContain("manually added delegate Jane Invoice");
+  });
+
+  it("PATCH /admin/registrations/:id/status marks a booking transferred without changing Stripe", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      paymentMethod: "card",
+      stripePaymentIntentId: "pi_transfer",
+      paidAt: new Date(),
+      orderReference: "SWP-12345",
+    });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ status: "transferred" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.status).toBe("transferred");
+    expect(body.stripeAction).toBe("skipped");
+    expect(stripeMock.refunds.create).not.toHaveBeenCalled();
+    expect(stripeMock.invoices.voidInvoice).not.toHaveBeenCalled();
+
+    const booking = getRows({ _name: "bookingsTable" })[0];
+    expect(booking.status).toBe("transferred");
+    expect(booking.stripePaymentIntentId).toBe("pi_transfer");
+    const auditData = activityRows()[0].data as Record<string, unknown>;
+    expect(auditData.summary).toBe("Booking SWP-12345: paid → transferred");
   });
 
   it("PATCH /admin/registrations/:id/status marks an open Stripe invoice paid out of band before syncing local status", async () => {
@@ -1065,6 +1203,7 @@ describe("admin audit trail — integration", () => {
       firstName: "Alice",
       lastName: "Smith",
       workEmail: "alice@acme.test",
+      notes: "Transferred to HR Analytics Summit 2027",
       isTbc: false,
     });
 
@@ -1080,10 +1219,13 @@ describe("admin audit trail — integration", () => {
         jobTitle: "Head of People",
         company: "Acme",
         workEmail: "alicia@acme.test",
+        notes: "Transferred to HR Analytics Summit 2027",
         gdprConsent: true,
       }),
     });
     expect(res.status).toBe(200);
+    const responseBody = (await res.json()) as Record<string, unknown>;
+    expect(responseBody).not.toHaveProperty("notes");
 
     const rows = activityRows();
     expect(rows).toHaveLength(1);
@@ -1104,6 +1246,7 @@ describe("admin audit trail — integration", () => {
     expect(after.firstName).toBe("***(6)"); // "Alicia"
     expect(before.workEmail).toMatch(/^\*\*\*\(/);
     expect(after.workEmail).toMatch(/^\*\*\*\(/);
+    expect(after.notes).toMatch(/^\*\*\*\(/);
     expect(before.isTbc).toBe(false);
     expect(after.isTbc).toBe(false);
 
@@ -1116,7 +1259,89 @@ describe("admin audit trail — integration", () => {
     const attendee = getRows({ _name: "attendeesTable" })[0];
     expect(attendee.firstName).toBe("Alicia");
     expect(attendee.workEmail).toBe("alicia@acme.test");
+    expect(attendee.notes).toBe("Transferred to HR Analytics Summit 2027");
     expect(sendAttendeeChangeNotificationMock).not.toHaveBeenCalled();
+
+    const detailRes = await fetch(`${baseUrl}/admin/registrations/101`, {
+      headers: { "x-admin-token": adminToken },
+    });
+    expect(detailRes.status).toBe(200);
+    const detail = (await detailRes.json()) as {
+      attendees: Array<{ notes?: string | null }>;
+    };
+    expect(detail.attendees[0]?.notes).toBe("Transferred to HR Analytics Summit 2027");
+  });
+
+  it("PATCH /bookings/:bookingId/attendees/:attendeeId clears organiser notes with null", async () => {
+    seedBooking({ id: 101, sessionToken: "sess-101" });
+    seedAttendee({ id: 201, bookingId: 101, notes: "Move to another event" });
+
+    const res = await fetch(`${baseUrl}/bookings/101/attendees/201`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": adminToken,
+      },
+      body: JSON.stringify({ notes: null }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(getRows({ _name: "attendeesTable" })[0].notes).toBeNull();
+
+    const detailRes = await fetch(`${baseUrl}/admin/registrations/101`, {
+      headers: { "x-admin-token": adminToken },
+    });
+    expect(detailRes.status).toBe(200);
+    const detail = (await detailRes.json()) as {
+      attendees: Array<{ notes?: string | null }>;
+    };
+    expect(detail.attendees[0]?.notes).toBeNull();
+  });
+
+  it("non-admin attendee create and update requests cannot change organiser notes", async () => {
+    seedBooking({ id: 101, sessionToken: "sess-101" });
+    seedAttendee({
+      id: 201,
+      bookingId: 101,
+      notes: "Internal organiser context",
+    });
+
+    const patchRes = await fetch(`${baseUrl}/bookings/101/attendees/201`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-booking-session": "sess-101",
+      },
+      body: JSON.stringify({
+        phone: "+44 7700 900123",
+        notes: "Attempted public overwrite",
+      }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect((await patchRes.json()) as Record<string, unknown>).not.toHaveProperty("notes");
+    expect(getRows({ _name: "attendeesTable" })[0].notes).toBe("Internal organiser context");
+
+    const upsertRes = await fetch(`${baseUrl}/bookings/101/attendees`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-booking-session": "sess-101",
+      },
+      body: JSON.stringify({
+        isLead: true,
+        seatIndex: 0,
+        firstName: "Alice",
+        lastName: "Smith",
+        jobTitle: "Head of People",
+        company: "Acme",
+        workEmail: "alice@acme.test",
+        gdprConsent: true,
+        notes: "Second attempted public overwrite",
+      }),
+    });
+    expect(upsertRes.status).toBe(200);
+    expect((await upsertRes.json()) as Record<string, unknown>).not.toHaveProperty("notes");
+    expect(getRows({ _name: "attendeesTable" })[0].notes).toBe("Internal organiser context");
   });
 
   it("PATCH /attendees/:id/managed sends organisers the stored before-and-after attendee changes", async () => {

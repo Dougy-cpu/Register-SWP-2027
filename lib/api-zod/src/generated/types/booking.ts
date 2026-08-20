@@ -29,6 +29,7 @@ export interface Booking {
   totalAmount: number;
   /** @nullable */
   paymentMethod?: BookingPaymentMethod;
+  manualEntry: boolean;
   /** @nullable */
   stripeSessionId?: string | null;
   /** @nullable */

@@ -12,6 +12,7 @@ export type AdminRegistrationStatusUpdateBodyStatus =
 export const AdminRegistrationStatusUpdateBodyStatus = {
   paid: "paid",
   invoiced: "invoiced",
+  transferred: "transferred",
   partial: "partial",
   pending_payment: "pending_payment",
   cancelled: "cancelled",

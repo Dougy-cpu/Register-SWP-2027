@@ -13,6 +13,7 @@ export const BookingStatus = {
   pending_payment: "pending_payment",
   paid: "paid",
   invoiced: "invoiced",
+  transferred: "transferred",
   cancelled: "cancelled",
   refunded: "refunded",
   disputed: "disputed",

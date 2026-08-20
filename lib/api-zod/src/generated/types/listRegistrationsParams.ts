@@ -10,6 +10,9 @@ import type { ListRegistrationsNeedsAttention } from "./listRegistrationsNeedsAt
 export type ListRegistrationsParams = {
   status?: string;
   passType?: string;
+  /**
+   * Case-insensitive search across attendee name, email, company, job title, organiser notes, booking reference and applied promo code.
+   */
   search?: string;
   /**
    * When true, only return confirmed (paid or invoiced) bookings with at least one undelivered confirmation side-effect.

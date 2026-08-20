@@ -18,6 +18,7 @@ export interface RegistrationSummary {
   totalAmount: number;
   /** @nullable */
   paymentMethod?: string | null;
+  manualEntry: boolean;
   /** @nullable */
   leadName?: string | null;
   /** @nullable */

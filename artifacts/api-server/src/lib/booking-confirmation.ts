@@ -108,13 +108,17 @@ export async function runConfirmationSideEffects(
   // refunded, disputed, abandoned-draft, etc.) — we must NOT send
   // welcome emails / organiser notifications / sheet syncs in that case.
   const [current] = await db
-    .select({ status: bookingsTable.status })
+    .select({ status: bookingsTable.status, manualEntry: bookingsTable.manualEntry })
     .from(bookingsTable)
     .where(eq(bookingsTable.id, bookingId));
-  if (!current || (current.status !== "paid" && current.status !== "invoiced")) {
+  if (
+    !current ||
+    current.manualEntry ||
+    (current.status !== "paid" && current.status !== "invoiced")
+  ) {
     logger.info(
       { bookingId, status: current?.status ?? null },
-      "runConfirmationSideEffects: booking not in paid/invoiced state — skipping all side-effects",
+      "runConfirmationSideEffects: booking is manual or not in paid/invoiced state — skipping all side-effects",
     );
     return { ran, skipped: SIDE_EFFECTS.map((s) => s.key), failed };
   }
@@ -179,6 +183,7 @@ export async function runConfirmationSideEffects(
  */
 export const needsAttentionPredicate = and(
   inArray(bookingsTable.status, ["paid", "invoiced"]),
+  eq(bookingsTable.manualEntry, false),
   or(
     eq(bookingsTable.confirmationEmailSent, false),
     eq(bookingsTable.welcomeEmailsSent, false),
@@ -198,7 +203,7 @@ export function deliveryStatusForBooking(b: typeof bookingsTable.$inferSelect): 
   sheetsSynced: boolean;
   needsAttention: boolean;
 } {
-  const isConfirmed = b.status === "paid" || b.status === "invoiced";
+  const isConfirmed = (b.status === "paid" || b.status === "invoiced") && !b.manualEntry;
   const anyMissing =
     !b.confirmationEmailSent || !b.welcomeEmailsSent || !b.organiserNotified || !b.sheetsSynced;
   return {

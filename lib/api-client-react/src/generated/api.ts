@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminBookingWithAttendees,
   AdminLoginBody,
   AdminLoginResponse,
   AdminRegistrationStatusErrorResponse,
@@ -48,6 +49,7 @@ import type {
   ListEmailLogsParams,
   ListRegistrationsParams,
   ListUnpaidInvoicesParams,
+  ManualRegistrationBody,
   PricingBreakdown,
   PricingRequest,
   PromoCode,
@@ -2851,6 +2853,94 @@ export function useListRegistrations<
 }
 
 /**
+ * Creates a one-person registration without running the public checkout,
+creating a Stripe invoice, or sending automatic emails. Current pass
+pricing and VAT are recorded, and the entry is labelled as manual.
+
+ * @summary Add a direct-invoice delegate manually (admin)
+ */
+export const getCreateManualRegistrationUrl = () => {
+  return `/api/admin/registrations`;
+};
+
+export const createManualRegistration = async (
+  manualRegistrationBody: ManualRegistrationBody,
+  options?: RequestInit,
+): Promise<AdminBookingWithAttendees> => {
+  return customFetch<AdminBookingWithAttendees>(getCreateManualRegistrationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(manualRegistrationBody),
+  });
+};
+
+export const getCreateManualRegistrationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createManualRegistration>>,
+    TError,
+    { data: BodyType<ManualRegistrationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createManualRegistration>>,
+  TError,
+  { data: BodyType<ManualRegistrationBody> },
+  TContext
+> => {
+  const mutationKey = ["createManualRegistration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createManualRegistration>>,
+    { data: BodyType<ManualRegistrationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createManualRegistration(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateManualRegistrationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createManualRegistration>>
+>;
+export type CreateManualRegistrationMutationBody = BodyType<ManualRegistrationBody>;
+export type CreateManualRegistrationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Add a direct-invoice delegate manually (admin)
+ */
+export const useCreateManualRegistration = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createManualRegistration>>,
+    TError,
+    { data: BodyType<ManualRegistrationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createManualRegistration>>,
+  TError,
+  { data: BodyType<ManualRegistrationBody> },
+  TContext
+> => {
+  return useMutation(getCreateManualRegistrationMutationOptions(options));
+};
+
+/**
  * Retries the confirmation email, welcome emails, organiser notification,
 and Sheets sync for any flag that is still false on a paid/invoiced booking.
 Each side-effect is gated on its own boolean flag, so already-delivered
@@ -3300,8 +3390,8 @@ export const getGetRegistrationUrl = (id: number) => {
 export const getRegistration = async (
   id: number,
   options?: RequestInit,
-): Promise<BookingWithAttendees> => {
-  return customFetch<BookingWithAttendees>(getGetRegistrationUrl(id), {
+): Promise<AdminBookingWithAttendees> => {
+  return customFetch<AdminBookingWithAttendees>(getGetRegistrationUrl(id), {
     ...options,
     method: "GET",
   });

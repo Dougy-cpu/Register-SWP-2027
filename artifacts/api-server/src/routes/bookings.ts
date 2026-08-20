@@ -89,8 +89,10 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
 }
 
 function formatAttendee(a: typeof attendeesTable.$inferSelect) {
+  const { notes, ...publicAttendee } = a;
+  void notes;
   return {
-    ...a,
+    ...publicAttendee,
     gdprConsentAt: a.gdprConsentAt ? a.gdprConsentAt.toISOString() : null,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),

@@ -38,6 +38,7 @@ const PII_KEYS = new Set([
   "country",
   "company",
   "jobTitle",
+  "notes",
   "vatNumber",
   "poNumber",
   "stripeCustomerId",
