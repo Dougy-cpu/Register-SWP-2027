@@ -572,6 +572,25 @@ describe("admin audit trail — integration", () => {
     expect(data.failures).toBe(1);
   });
 
+  it("GET /admin/stats sums ticket quantities while retaining completed order counts", async () => {
+    seedBooking({ id: 101, status: "paid", passType: "single", quantity: 3 });
+    seedBooking({ id: 102, status: "invoiced", passType: "single", quantity: 2 });
+    seedBooking({ id: 103, status: "paid", passType: "business", quantity: 4 });
+    seedBooking({ id: 104, status: "partial", passType: "single", quantity: 7 });
+
+    const res = await fetch(`${baseUrl}/admin/stats`, {
+      headers: { "x-admin-token": adminToken },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      completedRegistrations: number;
+      passCounts: { single: number; business: number };
+    };
+    expect(body.completedRegistrations).toBe(3);
+    expect(body.passCounts).toEqual({ single: 5, business: 4 });
+  });
+
   it("GET /admin/registrations searches company, job title, organiser notes and promo code case-insensitively", async () => {
     seedBooking({
       id: 101,
