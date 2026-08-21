@@ -806,8 +806,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         Your registration is confirmed when the invoice is issued and emailed.
                       </InvoiceProcessStep>
                       <InvoiceProcessStep icon={Building2} title="Finance-ready details">
-                        Supplier details, bank information, payment instructions and a secure
-                        Stripe payment link are included.
+                        Supplier details, bank information, payment instructions and a secure Stripe
+                        payment link are included.
                       </InvoiceProcessStep>
                       <InvoiceProcessStep icon={Landmark} title="Pay or update later">
                         Add a PO now, or add it later through the secure billing link before

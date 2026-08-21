@@ -271,8 +271,8 @@ export default function Step1Lead({
                               <span className="font-bold text-lg">Commercial attendee</span>
                             </div>
                             <span className="text-sm text-muted-foreground ml-7">
-                              Vendors, consultants, advisory firms, recruiters, technology
-                              providers and commercial service providers.
+                              Vendors, consultants, advisory firms, recruiters, technology providers
+                              and commercial service providers.
                             </span>
                           </label>
                         </FormControl>
