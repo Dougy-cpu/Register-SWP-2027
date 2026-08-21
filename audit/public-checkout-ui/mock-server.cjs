@@ -1,3 +1,5 @@
+// This standalone audit server intentionally runs as CommonJS.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const http = require("http");
 
 const mockPort = Number(process.env.MOCK_PORT || 4173);
@@ -25,8 +27,7 @@ function calculatePricing(body = {}) {
           [8, 15],
           [4, 10],
         ];
-  const groupDiscountPercent =
-    thresholds.find(([minimum]) => quantity >= minimum)?.[1] || 0;
+  const groupDiscountPercent = thresholds.find(([minimum]) => quantity >= minimum)?.[1] || 0;
   const baseSubtotal = pricePerHead * quantity;
   const groupDiscountAmount = (baseSubtotal * groupDiscountPercent) / 100;
   const promoDiscountAmount =
@@ -266,9 +267,7 @@ const server = http.createServer(async (request, response) => {
     const attendeeMatch = path.match(/^\/api\/bookings\/(\d+)\/attendees\/(\d+)$/);
     if (attendeeMatch && method === "PATCH") {
       const booking = findBookingById(attendeeMatch[1]);
-      const attendee = booking.attendees.find(
-        (item) => item.id === Number(attendeeMatch[2]),
-      );
+      const attendee = booking.attendees.find((item) => item.id === Number(attendeeMatch[2]));
       Object.assign(attendee, body, { updatedAt: now() });
       sendJson(response, 200, attendee);
       return;
@@ -337,10 +336,7 @@ const server = http.createServer(async (request, response) => {
             "Networking lunch",
             "Post-event content",
           ],
-          extraBenefits: [
-            "Exclusive attendee report",
-            "Company branding at the summit",
-          ],
+          extraBenefits: ["Exclusive attendee report", "Company branding at the summit"],
         },
       });
       return;

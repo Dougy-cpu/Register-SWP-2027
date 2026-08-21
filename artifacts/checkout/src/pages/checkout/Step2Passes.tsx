@@ -569,7 +569,9 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
   const singleBenefits =
     singleCfg && singleCfg.benefits.length > 0 ? singleCfg.benefits : DEFAULT_SINGLE_BENEFITS;
 
-  const businessCurrentPrice = businessCfg ? parseFloat(businessCfg.currentPrice) : BUSINESS_PASS_PRICE;
+  const businessCurrentPrice = businessCfg
+    ? parseFloat(businessCfg.currentPrice)
+    : BUSINESS_PASS_PRICE;
   const businessOriginalPrice = businessCfg
     ? parseFloat(businessCfg.originalPrice)
     : BUSINESS_PASS_ORIGINAL_PRICE;

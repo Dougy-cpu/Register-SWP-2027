@@ -6,10 +6,7 @@ export default function CheckoutProgress({ currentStep }: { currentStep: number 
   if (currentStep >= 5) return null;
 
   return (
-    <nav
-      aria-label="Checkout progress"
-      className="border-t border-primary/10 bg-white/95"
-    >
+    <nav aria-label="Checkout progress" className="border-t border-primary/10 bg-white/95">
       <div className="mx-auto max-w-4xl px-5 py-3 md:px-6 md:py-4">
         <div className="mb-3 flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground md:hidden">
           <span>
