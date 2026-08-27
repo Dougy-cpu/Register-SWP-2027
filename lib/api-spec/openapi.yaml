@@ -1310,6 +1310,38 @@ paths:
               schema:
                 type: string
 
+  /admin/registrations/export/scheduler:
+    get:
+      operationId: exportSessionSchedulerAttendees
+      tags: [admin]
+      summary: Export eligible attendees for Session Scheduler (admin)
+      description: |
+        Generates a fresh Excel workbook containing every non-TBC attendee
+        attached to a paid or invoiced booking. The worksheet columns are Name,
+        Email, Company and Job Title. This export is independent of the filters
+        on the registrations page.
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Session Scheduler attendee workbook
+          headers:
+            Content-Disposition:
+              description: Download filename for the generated workbook
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /event-settings/public:
     get:
       operationId: getPublicEventSettings

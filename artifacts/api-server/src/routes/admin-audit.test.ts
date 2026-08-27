@@ -17,6 +17,7 @@ process.env.ADMIN_TOKEN_SECRET = "x".repeat(48);
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import express from "express";
+import ExcelJS from "exceljs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -531,6 +532,12 @@ function seedAttendee(over: Partial<Record<string, unknown>> = {}): Record<strin
   return row;
 }
 
+async function readWorkbookResponse(response: Response): Promise<ExcelJS.Workbook> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await response.arrayBuffer());
+  return workbook;
+}
+
 describe("admin audit trail — integration", () => {
   it("POST /admin/login records a admin_login_success row with the IP as actor", async () => {
     const res = await fetch(`${baseUrl}/admin/login`, {
@@ -570,6 +577,144 @@ describe("admin audit trail — integration", () => {
     expect(typeof data.summary).toBe("string");
     expect((data.summary as string).toLowerCase()).toMatch(/failed admin login/);
     expect(data.failures).toBe(1);
+  });
+
+  it("GET /admin/registrations/export/scheduler requires admin authentication", async () => {
+    const res = await fetch(`${baseUrl}/admin/registrations/export/scheduler`);
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /admin/registrations/export/scheduler generates fresh, unfiltered attendee rows", async () => {
+    seedBooking({
+      id: 101,
+      status: "paid",
+      billingCompany: "Billing Company",
+      billingEmail: "billing@example.com",
+    });
+    seedBooking({ id: 102, status: "invoiced" });
+    seedBooking({ id: 103, status: "partial" });
+    seedAttendee({
+      id: 201,
+      bookingId: 101,
+      firstName: "Alice",
+      lastName: "Smith",
+      company: "Acme Ltd",
+      jobTitle: "People Director",
+      workEmail: "alice@example.com",
+    });
+    seedAttendee({
+      id: 202,
+      bookingId: 102,
+      firstName: "Ben",
+      lastName: "Jones",
+      company: "Example Group",
+      jobTitle: "Workforce Planning Lead",
+      workEmail: "ben@example.com",
+    });
+    seedAttendee({
+      id: 203,
+      bookingId: 103,
+      firstName: "Partial",
+      lastName: "Booking",
+      workEmail: "partial@example.com",
+    });
+
+    const firstResponse = await fetch(
+      `${baseUrl}/admin/registrations/export/scheduler?status=cancelled&search=nobody`,
+      { headers: { "x-admin-token": adminToken } },
+    );
+    expect(firstResponse.status).toBe(200);
+    expect(firstResponse.headers.get("cache-control")).toContain("no-store");
+    expect(firstResponse.headers.get("content-disposition")).toMatch(
+      /swp27-session-scheduler-attendees-\d{4}-\d{2}-\d{2}\.xlsx/,
+    );
+
+    const firstWorkbook = await readWorkbookResponse(firstResponse);
+    const firstSheet = firstWorkbook.getWorksheet("Attendees");
+    expect(firstSheet?.actualRowCount).toBe(3);
+    expect(firstSheet?.getRow(2).values).toEqual([
+      undefined,
+      "Alice Smith",
+      "alice@example.com",
+      "Acme Ltd",
+      "People Director",
+    ]);
+    expect(firstSheet?.getRow(3).values).toEqual([
+      undefined,
+      "Ben Jones",
+      "ben@example.com",
+      "Example Group",
+      "Workforce Planning Lead",
+    ]);
+    expect(JSON.stringify(firstSheet?.getSheetValues())).not.toContain("billing@example.com");
+    expect(JSON.stringify(firstSheet?.getSheetValues())).not.toContain("Billing Company");
+
+    seedAttendee({
+      id: 204,
+      bookingId: 101,
+      firstName: "Cara",
+      lastName: "Wilson",
+      company: "New Company",
+      jobTitle: "Strategic Workforce Manager",
+      workEmail: "cara@example.com",
+    });
+
+    const refreshedResponse = await fetch(`${baseUrl}/admin/registrations/export/scheduler`, {
+      headers: { "x-admin-token": adminToken },
+    });
+    const refreshedWorkbook = await readWorkbookResponse(refreshedResponse);
+    const refreshedSheet = refreshedWorkbook.getWorksheet("Attendees");
+    expect(refreshedSheet?.actualRowCount).toBe(4);
+    expect(refreshedSheet?.getRow(4).values).toEqual([
+      undefined,
+      "Cara Wilson",
+      "cara@example.com",
+      "New Company",
+      "Strategic Workforce Manager",
+    ]);
+  });
+
+  it("keeps the existing detailed registrations export contract unchanged", async () => {
+    seedBooking({ id: 101, status: "paid", orderReference: "SWP27-12345" });
+    seedBooking({ id: 102, status: "partial", orderReference: "SWP27-12346" });
+    seedAttendee({ id: 201, bookingId: 101 });
+    seedAttendee({ id: 202, bookingId: 102, workEmail: "partial@example.com" });
+
+    const res = await fetch(`${baseUrl}/admin/registrations/export?status=paid`, {
+      headers: { "x-admin-token": adminToken },
+    });
+    expect(res.status).toBe(200);
+
+    const workbook = await readWorkbookResponse(res);
+    const sheet = workbook.getWorksheet("Registrations");
+    expect(sheet).toBeDefined();
+    expect(sheet?.actualRowCount).toBe(2);
+    expect(Array.from({ length: 24 }, (_, index) => sheet?.getCell(1, index + 1).value)).toEqual([
+      "Booking Reference",
+      "Status",
+      "Entry Source",
+      "Pass Type",
+      "Qty",
+      "Subtotal (ex VAT) £",
+      "VAT £",
+      "Total £",
+      "Payment Method",
+      "Invoice Ref",
+      "Billing Name",
+      "Billing Company",
+      "Billing Email",
+      "Lead",
+      "First Name",
+      "Last Name",
+      "Job Title",
+      "Company",
+      "Work Email",
+      "Phone",
+      "Dietary / Access",
+      "Attendee Notes",
+      "GDPR Consent",
+      "Registered At",
+    ]);
   });
 
   it("GET /admin/stats sums ticket quantities while retaining completed order counts", async () => {
