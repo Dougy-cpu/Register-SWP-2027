@@ -1787,6 +1787,7 @@ export default function AdminRegistrations() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [schedulerExporting, setSchedulerExporting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1932,6 +1933,32 @@ export default function AdminRegistrations() {
       alert("Export failed. Please try again.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleSchedulerExport = async () => {
+    setSchedulerExporting(true);
+    try {
+      const token = localStorage.getItem("admin_token") || "";
+      const res = await fetch("/api/admin/registrations/export/scheduler", {
+        headers: { "x-admin-token": token },
+      });
+      if (!res.ok) throw new Error("Session Scheduler export failed");
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const contentDisposition = res.headers.get("content-disposition") || "";
+      const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+      const date = new Date().toISOString().split("T")[0];
+      a.download = filenameMatch?.[1] || `swp27-session-scheduler-attendees-${date}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Session Scheduler export failed. Please try again.");
+    } finally {
+      setSchedulerExporting(false);
     }
   };
 
@@ -2268,15 +2295,26 @@ export default function AdminRegistrations() {
           <Plus className="w-4 h-4" />
           Add delegate
         </Button>
-        <Button
-          onClick={handleExport}
-          disabled={exporting}
-          variant="outline"
-          className="h-12 gap-2 shrink-0 border-primary text-primary hover:bg-primary hover:text-white"
-        >
-          <Download className="w-4 h-4" />
-          {exporting ? "Exporting…" : "Export Excel"}
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto md:ml-auto">
+          <Button
+            onClick={handleExport}
+            disabled={exporting || schedulerExporting}
+            variant="outline"
+            className="h-12 gap-2 shrink-0 border-primary text-primary hover:bg-primary hover:text-white"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? "Exporting…" : "Export Excel"}
+          </Button>
+          <Button
+            onClick={handleSchedulerExport}
+            disabled={exporting || schedulerExporting}
+            className="h-12 gap-2 shrink-0 bg-primary text-white hover:bg-primary/90"
+            title="Exports every eligible attendee, regardless of the current page filters"
+          >
+            <Download className="w-4 h-4" />
+            {schedulerExporting ? "Preparing…" : "Export for Session Scheduler"}
+          </Button>
+        </div>
       </div>
 
       {/* Bulk action bar */}

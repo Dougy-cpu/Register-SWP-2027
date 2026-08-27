@@ -3533,6 +3533,82 @@ export function useExportRegistrations<
 }
 
 /**
+ * Generates a fresh Excel workbook containing every non-TBC attendee
+attached to a paid or invoiced booking. The worksheet columns are Name,
+Email, Company and Job Title. This export is independent of the filters
+on the registrations page.
+
+ * @summary Export eligible attendees for Session Scheduler (admin)
+ */
+export const getExportSessionSchedulerAttendeesUrl = () => {
+  return `/api/admin/registrations/export/scheduler`;
+};
+
+export const exportSessionSchedulerAttendees = async (options?: RequestInit): Promise<Blob> => {
+  return customFetch<Blob>(getExportSessionSchedulerAttendeesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportSessionSchedulerAttendeesQueryKey = () => {
+  return [`/api/admin/registrations/export/scheduler`] as const;
+};
+
+export const getExportSessionSchedulerAttendeesQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportSessionSchedulerAttendeesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>> = ({
+    signal,
+  }) => exportSessionSchedulerAttendees({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportSessionSchedulerAttendeesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>
+>;
+export type ExportSessionSchedulerAttendeesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Export eligible attendees for Session Scheduler (admin)
+ */
+
+export function useExportSessionSchedulerAttendees<
+  TData = Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof exportSessionSchedulerAttendees>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportSessionSchedulerAttendeesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Returns the public-facing copy required by the checkout, currently the
 How-invoicing-works help content shown on Step 4 (Pay by Invoice).
 No authentication required.
