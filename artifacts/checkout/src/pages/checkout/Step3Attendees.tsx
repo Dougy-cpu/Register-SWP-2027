@@ -624,35 +624,36 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">Attendee Details</h1>
+      <div className="space-y-3">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Step 3 of 4</p>
+        <h1 className="text-4xl font-bold md:text-5xl">Attendee details</h1>
         <p className="text-lg text-muted-foreground">
           {totalSeats === 1
-            ? "Please confirm who this ticket is for."
-            : `Please confirm who each of the ${totalSeats} tickets is for.`}
+            ? "Please confirm who this pass is for."
+            : `Please confirm who each of the ${totalSeats} passes is for.`}
         </p>
       </div>
 
       {totalSeats > 1 && (
-        <div className="flex gap-3 bg-blue-50 border border-blue-200 rounded p-4 text-sm text-blue-800">
+        <div className="flex gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <p>
             <span className="font-semibold">Not sure who's attending yet?</span> Mark any additional
-            ticket as <span className="font-semibold">TBC</span> to complete your booking now and
-            confirm the attendee details later — just contact us after booking.
+            pass as <span className="font-semibold">TBC</span> to complete your booking now and
+            confirm the attendee details later.
           </p>
         </div>
       )}
 
-      <div className="bg-white border border-border p-4 md:p-5 space-y-4">
+      <div className="swp-card space-y-4 rounded-2xl p-4 md:p-5">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="border border-border p-3">
+          <div className="rounded-lg border border-primary/10 bg-primary/[0.025] p-3">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Seats
+              Passes
             </p>
             <p className="text-xl font-bold mt-1">{totalSeats}</p>
           </div>
-          <div className="border border-border p-3">
+          <div className="rounded-lg border border-primary/10 bg-primary/[0.025] p-3">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Ready
             </p>
@@ -660,7 +661,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
               {readySeatCount}/{totalSeats}
             </p>
           </div>
-          <div className="border border-border p-3">
+          <div className="rounded-lg border border-primary/10 bg-primary/[0.025] p-3">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Lead company
             </p>
@@ -687,7 +688,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
               onClick={markAdditionalAttendeesTbc}
               className="justify-center"
             >
-              Mark additional seats TBC
+              Mark additional passes TBC
             </Button>
           </div>
         )}
@@ -708,7 +709,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
             <AccordionItem
               key={index}
               value={`attendee-${index}`}
-              className="bg-white border border-border px-6"
+              className="swp-card overflow-hidden rounded-2xl px-5 md:px-6"
             >
               <AccordionTrigger className="hover:no-underline py-6">
                 <div className="flex flex-col text-left">
@@ -734,7 +735,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                         }`}
                       >
                         <User className="w-4 h-4" />
-                        This ticket is for me
+                        This pass is for me
                       </button>
                       {isForMe && (
                         <p className="w-full mt-1 text-xs text-muted-foreground">
@@ -762,11 +763,8 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
 
                 {isTbc ? (
                   <div className="bg-amber-50 border border-amber-200 rounded p-4 text-sm text-amber-800">
-                    <p className="font-semibold mb-1">This ticket is marked as TBC</p>
-                    <p>
-                      You can confirm this attendee's details later — just contact us after booking
-                      and we'll update the registration for you.
-                    </p>
+                    <p className="font-semibold mb-1">This pass is marked as TBC</p>
+                    <p>You can confirm this attendee's details later.</p>
                   </div>
                 ) : (
                   <>
@@ -948,7 +946,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
         />
         <Button
           size="lg"
-          className="h-14 w-full min-w-0 px-6 text-base bg-primary hover:bg-primary/90 text-white border-none"
+          className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
           onClick={handleContinue}
           disabled={isSubmitting || autosaveStatus === "saving" || autosaveStatus === "error"}
         >

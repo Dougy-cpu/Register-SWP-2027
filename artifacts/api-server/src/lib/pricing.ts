@@ -12,7 +12,7 @@ export type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction
 /**
  * Atomically increment a promo code's `usedCount` after a successful booking
  * confirmation, refusing to exceed `maxUses` when set. For "complimentary"
- * codes the counter tracks tickets issued (so we add the booking's quantity);
+ * codes the counter tracks passes issued (so we add the booking's quantity);
  * for every other discount type the counter tracks bookings (so we add 1).
  *
  * Returns `true` if the counter was incremented, `false` if the increment was
@@ -57,9 +57,9 @@ export async function incrementPromoUsage(
 
 export const PASS_PRICES: Record<string, { price: number; originalPrice: number; seats: number }> =
   {
-    single: { price: 199, originalPrice: 429, seats: 1 },
+    single: { price: 249, originalPrice: 429, seats: 1 },
     team: { price: 499, originalPrice: 1200, seats: 3 },
-    business: { price: 599, originalPrice: 999, seats: 1 },
+    business: { price: 499, originalPrice: 999, seats: 1 },
   };
 
 const PASS_PRICE_DEFAULTS = PASS_PRICES;
@@ -201,8 +201,8 @@ export async function calculatePricing(
         if (promo.maxUses !== null) {
           promoRemainingSeats = Math.max(0, promo.maxUses - promo.usedCount);
         }
-        // Comp = 100% off, but only if every requested ticket is covered by
-        // the remaining cap. If the request exceeds remaining seats, the
+        // Comp = 100% off, but only if every requested pass is covered by
+        // the remaining cap. If the request exceeds remaining passes, the
         // discount does not apply — the caller (UI) will surface a prompt
         // asking the user to reduce the quantity or remove the code.
         if (promoRemainingSeats === null || promoRemainingSeats >= quantity) {

@@ -180,6 +180,7 @@ export default function AdminDashboard() {
   }
 
   const recentPartials = (stats as unknown as { recentPartials?: RegRow[] }).recentPartials ?? [];
+  const totalCompletedPasses = stats.passCounts.single + stats.passCounts.business;
 
   return (
     <AdminLayout title="Dashboard">
@@ -210,7 +211,7 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                Completed
+                Completed Orders
               </p>
               <h2 className="text-3xl font-bold">{stats.completedRegistrations}</h2>
             </div>
@@ -218,7 +219,7 @@ export default function AdminDashboard() {
               <Users className="w-5 h-5 text-secondary" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-3">paid or invoiced</p>
+          <p className="text-xs text-muted-foreground mt-3">paid or invoiced bookings</p>
         </Card>
 
         <Card className="p-5 border-l-4 border-l-yellow-400 rounded-sm shadow-sm">
@@ -295,30 +296,31 @@ export default function AdminDashboard() {
           <h3 className="text-xl font-bold mb-4">Pass Breakdown</h3>
           <Card className="p-6 border-border rounded-sm shadow-sm bg-white">
             <div className="space-y-6">
+              <p className="text-xs text-muted-foreground">Paid or invoiced tickets</p>
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="font-bold">HR Professional Pass</span>
+                  <span className="font-bold">Workforce Passes</span>
                   <span className="font-medium">{stats.passCounts.single}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                   <div
                     className="bg-primary h-full"
                     style={{
-                      width: `${(stats.passCounts.single / Math.max(1, stats.completedRegistrations)) * 100}%`,
+                      width: `${(stats.passCounts.single / Math.max(1, totalCompletedPasses)) * 100}%`,
                     }}
                   ></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="font-bold">Business Pass</span>
+                  <span className="font-bold">Business Passes</span>
                   <span className="font-medium">{stats.passCounts.business}</span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                   <div
                     className="bg-slate-800 h-full"
                     style={{
-                      width: `${(stats.passCounts.business / Math.max(1, stats.completedRegistrations)) * 100}%`,
+                      width: `${(stats.passCounts.business / Math.max(1, totalCompletedPasses)) * 100}%`,
                     }}
                   ></div>
                 </div>

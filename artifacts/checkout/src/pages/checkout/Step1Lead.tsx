@@ -181,8 +181,9 @@ export default function Step1Lead({
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">Who is attending?</h1>
+      <div className="space-y-3">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Step 1 of 4</p>
+        <h1 className="text-4xl font-bold md:text-5xl">Who is attending?</h1>
         <p className="text-lg text-muted-foreground">
           Please tell us a bit about yourself so we can tailor your experience.
         </p>
@@ -190,7 +191,7 @@ export default function Step1Lead({
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <div className="bg-white p-6 md:p-8 border border-border">
+          <section className="swp-card rounded-2xl p-6 md:p-8">
             <h2 className="text-2xl font-bold mb-6">I am registering as a:</h2>
             <FormField
               control={form.control}
@@ -206,9 +207,22 @@ export default function Step1Lead({
                       <FormItem>
                         <FormControl>
                           <label
-                            className={`flex flex-col cursor-pointer border-2 p-4 transition-all ${field.value === "hr_professional" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                            className={`swp-option-card relative flex min-h-[132px] cursor-pointer flex-col p-5 transition-all ${
+                              field.value === "hr_professional"
+                                ? "border-primary bg-primary/5 ring-1 ring-primary/15"
+                                : ""
+                            }`}
                           >
-                            <div className="flex items-center gap-2 mb-2">
+                            {field.value === "hr_professional" && (
+                              <span className="absolute right-4 top-4 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                                Selected
+                              </span>
+                            )}
+                            <div
+                              className={`mb-2 flex items-center gap-2 ${
+                                field.value === "hr_professional" ? "pr-20" : ""
+                              }`}
+                            >
                               <RadioGroupItem value="hr_professional" className="sr-only" />
                               <div
                                 className={`w-5 h-5 rounded-full border flex items-center justify-center ${field.value === "hr_professional" ? "border-primary" : "border-input"}`}
@@ -217,10 +231,12 @@ export default function Step1Lead({
                                   <div className="w-2.5 h-2.5 bg-primary rounded-full" />
                                 )}
                               </div>
-                              <span className="font-bold text-lg">HR Professional</span>
+                              <span className="font-bold text-lg">Employer-side attendee</span>
                             </div>
                             <span className="text-sm text-muted-foreground ml-7">
-                              HR Executives, Practitioners, and Business Leaders
+                              In-house HR, strategic workforce planning, people analytics, talent,
+                              skills, organisation design, transformation and business-facing
+                              workforce teams.
                             </span>
                           </label>
                         </FormControl>
@@ -228,9 +244,22 @@ export default function Step1Lead({
                       <FormItem>
                         <FormControl>
                           <label
-                            className={`flex flex-col cursor-pointer border-2 p-4 transition-all ${field.value === "consultant_vendor" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                            className={`swp-option-card relative flex min-h-[132px] cursor-pointer flex-col p-5 transition-all ${
+                              field.value === "consultant_vendor"
+                                ? "border-primary bg-primary/5 ring-1 ring-primary/15"
+                                : ""
+                            }`}
                           >
-                            <div className="flex items-center gap-2 mb-2">
+                            {field.value === "consultant_vendor" && (
+                              <span className="absolute right-4 top-4 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                                Selected
+                              </span>
+                            )}
+                            <div
+                              className={`mb-2 flex items-center gap-2 ${
+                                field.value === "consultant_vendor" ? "pr-20" : ""
+                              }`}
+                            >
                               <RadioGroupItem value="consultant_vendor" className="sr-only" />
                               <div
                                 className={`w-5 h-5 rounded-full border flex items-center justify-center ${field.value === "consultant_vendor" ? "border-primary" : "border-input"}`}
@@ -239,10 +268,11 @@ export default function Step1Lead({
                                   <div className="w-2.5 h-2.5 bg-primary rounded-full" />
                                 )}
                               </div>
-                              <span className="font-bold text-lg">Vendor / Consultant</span>
+                              <span className="font-bold text-lg">Commercial attendee</span>
                             </div>
                             <span className="text-sm text-muted-foreground ml-7">
-                              Solution Providers, Recruiters, and Consultants
+                              Vendors, consultants, advisory firms, recruiters, technology providers
+                              and commercial service providers.
                             </span>
                           </label>
                         </FormControl>
@@ -253,9 +283,9 @@ export default function Step1Lead({
                 </FormItem>
               )}
             />
-          </div>
+          </section>
 
-          <div className="bg-white p-6 md:p-8 border border-border space-y-6">
+          <section className="swp-card space-y-6 rounded-2xl p-6 md:p-8">
             <h2 className="text-2xl font-bold mb-6">Your Details</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -384,7 +414,7 @@ export default function Step1Lead({
                 )}
               />
             </div>
-          </div>
+          </section>
 
           {submitError && (
             <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded p-3">
@@ -397,7 +427,7 @@ export default function Step1Lead({
             <Button
               type="submit"
               size="lg"
-              className="px-10 h-14 text-lg bg-primary hover:bg-primary/90 text-white border-none"
+              className="swp-primary-btn h-14 w-full min-w-0 px-8 text-lg sm:w-auto"
             >
               Continue to Passes
             </Button>

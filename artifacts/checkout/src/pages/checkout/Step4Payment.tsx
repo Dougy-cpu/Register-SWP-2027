@@ -30,9 +30,7 @@ import {
   CreditCard,
   FileText,
   Building2,
-  Mail,
   Landmark,
-  ReceiptText,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -340,7 +338,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
   }, [booking.id, booking.status]);
 
   const currentPricing = calculatePricingMutation.data;
-  const bookingPassLabel = booking.passType === "single" ? "HR Professional Pass" : "Business Pass";
+  const bookingPassLabel = booking.passType === "single" ? "Workforce Pass" : "Business Pass";
   const bookingPassSummary = booking.quantity === 1 ? bookingPassLabel : `${bookingPassLabel}es`;
 
   const billingLead =
@@ -659,13 +657,13 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Step 4 of 4</p>
           <h1 className="text-4xl md:text-5xl font-bold">Final checkout</h1>
           <p className="max-w-3xl text-lg text-muted-foreground">
-            Choose how to pay, confirm invoice details if required, and finish your SWP Summit
-            registration.
+            Pay securely by card, or request a VAT invoice with supplier details, bank information
+            and payment instructions. VAT and the final total are shown before confirmation.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="min-h-[82px] rounded-md border border-border bg-white p-4">
+        <div className="swp-metric-strip grid grid-cols-1 divide-y divide-primary/10 overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="min-h-[82px] p-4">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Booking
             </p>
@@ -673,7 +671,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               {booking.quantity} {bookingPassSummary}
             </p>
           </div>
-          <div className="min-h-[82px] rounded-md border border-border bg-white p-4">
+          <div className="min-h-[82px] p-4">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Payment choice
             </p>
@@ -681,7 +679,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               {paymentMethod === "card" ? "Card" : "Invoice"}
             </p>
           </div>
-          <div className="min-h-[82px] rounded-md border border-border bg-white p-4">
+          <div className="min-h-[82px] p-4">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Total due
             </p>
@@ -691,7 +689,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
         <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
-            <section className="swp-card rounded-lg">
+            <section className="swp-card rounded-2xl">
               <div className="border-b border-border/70 p-5">
                 <h2 className="text-xl font-bold">Choose payment method</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -721,8 +719,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by card now</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Pay now by card through Stripe. This is the quickest option if you are
-                            ready to pay today and do not need an invoice raised first.
+                            Pay securely through Stripe and confirm your booking immediately.
                           </p>
                         </div>
                       </div>
@@ -751,10 +748,8 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                             <span className="text-lg font-bold">Pay by invoice</span>
                           </div>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Choose this if your organisation needs an invoice, supplier setup,
-                            finance approval or a PO process before payment. We will email the
-                            invoice immediately with company information, bank details and a secure
-                            payment link.
+                            Confirm registration and receive a VAT invoice with supplier details,
+                            bank information, payment instructions and a secure Stripe payment link.
                           </p>
                         </div>
                       </div>
@@ -770,13 +765,13 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             </section>
 
             {paymentMethod === "invoice" && (
-              <section className="swp-card rounded-lg">
+              <section className="swp-card rounded-2xl">
                 <div className="flex flex-col gap-3 border-b border-border/70 p-5 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h2 className="text-xl font-bold">Billing details for the invoice</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       These details appear on your VAT invoice. You can update billing details or
-                      add a PO number later using the secure link in the invoice email.
+                      add a PO number later using the secure billing link in the invoice email.
                     </p>
                   </div>
                 </div>
@@ -792,34 +787,31 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                           Built for procurement and finance teams
                         </h3>
                         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                          Invoice is best for procurement or finance-led bookings. If you are ready
-                          to pay by card now, use the card option above.
+                          Invoice payment is a first-class checkout route for procurement or
+                          finance-led bookings. If you are ready to pay by card now, use the card
+                          option above.
                         </p>
                       </div>
                       <div className="flex items-start gap-3 rounded-lg border border-primary/15 bg-white/80 p-3 text-sm leading-relaxed text-muted-foreground">
                         <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         <p>
-                          The invoice email includes company information, bank details and payment
-                          instructions for your finance team.
+                          The invoice email includes supplier details, bank information, payment
+                          instructions and a secure Stripe payment link for your finance team.
                         </p>
                       </div>
                     </div>
 
-                    <ol className="mt-5 grid gap-3 md:grid-cols-2">
-                      <InvoiceProcessStep icon={CheckCircle2} title="Confirm registration">
-                        Your booking is confirmed when the invoice is issued.
+                    <ol className="mt-5 grid gap-3 md:grid-cols-3">
+                      <InvoiceProcessStep icon={CheckCircle2} title="Confirm and issue">
+                        Your registration is confirmed when the invoice is issued and emailed.
                       </InvoiceProcessStep>
-                      <InvoiceProcessStep icon={Mail} title="Invoice emailed immediately">
-                        The invoice is sent straight to the billing contact.
+                      <InvoiceProcessStep icon={Building2} title="Finance-ready details">
+                        Supplier details, bank information, payment instructions and a secure Stripe
+                        payment link are included.
                       </InvoiceProcessStep>
-                      <InvoiceProcessStep icon={Building2} title="Supplier details included">
-                        Company information and bank details are included with the email.
-                      </InvoiceProcessStep>
-                      <InvoiceProcessStep icon={ReceiptText} title="PO can be added later">
-                        Use the secure invoice email link if finance needs a PO afterwards.
-                      </InvoiceProcessStep>
-                      <InvoiceProcessStep icon={Landmark} title="Pay later">
-                        Settle by bank transfer or the secure Stripe invoice payment link.
+                      <InvoiceProcessStep icon={Landmark} title="Pay or update later">
+                        Add a PO now, or add it later through the secure billing link before
+                        payment.
                       </InvoiceProcessStep>
                     </ol>
                   </div>
@@ -861,7 +853,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                       id="invoice-form"
                       onSubmit={form.handleSubmit(onSubmit)}
                     >
-                      <section className="rounded-md border border-border/70 p-4">
+                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
                         <div className="mb-4 flex items-start gap-3">
                           <StepBadge value={1} />
                           <div>
@@ -981,7 +973,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         </div>
                       </section>
 
-                      <section className="rounded-md border border-border/70 p-4">
+                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
                         <div className="mb-4 flex items-start gap-3">
                           <StepBadge value={2} />
                           <div>
@@ -1083,14 +1075,14 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         </div>
                       </section>
 
-                      <section className="rounded-md border border-border/70 p-4">
+                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
                         <div className="mb-4 flex items-start gap-3">
                           <StepBadge value={3} />
                           <div>
                             <h3 className="font-bold">Invoice references</h3>
                             <p className="text-sm text-muted-foreground">
                               Add a PO now if you have one. If not, you can confirm registration and
-                              add it later before payment.
+                              add it later before payment through the secure billing link.
                             </p>
                           </div>
                         </div>
@@ -1152,8 +1144,9 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                                     </p>
                                     <p className="mt-1">
                                       You can confirm registration now and add the PO later using
-                                      the secure link in the invoice email. Once added, we will
-                                      automatically email a revised invoice with the PO included.
+                                      the secure billing link in the invoice email. Once added, we
+                                      will automatically email a revised invoice with the PO
+                                      included.
                                     </p>
                                   </div>
                                 )}
@@ -1184,7 +1177,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           </div>
 
           <aside className="swp-checkout-sticky-sidebar space-y-5 md:self-start">
-            <section className="rounded-md border border-border bg-white">
+            <section className="swp-card overflow-hidden rounded-2xl">
               <div className="border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">Order summary</h3>
               </div>
@@ -1235,15 +1228,16 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             </section>
 
             <div className="space-y-5">
-              <section className="rounded-md border border-border bg-white p-5 shadow-[0_16px_35px_rgba(0,78,185,0.06)]">
+              <section className="swp-card rounded-2xl p-5">
                 <div className="flex flex-col gap-3">
                   {paymentMethod === "invoice" && (
                     <div className="rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
                       <p className="font-bold text-foreground">Ready to issue the invoice?</p>
                       <p className="mt-1">
                         This confirms the registration and emails the invoice immediately to the
-                        billing contact. PO and billing details can still be updated before payment
-                        from the secure link in the invoice email.
+                        billing contact. The invoice includes supplier details, bank information,
+                        payment instructions and a secure Stripe payment link. PO and billing
+                        details can still be updated before payment from the secure billing link.
                       </p>
                     </div>
                   )}
@@ -1294,7 +1288,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                 </div>
               </section>
 
-              <section className="rounded-md border border-border bg-white">
+              <section className="swp-card overflow-hidden rounded-2xl">
                 <div className="flex items-center justify-between gap-4 border-b border-border/70 p-5">
                   <h3 className="text-lg font-bold">What happens next</h3>
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
@@ -1316,26 +1310,15 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                     ) : (
                       <>
                         <NextStep value={1}>
-                          Registration is confirmed when the invoice is issued.
+                          Registration is confirmed when the invoice is issued and emailed.
                         </NextStep>
                         <NextStep value={2}>
-                          The invoice is emailed immediately to the billing contact.
+                          Supplier details, bank information, payment instructions and a secure
+                          Stripe payment link are included.
                         </NextStep>
                         <NextStep value={3}>
-                          The email includes company information, bank details and invoice payment
-                          instructions.
-                        </NextStep>
-                        <NextStep value={4}>
-                          Finance can settle the invoice by bank transfer or using the secure Stripe
-                          payment link on the invoice.
-                        </NextStep>
-                        <NextStep value={5}>
-                          PO and billing details can be updated later using the secure link in the
-                          email.
-                        </NextStep>
-                        <NextStep value={6}>
-                          If PO or billing details are updated, a revised invoice is emailed
-                          automatically.
+                          Pay by bank transfer or Stripe, and update PO or billing details securely
+                          before payment.
                         </NextStep>
                       </>
                     )}

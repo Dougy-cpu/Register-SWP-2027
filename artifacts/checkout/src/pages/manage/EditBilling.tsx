@@ -529,7 +529,7 @@ export default function EditBilling() {
                     "Updated billing details are saved.",
                     "The invoice is re-issued with the latest details.",
                     "The updated invoice is emailed to the billing contact.",
-                    "Payment can then be made by bank transfer or using the secure Stripe payment link on the invoice.",
+                    "Payment can then be made by bank transfer or using the secure Stripe payment link.",
                   ].map((item) => (
                     <li key={item} className="flex gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />

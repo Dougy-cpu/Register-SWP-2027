@@ -636,6 +636,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /email-templates/community_social:
+    get:
+      operationId: getCommunitySocialEmailTemplate
+      tags: [email]
+      summary: Get the Community Social email template
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Community Social email template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+    put:
+      operationId: updateCommunitySocialEmailTemplate
+      tags: [email]
+      summary: Update the Community Social email template
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmailTemplateBody"
+      responses:
+        "200":
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailTemplate"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /email-templates/community_social/test-send:
+    post:
+      operationId: sendTestCommunitySocialEmail
+      tags: [email]
+      summary: Send a test Community Social email
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TestEmailBody"
+      responses:
+        "200":
+          description: Test email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ==================== EMAIL LOGS ====================
   /admin/email-logs:
     get:
@@ -873,6 +940,7 @@ paths:
         - name: search
           in: query
           required: false
+          description: Case-insensitive search across attendee name, email, company, job title, organiser notes, booking reference and applied promo code.
           schema:
             type: string
         - name: needsAttention
@@ -899,6 +967,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RegistrationList"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createManualRegistration
+      tags: [admin]
+      summary: Add a direct-invoice delegate manually (admin)
+      description: |
+        Creates a one-person registration without running the public checkout,
+        creating a Stripe invoice, or sending automatic emails. Current pass
+        pricing and VAT are recorded, and the entry is labelled as manual.
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualRegistrationBody"
+      responses:
+        "201":
+          description: Manual registration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBookingWithAttendees"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -945,6 +1048,220 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/registrations/{id}/resend-confirmation-email:
+    post:
+      operationId: resendRegistrationConfirmationEmail
+      tags: [admin]
+      summary: Resend the customer confirmation email (admin)
+      description: |
+        Sends a fresh confirmation and receipt email for a paid or invoiced
+        booking. This does not run organiser notification or Sheets sync.
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated registration with resend summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationEmailResendResult"
+        "400":
+          description: Booking is not yet confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: No lead attendee email is available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Email could not be sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/{id}/resend-welcome-emails:
+    post:
+      operationId: resendRegistrationWelcomeEmails
+      tags: [admin]
+      summary: Resend attendee welcome emails (admin)
+      description: |
+        Sends fresh welcome emails to every non-TBC attendee on a paid or
+        invoiced booking. This does not run organiser notification or Sheets sync.
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated registration with resend summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationEmailResendResult"
+        "400":
+          description: Booking is not yet confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: No attendee email addresses are available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: One or more emails could not be sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/{id}/send-community-social-email:
+    post:
+      operationId: sendRegistrationCommunitySocialEmail
+      tags: [admin]
+      summary: Send the Community Social email to attendees (admin)
+      description: |
+        Manually sends the Community Social email to every non-TBC attendee on
+        a paid or invoiced booking. This endpoint is not part of automatic
+        booking confirmation, redelivery, organiser notification or Sheets sync.
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated registration with send summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationEmailResendResult"
+        "400":
+          description: Booking is not yet confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Community Social settings or attendee email addresses are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: One or more emails could not be sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/registrations/{id}/status:
+    patch:
+      operationId: updateRegistrationStatus
+      tags: [admin]
+      summary: Override registration status (admin)
+      description: |
+        Updates the local booking status. When an invoice booking with a
+        Stripe invoice is marked paid, the server first syncs Stripe by paying
+        open invoices with `paid_out_of_band: true`. If Stripe is unavailable
+        or the invoice cannot be marked paid, the local booking status is not
+        changed.
+      security:
+        - AdminToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRegistrationStatusUpdateBody"
+      responses:
+        "200":
+          description: Updated registration with Stripe side-effect result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRegistrationStatusUpdateResult"
+        "400":
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stripe invoice is not payable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRegistrationStatusErrorResponse"
+        "502":
+          description: Stripe invoice update failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRegistrationStatusErrorResponse"
+        "503":
+          description: Stripe is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRegistrationStatusErrorResponse"
+
   /admin/registrations/{id}:
     get:
       operationId: getRegistration
@@ -964,7 +1281,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BookingWithAttendees"
+                $ref: "#/components/schemas/AdminBookingWithAttendees"
         "404":
           description: Not found
           content:
@@ -992,6 +1309,38 @@ paths:
             text/csv:
               schema:
                 type: string
+
+  /admin/registrations/export/scheduler:
+    get:
+      operationId: exportSessionSchedulerAttendees
+      tags: [admin]
+      summary: Export eligible attendees for Session Scheduler (admin)
+      description: |
+        Generates a fresh Excel workbook containing every non-TBC attendee
+        attached to a paid or invoiced booking. The worksheet columns are Name,
+        Email, Company and Job Title. This export is independent of the filters
+        on the registrations page.
+      security:
+        - AdminToken: []
+      responses:
+        "200":
+          description: Session Scheduler attendee workbook
+          headers:
+            Content-Disposition:
+              description: Download filename for the generated workbook
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /event-settings/public:
     get:
@@ -1126,7 +1475,8 @@ components:
           type: string
         status:
           type: string
-          enum: [partial, pending_payment, paid, invoiced, cancelled, disputed]
+          enum:
+            [partial, pending_payment, paid, invoiced, transferred, cancelled, refunded, disputed]
         passType:
           type: string
           enum: [single, business]
@@ -1150,6 +1500,8 @@ components:
         paymentMethod:
           type: ["string", "null"]
           enum: ["card", "invoice", null]
+        manualEntry:
+          type: boolean
         stripeSessionId:
           type: ["string", "null"]
         stripePaymentIntentId:
@@ -1210,6 +1562,8 @@ components:
           type: boolean
         welcomeEmailsSent:
           type: boolean
+        communitySocialEmailSent:
+          type: boolean
         organiserNotified:
           type: boolean
         sheetsSynced:
@@ -1232,6 +1586,7 @@ components:
         - subtotalAmount
         - vatAmount
         - totalAmount
+        - manualEntry
         - currentStep
         - createdAt
         - updatedAt
@@ -1247,6 +1602,99 @@ components:
                 $ref: "#/components/schemas/Attendee"
           required:
             - attendees
+
+    AdminBookingWithAttendees:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            attendees:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminAttendee"
+          required:
+            - attendees
+
+    AdminRegistrationStatusUpdateBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            [paid, invoiced, transferred, partial, pending_payment, cancelled, refunded, disputed]
+      required:
+        - status
+
+    AdminRegistrationStatusAction:
+      type: string
+      enum:
+        - refund_issued
+        - invoice_voided
+        - invoice_paid_out_of_band
+        - skipped
+        - failed
+
+    AdminRegistrationStatusUpdateResult:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            stripeAction:
+              $ref: "#/components/schemas/AdminRegistrationStatusAction"
+          required:
+            - stripeAction
+
+    AdminRegistrationStatusErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        stripeAction:
+          type: string
+          enum: [failed]
+      required:
+        - error
+        - stripeAction
+
+    ManualRegistrationBody:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+        jobTitle:
+          type: string
+          minLength: 1
+        company:
+          type: string
+          minLength: 1
+        workEmail:
+          type: string
+          format: email
+        phone:
+          type: ["string", "null"]
+        dietaryAccessibility:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+          maxLength: 4000
+        passType:
+          type: string
+          enum: [single, business]
+          default: single
+        status:
+          type: string
+          enum: [invoiced, paid]
+          default: invoiced
+      required:
+        - firstName
+        - lastName
+        - jobTitle
+        - company
+        - workEmail
 
     CreateBookingBody:
       type: object
@@ -1318,7 +1766,8 @@ components:
           format: date-time
         status:
           type: string
-          enum: [partial, pending_payment, paid, invoiced, cancelled, disputed]
+          enum:
+            [partial, pending_payment, paid, invoiced, transferred, cancelled, refunded, disputed]
         stripeInvoiceId:
           type: ["string", "null"]
         stripeInvoicePdfUrl:
@@ -1379,6 +1828,15 @@ components:
         - createdAt
         - updatedAt
 
+    AdminAttendee:
+      allOf:
+        - $ref: "#/components/schemas/Attendee"
+        - type: object
+          properties:
+            notes:
+              type: ["string", "null"]
+              description: Organiser-only notes. Never returned through public attendee endpoints.
+
     CreateAttendeeBody:
       type: object
       properties:
@@ -1428,6 +1886,10 @@ components:
           type: ["string", "null"]
         gdprConsent:
           type: boolean
+        notes:
+          type: ["string", "null"]
+          maxLength: 4000
+          description: Organiser-only notes. Ignored unless the request is authenticated as an admin.
 
     # ==================== PRICING SCHEMAS ====================
     PricingRequest:
@@ -1837,7 +2299,7 @@ components:
           type: string
         type:
           type: string
-          enum: [confirmation, receipt, welcome, invoice, test]
+          enum: [confirmation, receipt, welcome, invoice, community_social, test]
         status:
           type: string
           enum: [sent, failed, pending]
@@ -1912,6 +2374,8 @@ components:
           type: number
         paymentMethod:
           type: ["string", "null"]
+        manualEntry:
+          type: boolean
         leadName:
           type: ["string", "null"]
         leadEmail:
@@ -1939,6 +2403,9 @@ components:
         welcomeEmailsSent:
           type: boolean
           description: True once welcome emails have been sent to all attendees.
+        communitySocialEmailSent:
+          type: boolean
+          description: True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking.
         organiserNotified:
           type: boolean
           description: True once the organiser has been notified of this booking.
@@ -1963,6 +2430,7 @@ components:
         - attendeeType
         - quantity
         - totalAmount
+        - manualEntry
         - currentStep
         - createdAt
         - updatedAt
@@ -1989,6 +2457,30 @@ components:
                     type: string
               required: [ran, skipped, failed]
           required: [redelivery]
+
+    RegistrationEmailResendResult:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            resend:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [confirmation, welcome, community_social]
+                sent:
+                  type: boolean
+                recipients:
+                  type: array
+                  items:
+                    type: string
+                failedRecipients:
+                  type: array
+                  items:
+                    type: string
+              required: [type, sent, recipients, failedRecipients]
+          required: [resend]
 
     RegistrationList:
       type: object

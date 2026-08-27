@@ -18,6 +18,7 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "pending_payment",
   "paid",
   "invoiced",
+  "transferred",
   "cancelled",
   "refunded",
   "disputed",
@@ -45,6 +46,7 @@ export const bookingsTable = pgTable(
     vatAmount: numeric("vat_amount", { precision: 10, scale: 2 }).notNull().default("0"),
     totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
     paymentMethod: paymentMethodEnum("payment_method"),
+    manualEntry: boolean("manual_entry").notNull().default(false),
     stripeSessionId: text("stripe_session_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     stripeInvoiceId: text("stripe_invoice_id"),
@@ -87,6 +89,9 @@ export const bookingsTable = pgTable(
     // panel as a "needs attention" badge so a stuck delivery is visible.
     confirmationEmailSent: boolean("confirmation_email_sent").notNull().default(false),
     welcomeEmailsSent: boolean("welcome_emails_sent").notNull().default(false),
+    // Manual campaign flag. This is deliberately not part of automatic
+    // confirmation delivery or the "needs attention" calculation.
+    communitySocialEmailSent: boolean("community_social_email_sent").notNull().default(false),
     organiserNotified: boolean("organiser_notified").notNull().default(false),
     sheetsSynced: boolean("sheets_synced").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

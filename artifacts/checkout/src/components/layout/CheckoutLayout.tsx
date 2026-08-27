@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import logoUrl from "@assets/swp-summit-logo.png";
+import CheckoutProgress from "@/components/checkout/CheckoutProgress";
 
 interface CheckoutLayoutProps {
   children: ReactNode;
@@ -7,32 +8,19 @@ interface CheckoutLayoutProps {
 }
 
 export default function CheckoutLayout({ children, currentStep = 1 }: CheckoutLayoutProps) {
-  const steps = ["Your Details", "Select Passes", "Attendee Details", "Payment"];
-
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary/20 selection:text-primary swp-grid-bg">
-      <header className="w-full border-b border-border bg-white/95 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto object-contain" />
-          {currentStep < 5 && (
-            <div className="text-sm font-medium text-muted-foreground hidden md:block">
-              Step {currentStep} of 4:{" "}
-              <span className="text-foreground">{steps[currentStep - 1]}</span>
-            </div>
-          )}
+      <header className="sticky top-0 z-20 w-full border-b border-primary/10 bg-white/95 shadow-[0_8px_30px_rgba(0,78,185,0.04)] backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 md:h-20 md:px-6">
+          <img src={logoUrl} alt="SWP Summit" className="h-10 w-auto object-contain md:h-12" />
+          <p className="hidden text-sm font-medium text-muted-foreground md:block">
+            Wednesday, 3 March 2027 · London
+          </p>
         </div>
-
-        {currentStep < 5 && (
-          <div className="w-full bg-muted h-1">
-            <div
-              className="bg-primary h-full transition-all duration-500 ease-out"
-              style={{ width: `${(currentStep / 4) * 100}%` }}
-            />
-          </div>
-        )}
+        <CheckoutProgress currentStep={currentStep} />
       </header>
 
-      <main className="relative flex-1 w-full max-w-6xl mx-auto px-6 py-12 flex flex-col">
+      <main className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 py-8 md:px-6 md:py-12">
         {children}
       </main>
 

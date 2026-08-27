@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
+import type Stripe from "stripe";
 import { eq, desc, asc, or, and, sql, count, notInArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
+import { v4 as uuidv4 } from "uuid";
 import { db } from "@workspace/db";
 import {
   bookingsTable,
@@ -28,11 +30,38 @@ import { logger } from "../lib/logger";
 import { refreshStripeInvoiceStatusIfStale } from "../lib/invoice";
 import { deriveInvoiceBadge } from "../lib/invoice-status";
 import { deliveryStatusForBooking, runConfirmationSideEffects } from "../lib/booking-confirmation";
+import {
+  getEventSettings,
+  sendCommunitySocialEmail,
+  sendConfirmationAndReceiptEmail,
+  sendWelcomeEmail,
+} from "../lib/email";
 import { getStripe } from "../lib/stripe-client";
 import { getOrCreateArchivedReceiptPdf } from "../lib/receipt-documents";
+import { calculatePricing } from "../lib/pricing";
+import { defaultOrderRef } from "../lib/order-reference";
+import {
+  buildSessionSchedulerExportRows,
+  createSessionSchedulerWorkbook,
+  getSessionSchedulerExportFilename,
+} from "../lib/session-scheduler-export";
 
 const router: IRouter = Router();
 const INVOICE_PAYMENT_TERMS_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+type AdminStatusStripeAction =
+  | "refund_issued"
+  | "invoice_voided"
+  | "invoice_paid_out_of_band"
+  | "skipped"
+  | "failed";
+
+type BookingUpdate = Partial<typeof bookingsTable.$inferInsert>;
+
+function applyStripeInvoiceUrlUpdates(updates: BookingUpdate, invoice: Stripe.Invoice): void {
+  if (invoice.invoice_pdf) updates.stripeInvoicePdfUrl = invoice.invoice_pdf;
+  if (invoice.hosted_invoice_url) updates.stripeInvoicePaymentUrl = invoice.hosted_invoice_url;
+}
 
 function getAdminRegistrationDate(booking: typeof bookingsTable.$inferSelect): Date {
   if (booking.paidAt) {
@@ -45,7 +74,11 @@ function getAdminRegistrationDate(booking: typeof bookingsTable.$inferSelect): D
     return invoiceCreatedAt;
   }
 
-  if (booking.status === "paid" || booking.status === "invoiced") {
+  if (
+    booking.status === "paid" ||
+    booking.status === "invoiced" ||
+    booking.status === "transferred"
+  ) {
     return booking.updatedAt ?? booking.createdAt;
   }
 
@@ -169,8 +202,12 @@ router.get("/admin/stats", adminAuth, async (_req, res): Promise<void> => {
   );
 
   const passCounts = {
-    single: completed.filter((b) => b.passType === "single").length,
-    business: completed.filter((b) => b.passType === "business").length,
+    single: completed
+      .filter((b) => b.passType === "single")
+      .reduce((sum, booking) => sum + booking.quantity, 0),
+    business: completed
+      .filter((b) => b.passType === "business")
+      .reduce((sum, booking) => sum + booking.quantity, 0),
   };
 
   const paymentMethodCounts = {
@@ -245,22 +282,27 @@ router.get("/admin/registrations", adminAuth, async (req, res): Promise<void> =>
   }
 
   if (search) {
-    const searchLower = search.toLowerCase();
-    const matchingAttendeeBookingIds = allAttendees
-      .filter(
-        (a) =>
-          a.firstName.toLowerCase().includes(searchLower) ||
-          a.lastName.toLowerCase().includes(searchLower) ||
-          a.workEmail.toLowerCase().includes(searchLower) ||
-          a.company.toLowerCase().includes(searchLower),
-      )
-      .map((a) => a.bookingId);
+    const searchLower = search.trim().toLowerCase();
+    if (searchLower) {
+      const matchingAttendeeBookingIds = allAttendees
+        .filter(
+          (a) =>
+            a.firstName.toLowerCase().includes(searchLower) ||
+            a.lastName.toLowerCase().includes(searchLower) ||
+            a.workEmail.toLowerCase().includes(searchLower) ||
+            a.company.toLowerCase().includes(searchLower) ||
+            a.jobTitle.toLowerCase().includes(searchLower) ||
+            a.notes?.toLowerCase().includes(searchLower),
+        )
+        .map((a) => a.bookingId);
 
-    filtered = filtered.filter(
-      (b) =>
-        matchingAttendeeBookingIds.includes(b.id) ||
-        (b.orderReference && b.orderReference.toLowerCase().includes(searchLower)),
-    );
+      filtered = filtered.filter(
+        (b) =>
+          matchingAttendeeBookingIds.includes(b.id) ||
+          b.orderReference?.toLowerCase().includes(searchLower) ||
+          b.promoCode?.toLowerCase().includes(searchLower),
+      );
+    }
   }
 
   const total = filtered.length;
@@ -277,6 +319,154 @@ router.get("/admin/registrations", adminAuth, async (req, res): Promise<void> =>
   });
 
   res.json({ registrations: result, total, page, limit });
+});
+
+router.post("/admin/registrations", adminAuth, async (req, res): Promise<void> => {
+  const {
+    firstName,
+    lastName,
+    jobTitle,
+    company,
+    workEmail,
+    phone,
+    dietaryAccessibility,
+    notes,
+    passType = "single",
+    status = "invoiced",
+  } = req.body as Record<string, unknown>;
+
+  const requiredText = { firstName, lastName, jobTitle, company, workEmail };
+  for (const [field, value] of Object.entries(requiredText)) {
+    if (typeof value !== "string" || !value.trim()) {
+      res.status(400).json({ error: `${field} is required` });
+      return;
+    }
+  }
+
+  const email = String(workEmail).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    res.status(400).json({ error: "workEmail must be a valid email address" });
+    return;
+  }
+  if (passType !== "single" && passType !== "business") {
+    res.status(400).json({ error: "passType must be single or business" });
+    return;
+  }
+  if (status !== "invoiced" && status !== "paid") {
+    res.status(400).json({ error: "status must be invoiced or paid" });
+    return;
+  }
+  if (phone !== undefined && phone !== null && typeof phone !== "string") {
+    res.status(400).json({ error: "phone must be a string" });
+    return;
+  }
+  if (
+    dietaryAccessibility !== undefined &&
+    dietaryAccessibility !== null &&
+    typeof dietaryAccessibility !== "string"
+  ) {
+    res.status(400).json({ error: "dietaryAccessibility must be a string" });
+    return;
+  }
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
+    res.status(400).json({ error: "notes must be a string" });
+    return;
+  }
+  if (typeof notes === "string" && notes.length > 4000) {
+    res.status(400).json({ error: "notes must be 4,000 characters or fewer" });
+    return;
+  }
+
+  const pricing = await calculatePricing(passType, 1);
+  const now = new Date();
+  const invoiceDueDate =
+    status === "invoiced" ? new Date(now.getTime() + INVOICE_PAYMENT_TERMS_DAYS * DAY_MS) : null;
+  const attendeeType = passType === "business" ? "consultant_vendor" : "hr_professional";
+  const cleanFirstName = String(firstName).trim();
+  const cleanLastName = String(lastName).trim();
+  const cleanJobTitle = String(jobTitle).trim();
+  const cleanCompany = String(company).trim();
+
+  const created = await db.transaction(async (tx) => {
+    const [booking] = await tx
+      .insert(bookingsTable)
+      .values({
+        sessionToken: `manual-${uuidv4()}`,
+        status,
+        passType,
+        attendeeType,
+        quantity: 1,
+        subtotalAmount: pricing.subtotalAfterDiscounts.toFixed(2),
+        vatAmount: pricing.vatAmount.toFixed(2),
+        totalAmount: pricing.total.toFixed(2),
+        groupDiscountAmount:
+          pricing.groupDiscountAmount > 0 ? pricing.groupDiscountAmount.toFixed(2) : null,
+        promoDiscountAmount: null,
+        paymentMethod: "invoice",
+        manualEntry: true,
+        currentStep: 4,
+        billingName: `${cleanFirstName} ${cleanLastName}`,
+        billingCompany: cleanCompany,
+        billingEmail: email,
+        billingPhone: typeof phone === "string" ? phone.trim() || null : null,
+        invoiceDueDate,
+        paidAt: status === "paid" ? now : null,
+        managementToken: uuidv4(),
+      })
+      .returning();
+
+    const [bookingWithReference] = await tx
+      .update(bookingsTable)
+      .set({ orderReference: defaultOrderRef(booking.id) })
+      .where(eq(bookingsTable.id, booking.id))
+      .returning();
+
+    const [attendee] = await tx
+      .insert(attendeesTable)
+      .values({
+        bookingId: booking.id,
+        isLead: true,
+        seatIndex: 0,
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
+        jobTitle: cleanJobTitle,
+        company: cleanCompany,
+        workEmail: email,
+        phone: typeof phone === "string" ? phone.trim() || null : null,
+        dietaryAccessibility:
+          typeof dietaryAccessibility === "string" ? dietaryAccessibility.trim() || null : null,
+        notes: typeof notes === "string" ? notes.trim() || null : null,
+        isTbc: false,
+        gdprConsent: false,
+        gdprConsentAt: null,
+      })
+      .returning();
+
+    return { booking: bookingWithReference, attendee };
+  });
+
+  await logAdminAction({
+    type: "admin_attendee_added",
+    bookingId: created.booking.id,
+    attendeeId: created.attendee.id,
+    summary: `Admin manually added delegate ${cleanFirstName} ${cleanLastName} as a direct-invoice registration`,
+    after: {
+      firstName: cleanFirstName,
+      lastName: cleanLastName,
+      jobTitle: cleanJobTitle,
+      company: cleanCompany,
+      workEmail: email,
+      notes: created.attendee.notes,
+      passType,
+      status,
+      manualEntry: true,
+    },
+  });
+
+  res.status(201).json({
+    ...formatBooking(created.booking),
+    attendees: [formatAttendee(created.attendee)],
+  });
 });
 
 router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<void> => {
@@ -298,6 +488,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
   const columns: ExcelJS.Column[] = [
     { header: "Booking Reference", key: "bookingRef", width: 18 },
     { header: "Status", key: "status", width: 14 },
+    { header: "Entry Source", key: "entrySource", width: 16 },
     { header: "Pass Type", key: "passType", width: 14 },
     { header: "Qty", key: "qty", width: 6 },
     { header: "Subtotal (ex VAT) £", key: "subtotal", width: 18 },
@@ -316,6 +507,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
     { header: "Work Email", key: "workEmail", width: 28 },
     { header: "Phone", key: "phone", width: 16 },
     { header: "Dietary / Access", key: "dietary", width: 22 },
+    { header: "Attendee Notes", key: "notes", width: 36 },
     { header: "GDPR Consent", key: "gdpr", width: 14 },
     { header: "Registered At", key: "registeredAt", width: 22 },
   ] as ExcelJS.Column[];
@@ -337,6 +529,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
       sheet.addRow({
         bookingRef: booking.orderReference || "",
         status: booking.status,
+        entrySource: booking.manualEntry ? "Manual direct invoice" : "Online checkout",
         passType: booking.passType,
         qty: booking.quantity,
         subtotal: parseFloat(booking.subtotalAmount?.toString() || "0"),
@@ -355,6 +548,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
         workEmail: "",
         phone: "",
         dietary: "",
+        notes: "",
         gdpr: "",
         registeredAt,
       });
@@ -365,6 +559,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
       const row = sheet.addRow({
         bookingRef: booking.orderReference || "",
         status: booking.status,
+        entrySource: booking.manualEntry ? "Manual direct invoice" : "Online checkout",
         passType: booking.passType,
         qty: booking.quantity,
         subtotal: parseFloat(booking.subtotalAmount?.toString() || "0"),
@@ -383,6 +578,7 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
         workEmail: a.isTbc ? "" : a.workEmail || "",
         phone: a.isTbc ? "" : a.phone || "",
         dietary: a.isTbc ? "" : a.dietaryAccessibility || "",
+        notes: a.notes || "",
         gdpr: a.isTbc ? "" : a.gdprConsent ? "Yes" : "No",
         registeredAt,
       });
@@ -417,6 +613,27 @@ router.get("/admin/registrations/export", adminAuth, async (req, res): Promise<v
   res.setHeader("Content-Disposition", `attachment; filename="swp27-registrations-${date}.xlsx"`);
   await workbook.xlsx.write(res);
   res.end();
+});
+
+router.get("/admin/registrations/export/scheduler", adminAuth, async (_req, res): Promise<void> => {
+  const [bookings, attendees] = await Promise.all([
+    db.select().from(bookingsTable),
+    db.select().from(attendeesTable),
+  ]);
+  const rows = buildSessionSchedulerExportRows(bookings, attendees);
+  const workbook = createSessionSchedulerWorkbook(rows);
+  const buffer = await workbook.xlsx.writeBuffer();
+
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${getSessionSchedulerExportFilename()}"`,
+  );
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.send(Buffer.from(buffer));
 });
 
 router.get("/admin/registrations/:id", adminAuth, async (req, res): Promise<void> => {
@@ -513,6 +730,246 @@ router.post("/admin/registrations/:id/redeliver", adminAuth, async (req, res): P
   res.json({ ...formatBooking(refreshed), redelivery: result });
 });
 
+router.post(
+  "/admin/registrations/:id/resend-confirmation-email",
+  adminAuth,
+  async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = parseInt(raw, 10);
+
+    const [[booking], attendees] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, id)),
+      db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, id)),
+    ]);
+
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.status !== "paid" && booking.status !== "invoiced") {
+      res.status(400).json({
+        error: "Only confirmed (paid/invoiced) bookings can have emails resent",
+      });
+      return;
+    }
+
+    const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
+    const recipient = lead?.workEmail;
+    if (!recipient) {
+      res.status(409).json({ error: "No lead attendee email address is available" });
+      return;
+    }
+
+    const sent = await sendConfirmationAndReceiptEmail(id);
+    const resend = {
+      type: "confirmation" as const,
+      sent,
+      recipients: sent ? [recipient] : [],
+      failedRecipients: sent ? [] : [recipient],
+    };
+
+    if (!sent) {
+      await logAdminAction({
+        type: "admin_booking_redelivered",
+        bookingId: id,
+        summary: `Failed to resend confirmation email for booking ${booking.orderReference || `#${id}`}`,
+        meta: { resend },
+      });
+      res.status(502).json({
+        error: "Confirmation email could not be sent. Check API logs.",
+        resend,
+      });
+      return;
+    }
+
+    await db
+      .update(bookingsTable)
+      .set({ confirmationEmailSent: true })
+      .where(eq(bookingsTable.id, id));
+
+    await logAdminAction({
+      type: "admin_booking_redelivered",
+      bookingId: id,
+      summary: `Resent confirmation email for booking ${booking.orderReference || `#${id}`}`,
+      meta: { resend },
+    });
+
+    const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+    res.json({ ...formatBooking(refreshed), resend });
+  },
+);
+
+router.post(
+  "/admin/registrations/:id/resend-welcome-emails",
+  adminAuth,
+  async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = parseInt(raw, 10);
+
+    const [[booking], attendees] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, id)),
+      db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, id)),
+    ]);
+
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.status !== "paid" && booking.status !== "invoiced") {
+      res.status(400).json({
+        error: "Only confirmed (paid/invoiced) bookings can have emails resent",
+      });
+      return;
+    }
+
+    const welcomeAttendees = attendees
+      .filter((attendee) => !attendee.isTbc && !!attendee.workEmail)
+      .sort((a, b) => (a.seatIndex ?? 0) - (b.seatIndex ?? 0));
+    if (welcomeAttendees.length === 0) {
+      res.status(409).json({ error: "No attendee welcome email addresses are available" });
+      return;
+    }
+
+    const recipients: string[] = [];
+    const failedRecipients: string[] = [];
+    for (const attendee of welcomeAttendees) {
+      const sent = await sendWelcomeEmail(id, attendee.firstName, attendee.workEmail);
+      if (sent) {
+        recipients.push(attendee.workEmail);
+      } else {
+        failedRecipients.push(attendee.workEmail);
+      }
+    }
+
+    const sent = failedRecipients.length === 0;
+    const resend = {
+      type: "welcome" as const,
+      sent,
+      recipients,
+      failedRecipients,
+    };
+
+    if (!sent) {
+      await logAdminAction({
+        type: "admin_booking_redelivered",
+        bookingId: id,
+        summary: `Failed to resend welcome emails for booking ${booking.orderReference || `#${id}`}`,
+        meta: { resend },
+      });
+      res.status(502).json({
+        error: "One or more welcome emails could not be sent. Check API logs.",
+        resend,
+      });
+      return;
+    }
+
+    await db.update(bookingsTable).set({ welcomeEmailsSent: true }).where(eq(bookingsTable.id, id));
+
+    await logAdminAction({
+      type: "admin_booking_redelivered",
+      bookingId: id,
+      summary: `Resent welcome emails for booking ${booking.orderReference || `#${id}`}`,
+      meta: { resend },
+    });
+
+    const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+    res.json({ ...formatBooking(refreshed), resend });
+  },
+);
+
+router.post(
+  "/admin/registrations/:id/send-community-social-email",
+  adminAuth,
+  async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = parseInt(raw, 10);
+
+    const [[booking], attendees, settings] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, id)),
+      db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, id)),
+      getEventSettings(),
+    ]);
+
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.status !== "paid" && booking.status !== "invoiced") {
+      res.status(400).json({
+        error: "Only confirmed (paid/invoiced) bookings can receive the Community Social email",
+      });
+      return;
+    }
+    if (!settings.socialEnabled || !settings.socialStartAt || !settings.socialVenue?.trim()) {
+      res.status(409).json({
+        error:
+          "Enable the Community Social and set its date, time and venue in Event Settings before sending.",
+      });
+      return;
+    }
+
+    const socialAttendees = attendees
+      .filter((attendee) => !attendee.isTbc && !!attendee.workEmail)
+      .sort((a, b) => (a.seatIndex ?? 0) - (b.seatIndex ?? 0));
+    if (socialAttendees.length === 0) {
+      res.status(409).json({ error: "No attendee email addresses are available" });
+      return;
+    }
+
+    const recipients: string[] = [];
+    const failedRecipients: string[] = [];
+    for (const attendee of socialAttendees) {
+      const sent = await sendCommunitySocialEmail(
+        id,
+        attendee.firstName || "there",
+        attendee.workEmail,
+      );
+      if (sent) {
+        recipients.push(attendee.workEmail);
+      } else {
+        failedRecipients.push(attendee.workEmail);
+      }
+    }
+
+    const sent = failedRecipients.length === 0;
+    const resend = {
+      type: "community_social" as const,
+      sent,
+      recipients,
+      failedRecipients,
+    };
+
+    if (!sent) {
+      await logAdminAction({
+        type: "admin_community_social_email_sent",
+        bookingId: id,
+        summary: `Community Social email delivery failed for booking ${booking.orderReference || `#${id}`}`,
+        meta: { resend },
+      });
+      res.status(502).json({
+        error: "One or more Community Social emails could not be sent. Check API logs.",
+        resend,
+      });
+      return;
+    }
+
+    await db
+      .update(bookingsTable)
+      .set({ communitySocialEmailSent: true })
+      .where(eq(bookingsTable.id, id));
+
+    await logAdminAction({
+      type: "admin_community_social_email_sent",
+      bookingId: id,
+      summary: `Sent Community Social emails for booking ${booking.orderReference || `#${id}`}`,
+      meta: { resend },
+    });
+
+    const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+    res.json({ ...formatBooking(refreshed), resend });
+  },
+);
+
 router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -521,6 +978,7 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
   const allowed = [
     "paid",
     "invoiced",
+    "transferred",
     "partial",
     "pending_payment",
     "cancelled",
@@ -539,7 +997,75 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
   }
 
   let finalStatus = status;
-  let stripeAction: "refund_issued" | "invoice_voided" | "skipped" | "failed" = "skipped";
+  let stripeAction: AdminStatusStripeAction = "skipped";
+  const statusUpdateOverrides: BookingUpdate = {};
+
+  if (status === "paid" && existing.paymentMethod === "invoice" && existing.stripeInvoiceId) {
+    const stripe = getStripe();
+    const invoiceId = existing.stripeInvoiceId;
+
+    if (!stripe) {
+      logger.error(
+        { bookingId: id, invoiceId },
+        "Stripe not configured - cannot mark invoice paid from admin status override",
+      );
+      res.status(503).json({
+        error: "Stripe is not configured; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    let paidInvoice: Stripe.Invoice;
+    try {
+      const currentInvoice = await stripe.invoices.retrieve(invoiceId);
+
+      if (currentInvoice.status === "paid") {
+        paidInvoice = currentInvoice;
+      } else if (currentInvoice.status === "open") {
+        paidInvoice = await stripe.invoices.pay(invoiceId, { paid_out_of_band: true });
+      } else {
+        logger.warn(
+          { bookingId: id, invoiceId, stripeInvoiceStatus: currentInvoice.status },
+          "Stripe invoice is not open or paid; admin paid override blocked",
+        );
+        res.status(409).json({
+          error: `Stripe invoice is ${currentInvoice.status ?? "not payable"}; booking status was not changed`,
+          stripeAction: "failed",
+        });
+        return;
+      }
+    } catch (err) {
+      logger.error(
+        { err, bookingId: id, invoiceId },
+        "Failed to mark Stripe invoice paid from admin status override",
+      );
+      res.status(502).json({
+        error: "Failed to mark Stripe invoice paid; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    if (paidInvoice.status !== "paid") {
+      logger.error(
+        { bookingId: id, invoiceId, stripeInvoiceStatus: paidInvoice.status },
+        "Stripe invoice pay call did not return a paid invoice; admin paid override blocked",
+      );
+      res.status(502).json({
+        error: "Stripe invoice was not marked paid; booking status was not changed",
+        stripeAction: "failed",
+      });
+      return;
+    }
+
+    const syncedAt = new Date();
+    stripeAction = "invoice_paid_out_of_band";
+    statusUpdateOverrides.paidAt = existing.paidAt ?? syncedAt;
+    statusUpdateOverrides.stripeInvoiceStatus = "paid";
+    statusUpdateOverrides.stripeInvoiceStatusSyncedAt = syncedAt;
+    applyStripeInvoiceUrlUpdates(statusUpdateOverrides, paidInvoice);
+  }
 
   if (status === "cancelled") {
     const stripe = getStripe();
@@ -577,7 +1103,11 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
 
   const [updated] = await db
     .update(bookingsTable)
-    .set({ status: finalStatus as typeof existing.status, updatedAt: new Date() })
+    .set({
+      status: finalStatus as typeof existing.status,
+      updatedAt: new Date(),
+      ...statusUpdateOverrides,
+    })
     .where(eq(bookingsTable.id, id))
     .returning();
 
@@ -1056,6 +1586,9 @@ router.put("/admin/passes/config/:passType", adminAuth, async (req, res): Promis
   if (extraBenefits !== undefined)
     updates.extraBenefits = Array.isArray(extraBenefits) ? extraBenefits : [];
 
+  const defaultCurrentPrice = passType === "business" ? "499" : "249";
+  const defaultOriginalPrice = passType === "business" ? "999" : "429";
+
   const [prev] = await db
     .select()
     .from(passConfigTable)
@@ -1065,9 +1598,9 @@ router.put("/admin/passes/config/:passType", adminAuth, async (req, res): Promis
     .insert(passConfigTable)
     .values({
       passType,
-      currentPrice: updates.currentPrice ?? "199",
-      originalPrice: updates.originalPrice ?? "429",
-      pricingPeriodName: updates.pricingPeriodName ?? "Early Bird",
+      currentPrice: updates.currentPrice ?? defaultCurrentPrice,
+      originalPrice: updates.originalPrice ?? defaultOriginalPrice,
+      pricingPeriodName: updates.pricingPeriodName ?? "Super Early Bird",
       benefits: updates.benefits ?? [],
       extraBenefits: updates.extraBenefits ?? [],
     })
@@ -1321,6 +1854,7 @@ const bucketSql = sql<AgingBucket>`
 const unpaidInvoiceWhereSql = and(
   eq(bookingsTable.paymentMethod, "invoice"),
   eq(bookingsTable.status, "invoiced"),
+  eq(bookingsTable.manualEntry, false),
   or(
     isNull(bookingsTable.stripeInvoiceStatus),
     notInArray(bookingsTable.stripeInvoiceStatus, ["paid", "void", "uncollectible"]),

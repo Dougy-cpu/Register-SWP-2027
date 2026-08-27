@@ -275,9 +275,9 @@ describe("incrementPromoUsage cap enforcement (via db mock)", () => {
     expect(dbState.promos[0].usedCount).toBe(3);
   });
 
-  it("cannot oversubscribe a complimentary capped code under concurrent multi-ticket calls", async () => {
+  it("cannot oversubscribe a complimentary capped code under concurrent multi-pass calls", async () => {
     seedPromo({ discountType: "complimentary", maxUses: 5, usedCount: 0 });
-    // Five concurrent comp bookings of 2 tickets each = 10 tickets requested.
+    // Five concurrent comp bookings of 2 passes each = 10 passes requested.
     // Only those that fit (2+2 = 4 ≤ 5) should commit; the third would push
     // total to 6 > 5 and must be rejected.
     const results = await Promise.all(
@@ -330,8 +330,8 @@ describe("calculatePricing — complimentary code", () => {
   it("zeros the order when remaining seats >= requested quantity", async () => {
     seedPromo({ maxUses: 5, usedCount: 0 });
     const result = await calculatePricing("single", 3, "FREEPASS");
-    expect(result.baseSubtotal).toBe(597);
-    expect(result.promoDiscountAmount).toBe(597);
+    expect(result.baseSubtotal).toBe(747);
+    expect(result.promoDiscountAmount).toBe(747);
     expect(result.subtotalAfterDiscounts).toBe(0);
     expect(result.total).toBe(0);
     expect(result.promoDiscountType).toBe("complimentary");
@@ -341,7 +341,7 @@ describe("calculatePricing — complimentary code", () => {
   it("zeros the order when remaining seats == requested quantity (exact-fit)", async () => {
     seedPromo({ maxUses: 4, usedCount: 1 });
     const result = await calculatePricing("single", 3, "FREEPASS");
-    expect(result.promoDiscountAmount).toBe(597);
+    expect(result.promoDiscountAmount).toBe(747);
     expect(result.total).toBe(0);
     expect(result.promoRemainingSeats).toBe(3);
   });
@@ -350,9 +350,9 @@ describe("calculatePricing — complimentary code", () => {
     seedPromo({ maxUses: 5, usedCount: 3 });
     const result = await calculatePricing("single", 3, "FREEPASS");
     expect(result.promoDiscountAmount).toBe(0);
-    expect(result.subtotalAfterDiscounts).toBe(597);
-    expect(result.vatAmount).toBeCloseTo(119.4, 2);
-    expect(result.total).toBeCloseTo(716.4, 2);
+    expect(result.subtotalAfterDiscounts).toBe(747);
+    expect(result.vatAmount).toBeCloseTo(149.4, 2);
+    expect(result.total).toBeCloseTo(896.4, 2);
     expect(result.promoDiscountType).toBe("complimentary");
     expect(result.promoRemainingSeats).toBe(2);
   });

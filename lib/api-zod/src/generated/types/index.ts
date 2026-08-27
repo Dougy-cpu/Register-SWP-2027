@@ -6,8 +6,16 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./adminAttendee";
+export * from "./adminBookingWithAttendees";
 export * from "./adminLoginBody";
 export * from "./adminLoginResponse";
+export * from "./adminRegistrationStatusAction";
+export * from "./adminRegistrationStatusErrorResponse";
+export * from "./adminRegistrationStatusErrorResponseStripeAction";
+export * from "./adminRegistrationStatusUpdateBody";
+export * from "./adminRegistrationStatusUpdateBodyStatus";
+export * from "./adminRegistrationStatusUpdateResult";
 export * from "./adminStats";
 export * from "./adminStatsPassCounts";
 export * from "./adminStatsPaymentMethodCounts";
@@ -55,6 +63,9 @@ export * from "./listUnpaidInvoicesBucket";
 export * from "./listUnpaidInvoicesOrder";
 export * from "./listUnpaidInvoicesParams";
 export * from "./listUnpaidInvoicesSort";
+export * from "./manualRegistrationBody";
+export * from "./manualRegistrationBodyPassType";
+export * from "./manualRegistrationBodyStatus";
 export * from "./pricingBreakdown";
 export * from "./pricingBreakdownPromoDiscountType";
 export * from "./pricingRequest";
@@ -65,6 +76,9 @@ export * from "./promoCodeDiscountType";
 export * from "./promoCodeValidationResult";
 export * from "./promoCodeValidationResultDiscountType";
 export * from "./publicEventSettings";
+export * from "./registrationEmailResendResult";
+export * from "./registrationEmailResendResultResend";
+export * from "./registrationEmailResendResultResendType";
 export * from "./registrationList";
 export * from "./registrationRedeliveryResult";
 export * from "./registrationRedeliveryResultRedelivery";

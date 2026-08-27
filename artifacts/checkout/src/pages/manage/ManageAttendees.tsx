@@ -440,7 +440,7 @@ export default function ManageAttendees() {
               </span>
               {" - "}
               {booking.quantity}{" "}
-              {booking.passType === "single" ? "HR Professional Pass" : "Business Pass"}
+              {booking.passType === "single" ? "Workforce Pass" : "Business Pass"}
               {booking.quantity !== 1 ? "es" : ""}
             </span>
             {booking.paymentMethod === "invoice" && (

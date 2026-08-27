@@ -41,7 +41,7 @@ interface AttendeeForPdf {
 }
 
 const passLabels: Record<string, string> = {
-  single: "HR Professional Pass, SWP Summit",
+  single: "Workforce Pass, SWP Summit",
   team: "Team Pass, SWP Summit",
   business: "Business Pass, SWP Summit",
 };

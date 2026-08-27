@@ -29,6 +29,7 @@ export interface Booking {
   totalAmount: number;
   /** @nullable */
   paymentMethod?: BookingPaymentMethod;
+  manualEntry: boolean;
   /** @nullable */
   stripeSessionId?: string | null;
   /** @nullable */
@@ -81,6 +82,7 @@ export interface Booking {
   invoiceBadgeStatus?: BookingInvoiceBadgeStatus;
   confirmationEmailSent?: boolean;
   welcomeEmailsSent?: boolean;
+  communitySocialEmailSent?: boolean;
   organiserNotified?: boolean;
   sheetsSynced?: boolean;
   needsAttention?: boolean;

@@ -13,5 +13,6 @@ export const EmailLogType = {
   receipt: "receipt",
   welcome: "welcome",
   invoice: "invoice",
+  community_social: "community_social",
   test: "test",
 } as const;

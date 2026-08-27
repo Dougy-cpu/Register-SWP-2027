@@ -10,6 +10,20 @@ import { logger } from "./logger";
 
 export async function runMigrations() {
   try {
+    await db.execute(
+      sql`ALTER TYPE email_template_type ADD VALUE IF NOT EXISTS 'community_social'`,
+    );
+    await db.execute(sql`ALTER TYPE email_log_type ADD VALUE IF NOT EXISTS 'community_social'`);
+    await db.execute(sql`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS community_social_email_sent BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    logger.info("Migration: Community Social email types and delivery flag ensured");
+  } catch (err) {
+    logger.warn({ err }, "Migration: could not ensure Community Social email support");
+  }
+
+  try {
     await db.execute(sql`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hear_about_us TEXT`);
     logger.info("Migration: hear_about_us column ensured");
   } catch (err) {
@@ -136,6 +150,36 @@ const DEFAULT_WELCOME_BODY = `
 <strong>The SWP Summit Team</strong></p>
 `;
 
+const DEFAULT_COMMUNITY_SOCIAL_SUBJECT = "{{socialName}} invitation - {{eventName}}";
+
+const DEFAULT_COMMUNITY_SOCIAL_BODY = `
+<h2>You're invited to the Community Social</h2>
+
+<p>Hi {{firstName}},</p>
+
+<p>We'd like to invite you to <strong>{{socialName}}</strong>, connected with {{eventName}}.</p>
+
+<div class="info-box">
+  <strong>{{socialName}}</strong><br>
+  <strong>Date:</strong> {{socialDate}}<br>
+  <strong>Time:</strong> {{socialTime}}<br>
+  <strong>Venue:</strong> {{socialVenue}}
+</div>
+
+<p>{{socialDescription}}</p>
+
+{{socialCalendarLinks}}
+
+<p style="text-align:center;margin:28px 0;">
+  <a href="{{socialDetailsUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Visit the SWP Summit website</a>
+</p>
+
+<p><a href="{{socialMapUrl}}">View the venue on Google Maps</a></p>
+
+<p>Best,<br>
+<strong>The SWP Summit Team</strong></p>
+`;
+
 const DEFAULT_DISCOUNT_TIERS = [
   { passType: "single" as const, minQuantity: 4, discountPercent: "10", label: "4+ passes" },
   { passType: "single" as const, minQuantity: 8, discountPercent: "15", label: "8+ passes" },
@@ -152,6 +196,21 @@ const DEFAULT_DISCOUNT_TIERS = [
     discountPercent: "15",
     label: "5+ Business Passes",
   },
+];
+
+const DEFAULT_PASS_BENEFITS = [
+  "Full summit day",
+  "Main stage keynotes and content forums",
+  "Planning Lab sessions",
+  "PowerPulse and optional Quickfire sessions",
+  "Personalised agenda creator before the event",
+  "Networking breaks, lunch and drinks reception",
+  "Session slides and recordings after the event",
+];
+
+const DEFAULT_BUSINESS_EXTRA_BENEFITS = [
+  "This is an attendee pass, not a sponsorship package.",
+  "Speaking, branding, sponsor visibility and VIP invitations are handled separately.",
 ];
 
 function rebrandLegacyText(value: string): string {
@@ -212,6 +271,50 @@ async function rebrandLegacyDefaults() {
       logger.info({ type: template.type }, "Rebranded legacy email template text");
     }
   }
+
+  const passConfigs = await db.select().from(passConfigTable);
+  for (const config of passConfigs) {
+    const updates: Partial<typeof passConfigTable.$inferInsert> = {};
+    const benefits = Array.isArray(config.benefits) ? config.benefits : [];
+    const extraBenefits = Array.isArray(config.extraBenefits) ? config.extraBenefits : [];
+    const currentPrice = Number(config.currentPrice);
+
+    if (config.passType === "single") {
+      if (currentPrice === 199) updates.currentPrice = "249.00";
+      if (config.pricingPeriodName === "Early Bird") updates.pricingPeriodName = "Super Early Bird";
+      if (
+        benefits.includes("Conference Sessions") ||
+        benefits.includes("Access to Pre-Event Social")
+      ) {
+        updates.benefits = DEFAULT_PASS_BENEFITS;
+      }
+    }
+
+    if (config.passType === "business") {
+      if (currentPrice === 599) updates.currentPrice = "499.00";
+      if (config.pricingPeriodName === "Early Bird") updates.pricingPeriodName = "Super Early Bird";
+      if (
+        benefits.includes("Conference Sessions") ||
+        benefits.includes("Happy Hour with Entertainment")
+      ) {
+        updates.benefits = DEFAULT_PASS_BENEFITS;
+      }
+      if (
+        extraBenefits.includes("Exclusive Attendee Report") ||
+        extraBenefits.includes("Company Branding at the Summit")
+      ) {
+        updates.extraBenefits = DEFAULT_BUSINESS_EXTRA_BENEFITS;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(passConfigTable)
+        .set(updates)
+        .where(eq(passConfigTable.passType, config.passType));
+      logger.info({ passType: config.passType }, "Updated legacy pass config defaults");
+    }
+  }
 }
 
 export async function seed() {
@@ -251,6 +354,24 @@ export async function seed() {
       logger.debug("Confirmation email template already present, skipping seed");
     }
 
+    // This template is available for manual sends only. It is intentionally
+    // not part of the automatic post-booking email sequence.
+    const existingCommunitySocial = await db
+      .select()
+      .from(emailTemplatesTable)
+      .where(eq(emailTemplatesTable.type, "community_social"));
+
+    if (existingCommunitySocial.length === 0) {
+      await db.insert(emailTemplatesTable).values({
+        type: "community_social",
+        subject: DEFAULT_COMMUNITY_SOCIAL_SUBJECT,
+        htmlBody: DEFAULT_COMMUNITY_SOCIAL_BODY,
+      });
+      logger.info("Seeded Community Social email template");
+    } else {
+      logger.debug("Community Social email template already present, skipping seed");
+    }
+
     const existingTiers = await db.select().from(discountTiersTable);
     if (existingTiers.length === 0) {
       await db.insert(discountTiersTable).values(DEFAULT_DISCOUNT_TIERS);
@@ -262,22 +383,10 @@ export async function seed() {
       await db.insert(passConfigTable).values([
         {
           passType: "single",
-          currentPrice: "199.00",
+          currentPrice: "249.00",
           originalPrice: "429.00",
           pricingPeriodName: "Super Early Bird",
-          benefits: [
-            "Conference Sessions",
-            "Networking Sessions",
-            "Happy Hour Networking",
-            "Personalised Agenda",
-            "Access to Pre-Event Social",
-            "Exhibition Hall",
-            "Award-winning Food & Drink",
-            "On-Demand Recordings",
-            "Additional Content Access",
-            "Presentation Slides",
-            "Post-Event Content",
-          ],
+          benefits: DEFAULT_PASS_BENEFITS,
           extraBenefits: [],
         },
         {
@@ -285,18 +394,8 @@ export async function seed() {
           currentPrice: "499.00",
           originalPrice: "999.00",
           pricingPeriodName: "Super Early Bird",
-          benefits: [
-            "Conference Sessions",
-            "Networking Sessions",
-            "Happy Hour with Entertainment",
-            "Exhibition Hall",
-            "Award-winning Food & Drink",
-            "On-Demand Recordings",
-            "Additional Content Access",
-            "Presentation Slides",
-            "Post-Event Content",
-          ],
-          extraBenefits: ["Exclusive Attendee Report", "Company Branding at the Summit"],
+          benefits: DEFAULT_PASS_BENEFITS,
+          extraBenefits: DEFAULT_BUSINESS_EXTRA_BENEFITS,
         },
       ]);
       logger.info("Seeded default pass config");

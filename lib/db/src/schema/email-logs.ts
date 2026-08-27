@@ -8,6 +8,7 @@ export const emailLogTypeEnum = pgEnum("email_log_type", [
   "receipt",
   "welcome",
   "invoice",
+  "community_social",
   "test",
 ]);
 

@@ -58,8 +58,8 @@ What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
 
 How can I pay?
-The invoice email includes company information, bank details and payment instructions.
-Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.
+The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link.
+Your finance team can settle the invoice by bank transfer or through Stripe.
 
 Where do I send remittance advice?
 Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
@@ -788,7 +788,7 @@ export default function AdminSettings() {
               <div className="space-y-4 pt-2 border-t border-border">
                 <div className="flex items-center justify-between pt-4">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                    Pre-Event Social (Optional)
+                    Additional Networking Social (Optional)
                   </h3>
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input
@@ -813,7 +813,7 @@ export default function AdminSettings() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, socialName: e.target.value || null }))
                       }
-                      placeholder="Pre-Summit Drinks"
+                      placeholder="Optional Networking Drinks"
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

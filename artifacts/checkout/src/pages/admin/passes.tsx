@@ -29,15 +29,14 @@ interface PassConfig {
 const PASS_TYPES = [
   {
     passType: "single" as const,
-    label: "HR Professional Pass",
-    description: "For HR professionals attending the summit",
+    label: "Workforce Pass",
+    description: "For employer-side attendees",
     showExtraBenefits: false,
   },
   {
     passType: "business" as const,
     label: "Business Pass",
-    description:
-      "For consultants and vendors — includes everything in the HR pass plus exclusive extras",
+    description: "For commercial attendees attending as delegates",
     showExtraBenefits: true,
   },
 ];
@@ -213,9 +212,9 @@ export default function AdminPasses() {
           const c = data[pt];
           drafts[pt] = c ?? {
             passType: pt,
-            currentPrice: pt === "business" ? "599" : "199",
+            currentPrice: pt === "business" ? "499" : "249",
             originalPrice: pt === "business" ? "999" : "429",
-            pricingPeriodName: "Early Bird",
+            pricingPeriodName: "Super Early Bird",
             benefits: [],
             extraBenefits: [],
           };
@@ -417,7 +416,7 @@ export default function AdminPasses() {
                           </label>
                           <Input
                             type="text"
-                            placeholder="e.g. Early Bird"
+                            placeholder="e.g. Super Early Bird"
                             value={draft.pricingPeriodName}
                             onChange={(e) =>
                               updateDraft(passType, "pricingPeriodName", e.target.value)
@@ -452,16 +451,15 @@ export default function AdminPasses() {
                       {showExtraBenefits && (
                         <div>
                           <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                            Exclusive to Business Pass
+                            Business Pass guidance
                           </label>
                           <p className="text-xs text-muted-foreground mb-3">
-                            These extras are shown separately with a gold accent below the standard
-                            benefits.
+                            These guidance points are shown separately below the standard benefits.
                           </p>
                           <BenefitsList
                             benefits={draft.extraBenefits}
                             onChange={(list) => updateDraft(passType, "extraBenefits", list)}
-                            placeholder="Add an exclusive benefit…"
+                            placeholder="Add Business Pass guidance…"
                           />
                         </div>
                       )}
@@ -498,7 +496,7 @@ export default function AdminPasses() {
         {activeTab === "inventory" && (
           <div className="space-y-4">
             <p className="text-muted-foreground text-sm">
-              Set the number of remaining tickets for each pass type. When a count is configured, it
+              Set the number of remaining passes for each pass type. When a count is configured, it
               will be displayed on the checkout as urgency messaging to encourage bookings. Leave
               blank for unlimited.
             </p>

@@ -23,6 +23,12 @@ import {
   generateReceiptPdfForBooking,
 } from "./receipt-documents";
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl, type CalendarEvent } from "./ics";
+import {
+  formatAttendeeSeatLabel,
+  formatAttendeeSnapshotName,
+  type AttendeeChangeSnapshot,
+  type AttendeeFieldChange,
+} from "./attendee-changes";
 
 async function downloadHttpsPdf(url: string, redirectsLeft = 5): Promise<Buffer | null> {
   return new Promise((resolve) => {
@@ -125,8 +131,8 @@ What are the payment terms?
 Invoices are due within 14 days, or before the event date if sooner. Your seats are reserved as soon as the invoice is issued.
 
 How can I pay?
-The invoice email includes company information, bank details and payment instructions.
-Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.
+The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link.
+Your finance team can settle the invoice by bank transfer or through Stripe.
 
 Where do I send remittance advice?
 Email remittance to douglas@peoplestrategyhub.com so we can match your payment quickly.
@@ -218,7 +224,7 @@ const FROM_NAME = process.env.FROM_NAME || "SWP Summit";
 async function logEmail(
   bookingId: number | null,
   recipient: string,
-  type: "confirmation" | "receipt" | "welcome" | "invoice" | "test",
+  type: "confirmation" | "receipt" | "welcome" | "invoice" | "community_social" | "test",
   status: "sent" | "failed" | "pending",
   errorMessage?: string,
 ) {
@@ -378,7 +384,7 @@ async function buildConfirmationEmailHtml(
   settings: EventSettings,
 ): Promise<{ html: string; subject: string }> {
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass",
+    single: "Workforce Pass",
     team: "Team Pass (3 seats)",
     business: "Business Pass",
   };
@@ -458,7 +464,7 @@ async function buildConfirmationEmailHtml(
       ? `<div style="margin:20px 0;padding:16px 20px;background:#f0f6ff;border:1px solid #e2e8f0;border-radius:6px;">
       <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#000000;">Invoice issued</p>
       <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">Your registration is confirmed and the invoice has been emailed to <strong>${escHtml(booking.billingEmail || "the billing contact")}</strong>.</p>
-      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes company information, bank details and payment instructions. Your finance team can settle the invoice by bank transfer or through the secure Stripe payment link on the invoice.</p>
+      <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">The invoice email includes supplier details, bank information, payment instructions and a secure Stripe payment link. Your finance team can settle the invoice by bank transfer or through Stripe.</p>
       <p style="margin:0 0 10px;font-size:14px;color:#444;line-height:1.6;">Need to add a PO number later? Use the secure billing link in your confirmation email. Once updated, we will automatically re-issue the invoice with the PO included.</p>
       <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">If the billing contact does not see the invoice within a few minutes, please ask them to check their junk or spam folder.</p>
     </div>`
@@ -1134,7 +1140,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
   const lead = attendees.find((a) => a.isLead) || attendees[0];
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass",
+    single: "Workforce Pass",
     team: "Team Pass (3 seats)",
     business: "Business Pass",
   };
@@ -1179,7 +1185,7 @@ export async function sendOrganiserNotification(bookingId: number): Promise<bool
     <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
       <tr><td style="padding:7px 0;color:#666;width:180px;border-bottom:1px solid #f0f0f0">Order Reference</td><td style="border-bottom:1px solid #f0f0f0"><strong style="font-family:monospace">${escHtml(booking.orderReference || `#${bookingId}`)}</strong></td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Pass Type</td><td style="border-bottom:1px solid #f0f0f0">${passLabels[booking.passType] || booking.passType}</td></tr>
-      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity} ${booking.quantity === 1 ? "ticket" : "tickets"}</td></tr>
+      <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Quantity</td><td style="border-bottom:1px solid #f0f0f0">${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Payment Method</td><td style="border-bottom:1px solid #f0f0f0">${booking.paymentMethod === "card" ? "Credit/Debit Card" : booking.paymentMethod === "invoice" ? "Invoice" : "-"}</td></tr>
       <tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Status</td><td style="border-bottom:1px solid #f0f0f0"><strong style="color:${booking.status === "paid" ? "#16a34a" : "#d97706"}">${booking.status === "paid" ? "Paid" : booking.status === "invoiced" ? "Invoiced (Awaiting Payment)" : escHtml(booking.status)}</strong></td></tr>
       ${booking.promoCode ? `<tr><td style="padding:7px 0;color:#666;border-bottom:1px solid #f0f0f0">Promo Code</td><td style="border-bottom:1px solid #f0f0f0">${escHtml(booking.promoCode)}</td></tr>` : ""}
@@ -1500,9 +1506,9 @@ export async function sendIncompleteFormNotification(bookingId: number): Promise
   if (!lead) return;
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass (HR Professional)",
+    single: "Workforce Pass (Employer-side attendee)",
     team: "Team Pass (3 seats)",
-    business: "Business Pass (Vendor/Consultant)",
+    business: "Business Pass (Commercial attendee)",
   };
 
   const submittedAt = booking.updatedAt || booking.createdAt;
@@ -1741,18 +1747,6 @@ function renderCalendarBlockHtml(opts: {
     </div>`;
 }
 
-function renderSocialTbcHtml(): string {
-  return `
-    <div style="margin:24px 0;">
-      <h3 style="margin:0 0 8px;color:#000;">Pre-event social</h3>
-      <div style="border:1px dashed #e2e8f0;border-radius:6px;padding:18px 20px;margin:12px 0;background:#f0f6ff;">
-        <p style="margin:0;font-size:14px;color:#444;line-height:1.5;">
-          Details to follow - we'll be in touch closer to the date with the time, venue, and an invite you can pop in your calendar.
-        </p>
-      </div>
-    </div>`;
-}
-
 export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceholders {
   const appBaseUrl = process.env.APP_BASE_URL || "https://register.swpsummit.com";
   const tz = settings.eventTimezone || "Europe/London";
@@ -1790,7 +1784,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     });
   }
 
-  let socialCalendarLinks = renderSocialTbcHtml();
+  let socialCalendarLinks = "";
   let socialGoogleCalendarUrl = "";
   let socialOutlookCalendarUrl = "";
   let socialIcsCalendarUrl = "";
@@ -1798,7 +1792,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
   if (settings.socialEnabled && settings.socialStartAt && settings.socialEndAt) {
     const start = new Date(settings.socialStartAt);
     const end = new Date(settings.socialEndAt);
-    const name = settings.socialName || "Pre-Event Social";
+    const name = settings.socialName || "Additional Networking Social";
     const ev: CalendarEvent = {
       uid: `event-settings-${settings.id}-social@swpsummit.com`,
       title: name,
@@ -1812,7 +1806,7 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     socialOutlookCalendarUrl = buildOutlookCalendarUrl(ev);
     socialIcsCalendarUrl = `${appBaseUrl}/api/calendar/social.ics`;
     socialCalendarLinks = renderCalendarBlockHtml({
-      heading: "Pre-event social",
+      heading: "Additional networking social",
       title: name,
       subtitle:
         formatCalendarRangeLabel(start, end, tz) +
@@ -1839,6 +1833,130 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
 // Backward-compat shim - returns combined block
 export function buildCalendarLinksSection(settings: EventSettings): string {
   return getCalendarPlaceholders(settings).calendarLinks;
+}
+
+export function getCommunitySocialTemplateVars(
+  settings: EventSettings,
+  firstName: string,
+): Record<string, string> {
+  const configuredVenue = settings.socialVenue?.trim() || "";
+  const venue = configuredVenue || "To be confirmed";
+  const startAt = settings.socialStartAt ? new Date(settings.socialStartAt) : null;
+  const hasValidStart = startAt !== null && !Number.isNaN(startAt.getTime());
+  const timeZone = settings.eventTimezone || "Europe/London";
+
+  let socialDate = "To be confirmed";
+  let socialTime = "To be confirmed";
+  if (hasValidStart) {
+    try {
+      socialDate = startAt.toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone,
+      });
+      socialTime = startAt
+        .toLocaleTimeString("en-GB", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone,
+        })
+        .replace(" ", "")
+        .toLowerCase();
+    } catch {
+      socialDate = startAt.toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+      socialTime = startAt
+        .toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true })
+        .replace(" ", "")
+        .toLowerCase();
+    }
+  }
+
+  const detailsUrl = settings.orgWebsite || "https://swpsummit.com";
+  const socialMapUrl = configuredVenue
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(configuredVenue)}`
+    : detailsUrl;
+  const calendar = getCalendarPlaceholders(settings);
+
+  return {
+    "{{firstName}}": escHtml(firstName || "there"),
+    "{{eventName}}": escHtml(settings.eventName || "SWP Summit"),
+    "{{socialName}}": escHtml(
+      settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
+    ),
+    "{{socialVenue}}": escHtml(venue),
+    "{{socialDate}}": escHtml(socialDate),
+    "{{socialTime}}": escHtml(socialTime),
+    "{{socialDescription}}": escHtml(settings.socialDescription || ""),
+    "{{socialDetailsUrl}}": escHtml(detailsUrl),
+    "{{socialMapUrl}}": escHtml(socialMapUrl),
+    "{{socialCalendarLinks}}":
+      settings.socialEnabled && settings.socialStartAt && settings.socialEndAt
+        ? calendar.socialCalendarLinks
+        : "",
+  };
+}
+
+/**
+ * Send the manually triggered Community Social invitation to one attendee.
+ * This function is never called by the automatic booking confirmation flow.
+ */
+export async function sendCommunitySocialEmail(
+  bookingId: number,
+  firstName: string,
+  toEmail: string,
+): Promise<boolean> {
+  try {
+    const [template] = await db
+      .select()
+      .from(emailTemplatesTable)
+      .where(eq(emailTemplatesTable.type, "community_social"));
+
+    if (!template) {
+      logger.warn({ bookingId }, "No Community Social email template found");
+      return false;
+    }
+
+    const settings = await getEventSettings();
+    const vars = getCommunitySocialTemplateVars(settings, firstName);
+    let personalised = template.htmlBody;
+    for (const [key, value] of Object.entries(vars)) {
+      personalised = personalised.replaceAll(key, value);
+    }
+
+    const subject = applySubjectVars(template.subject, {
+      firstName: firstName || "there",
+      eventName: settings.eventName || "SWP Summit",
+      socialName: settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
+    });
+    const html = wrapInBrandedLayout(personalised, settings);
+    const sent = await sendMail({
+      to: toEmail,
+      subject,
+      html,
+      fromName: settings.fromName,
+      fromEmail: settings.fromEmail,
+    });
+
+    await logEmail(
+      bookingId,
+      toEmail,
+      "community_social",
+      sent ? "sent" : "failed",
+      sent ? undefined : "SMTP not configured or send failed",
+    );
+    return sent;
+  } catch (err) {
+    logger.error({ err, bookingId, toEmail }, "Failed to send Community Social email");
+    return false;
+  }
 }
 
 function buildManageLinkSection(manageUrl: string): string {
@@ -1946,18 +2064,40 @@ export async function sendWelcomeEmail(
   }
 }
 
+export function renderAttendeeChangeTableHtml(changes: AttendeeFieldChange[]): string {
+  return `<table width="100%" role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <tr style="background:#0f172a">
+      <th align="left" style="width:26%;padding:11px 14px;color:#cbd5e1;font-size:12px;line-height:1.4;border-bottom:1px solid #334155">Field</th>
+      <th align="left" style="width:37%;padding:11px 14px;color:#cbd5e1;font-size:12px;line-height:1.4;border-bottom:1px solid #334155">Previous details</th>
+      <th align="left" style="width:37%;padding:11px 14px;color:#cbd5e1;font-size:12px;line-height:1.4;border-bottom:1px solid #334155">New details</th>
+    </tr>
+    ${changes
+      .map(
+        (change, index) => `<tr style="background:${index % 2 === 0 ? "#1e293b" : "#263548"}">
+      <td style="padding:11px 14px;font-weight:bold;color:#94a3b8;font-size:13px;line-height:1.45;border-bottom:1px solid #334155;vertical-align:top;overflow-wrap:anywhere">${escHtml(change.label)}</td>
+      <td style="padding:11px 14px;color:#e2e8f0;font-size:13px;line-height:1.45;border-bottom:1px solid #334155;vertical-align:top;overflow-wrap:anywhere">${escHtml(change.previous)}</td>
+      <td style="padding:11px 14px;color:#f8fafc;font-size:13px;line-height:1.45;border-bottom:1px solid #334155;vertical-align:top;overflow-wrap:anywhere">${escHtml(change.current)}</td>
+    </tr>`,
+      )
+      .join("")}
+  </table>`;
+}
+
 export async function sendAttendeeChangeNotification(
   bookingId: number,
   attendeeId: number,
-  updatedData: {
-    firstName: string;
-    lastName: string;
-    jobTitle?: string;
-    company?: string;
-    workEmail: string;
+  changeSet: {
+    previous: AttendeeChangeSnapshot;
+    current: AttendeeChangeSnapshot;
+    changes: AttendeeFieldChange[];
   },
 ): Promise<void> {
   try {
+    if (changeSet.changes.length === 0) {
+      logger.info({ bookingId, attendeeId }, "No attendee field changes detected");
+      return;
+    }
+
     const recipients = await getOrganiserEmails();
     if (recipients.length === 0) {
       logger.info(
@@ -1973,6 +2113,9 @@ export async function sendAttendeeChangeNotification(
     const settings = await getEventSettings();
     const orderRef =
       booking.orderReference || `${settings.refPrefix}-${settings.refOffset + bookingId}`;
+    const previousName = formatAttendeeSnapshotName(changeSet.previous);
+    const currentName = formatAttendeeSnapshotName(changeSet.current);
+    const seatLabel = formatAttendeeSeatLabel(changeSet.current, booking.quantity);
     const changedAt = new Date().toLocaleString("en-GB", {
       timeZone: "Europe/London",
       weekday: "short",
@@ -1987,10 +2130,20 @@ export async function sendAttendeeChangeNotification(
     const defaultAttendeeSubject = `Attendee Details Updated - {{orderReference}} - {{firstName}} {{lastName}}`;
     const subject = applySubjectVars(settings.notifyAttendeeSubject || defaultAttendeeSubject, {
       orderReference: orderRef,
-      firstName: updatedData.firstName,
-      lastName: updatedData.lastName,
+      firstName: changeSet.current.firstName,
+      lastName: changeSet.current.lastName,
       eventName: settings.eventName,
     });
+
+    const contextRows = [
+      ["Order reference", orderRef],
+      ["Seat", seatLabel],
+      ["Attendee ID", String(attendeeId)],
+      ["Previous attendee", previousName],
+      ["Current attendee", currentName],
+      ["Fields changed", String(changeSet.changes.length)],
+      ["Changed at", changedAt],
+    ];
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1999,42 +2152,33 @@ export async function sendAttendeeChangeNotification(
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 16px">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+        <table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;width:100%">
           <tr>
-            <td style="background:#1e293b;padding:32px 32px 24px;border-radius:4px 4px 0 0">
+            <td style="background:#1e293b;padding:32px 32px 24px;border-radius:6px 6px 0 0">
               <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#f8fafc;letter-spacing:-0.02em">
                 Attendee Details Updated
               </h1>
               <p style="margin:0;font-size:14px;color:#64748b">
-                SWP Summit &mdash; Self-Service Change Notification
+                ${escHtml(settings.eventName || "SWP Summit")} | Self-Service Change Notification
               </p>
             </td>
           </tr>
           <tr>
             <td style="background:#166534;padding:12px 32px">
               <p style="margin:0;font-size:14px;color:#dcfce7">
-                An attendee updated their details via the self-service management link at <strong style="color:#bbf7d0">${changedAt}</strong>.
+                <strong style="color:#bbf7d0">${changeSet.changes.length} ${changeSet.changes.length === 1 ? "field was" : "fields were"} changed</strong> for ${escHtml(seatLabel)}.
               </p>
             </td>
           </tr>
           <tr>
             <td style="background:#1e293b;padding:0">
-              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-                ${[
-                  ["Order Reference", orderRef],
-                  ["Attendee ID", String(attendeeId)],
-                  ["First Name", updatedData.firstName],
-                  ["Last Name", updatedData.lastName],
-                  ["Job Title", updatedData.jobTitle || "-"],
-                  ["Company", updatedData.company || "-"],
-                  ["Work Email", updatedData.workEmail],
-                  ["Changed At", changedAt],
-                ]
+              <table width="100%" role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+                ${contextRows
                   .map(
                     ([label, value], i) => `
                   <tr style="background:${i % 2 === 0 ? "#1e293b" : "#263548"}">
-                    <td style="padding:11px 16px;font-weight:bold;color:#94a3b8;font-size:13px;width:160px;border-bottom:1px solid #334155">${escHtml(label)}</td>
-                    <td style="padding:11px 16px;color:#f1f5f9;font-size:13px;border-bottom:1px solid #334155">${escHtml(value)}</td>
+                    <td style="padding:11px 16px;font-weight:bold;color:#94a3b8;font-size:13px;width:170px;border-bottom:1px solid #334155">${escHtml(label)}</td>
+                    <td style="padding:11px 16px;color:#f1f5f9;font-size:13px;border-bottom:1px solid #334155;overflow-wrap:anywhere">${escHtml(value)}</td>
                   </tr>`,
                   )
                   .join("")}
@@ -2042,9 +2186,19 @@ export async function sendAttendeeChangeNotification(
             </td>
           </tr>
           <tr>
-            <td style="background:#0f172a;padding:20px 32px;border-top:1px solid #1e293b;border-radius:0 0 4px 4px">
+            <td style="background:#1e293b;padding:24px 24px 10px">
+              <h2 style="margin:0;font-size:16px;line-height:1.4;color:#f8fafc">What changed</h2>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#1e293b;padding:0 24px 24px">
+              ${renderAttendeeChangeTableHtml(changeSet.changes)}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#0f172a;padding:20px 32px;border-top:1px solid #1e293b;border-radius:0 0 6px 6px">
               <p style="margin:0;font-size:12px;color:#475569">
-                SWP Summit &bull; ${settings.orgName} &bull; Internal organiser notification
+                ${escHtml(settings.eventName || "SWP Summit")} | ${escHtml(settings.orgName)} | Internal organiser notification
               </p>
             </td>
           </tr>
@@ -2371,8 +2525,8 @@ export async function sendInvoiceReminder(bookingId: number): Promise<void> {
     : "14 days from invoice issue";
 
   const passLabels: Record<string, string> = {
-    single: "HR Professional Pass - HR Professional",
-    business: "Business Pass - Vendor/Consultant",
+    single: "Workforce Pass - Employer-side attendee",
+    business: "Business Pass - Commercial attendee",
   };
   const passLabel = passLabels[booking.passType] || booking.passType;
   const totalAmount = parseFloat(booking.totalAmount?.toString() || "0").toFixed(2);
