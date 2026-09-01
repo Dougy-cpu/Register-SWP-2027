@@ -180,6 +180,39 @@ const DEFAULT_COMMUNITY_SOCIAL_BODY = `
 <strong>The SWP Summit Team</strong></p>
 `;
 
+const DEFAULT_SPONSOR_WELCOME_SUBJECT =
+  "SWP Summit 2027 | {{company}} sponsor welcome and workspace";
+
+const DEFAULT_SPONSOR_WELCOME_BODY = `
+<h2>Welcome to SWP Summit 2027</h2>
+<p>Hi {{firstName}},</p>
+<p>It is great to have the <strong>{{company}}</strong> team joining us as a {{packageLabel}} sponsor.</p>
+<p>I have brought your passes, sponsor team, content, assets and logistics together in one private workspace. It shows what we have received, what is still needed and any deadlines, so you do not need to keep track of a long email thread.</p>
+<p style="text-align:center;margin:28px 0;"><a href="{{workspaceUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 26px;border-radius:6px;text-decoration:none;font-weight:700;">Open your sponsor workspace</a></p>
+<h3>Your passes</h3>
+<div class="info-box"><strong>Private VIP Workforce passes</strong><br>Code: <strong>{{vipCode}}</strong><br>Allocation: {{vipAllocation}}<br>Maximum per booking: {{vipMaxPerBooking}}<br><a href="{{vipUrl}}">Open the VIP registration link</a></div>
+<div class="info-box" style="margin-top:16px;"><strong>Public Workforce discount</strong><br>Code: <strong>{{publicCode}}</strong><br>Discount: 20% after any group discount<br><a href="{{publicUrl}}">Open the public registration link</a></div>
+<h3>Your sponsor team</h3>
+<p>You have <strong>{{staffAllocation}}</strong> sponsor staff places. Please register each person in the workspace once their details are confirmed, including whether they will join the Community Social and any dietary or accessibility information.</p>
+<h3>Content, assets and logistics</h3>
+<p>Any session, speaker, slides, artwork or logistics actions included in your package are listed in the workspace. Where a session is included, you can submit the title, a concise description, presenter details, headshot and up to three takeaways there.</p>
+<p>Please open the workspace, check the actions and confirm any logistics documents once reviewed. If you need more passes or anything is unclear, you can send us a request directly from the workspace.</p>
+<p>Thanks,<br><strong>Douglas</strong></p>
+`;
+
+const DEFAULT_SPONSOR_STAFF_SUBJECT =
+  "Your SWP Summit 2027 sponsor staff registration is confirmed";
+
+const DEFAULT_SPONSOR_STAFF_BODY = `
+<h2>Your place is confirmed</h2>
+<p>Hi {{firstName}},</p>
+<p>You have been registered as part of the <strong>{{company}}</strong> sponsor team for <strong>{{eventName}}</strong>.</p>
+<div class="info-box"><strong>Date:</strong> {{eventDate}}<br><strong>Venue:</strong> {{eventVenue}}</div>
+<p>There is nothing to pay and no invoice or receipt is needed. If any details change, your sponsor contact can update them in the sponsor workspace.</p>
+<p>We look forward to seeing you there.</p>
+<p>Best,<br><strong>The SWP Summit team</strong></p>
+`;
+
 const DEFAULT_DISCOUNT_TIERS = [
   { passType: "single" as const, minQuantity: 4, discountPercent: "10", label: "4+ passes" },
   { passType: "single" as const, minQuantity: 8, discountPercent: "15", label: "8+ passes" },
@@ -370,6 +403,29 @@ export async function seed() {
       logger.info("Seeded Community Social email template");
     } else {
       logger.debug("Community Social email template already present, skipping seed");
+    }
+
+    const sponsorTemplates = [
+      {
+        type: "sponsor_welcome" as const,
+        subject: DEFAULT_SPONSOR_WELCOME_SUBJECT,
+        htmlBody: DEFAULT_SPONSOR_WELCOME_BODY,
+      },
+      {
+        type: "sponsor_staff" as const,
+        subject: DEFAULT_SPONSOR_STAFF_SUBJECT,
+        htmlBody: DEFAULT_SPONSOR_STAFF_BODY,
+      },
+    ];
+    for (const sponsorTemplate of sponsorTemplates) {
+      const [existingSponsorTemplate] = await db
+        .select({ id: emailTemplatesTable.id })
+        .from(emailTemplatesTable)
+        .where(eq(emailTemplatesTable.type, sponsorTemplate.type));
+      if (!existingSponsorTemplate) {
+        await db.insert(emailTemplatesTable).values(sponsorTemplate);
+        logger.info({ type: sponsorTemplate.type }, "Seeded sponsor email template");
+      }
     }
 
     const existingTiers = await db.select().from(discountTiersTable);

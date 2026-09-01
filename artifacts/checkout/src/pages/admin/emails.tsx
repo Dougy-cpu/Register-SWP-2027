@@ -48,6 +48,9 @@ const EMAIL_LOG_TYPE_LABELS: Record<string, string> = {
   welcome: "Welcome",
   invoice: "Invoice",
   community_social: "Community Social",
+  sponsor_welcome: "Sponsor Welcome",
+  sponsor_staff: "Sponsor Staff",
+  sponsor_internal: "Sponsor Notification",
   test: "Test",
 };
 
@@ -1355,7 +1358,7 @@ export default function AdminEmails() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          {log.bookingId && (
+                          {log.bookingId && log.type !== "sponsor_staff" && (
                             <Button
                               variant={sentLogIds.has(log.id) ? "default" : "outline"}
                               size="sm"

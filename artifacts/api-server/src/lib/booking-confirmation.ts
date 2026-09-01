@@ -1,6 +1,6 @@
-import { and, eq, inArray, not, or, isNull } from "drizzle-orm";
+import { and, eq, inArray, not, or, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookingsTable } from "@workspace/db";
+import { attendeesTable, bookingsTable } from "@workspace/db";
 import { logger } from "./logger";
 import {
   sendConfirmationAndReceiptEmail,
@@ -8,6 +8,18 @@ import {
   sendOrganiserNotification,
 } from "./email";
 import { syncBookingToSheets } from "./google-sheets";
+import {
+  notifySponsorRedemptionForBooking,
+  reservePromoUsageForBooking,
+} from "./sponsor-redemptions";
+import { sendSponsorInternalNotification, sendSponsorStaffWelcome } from "./sponsor-email";
+
+export class PromoReservationError extends Error {
+  constructor() {
+    super("The promo allocation is no longer available");
+    this.name = "PromoReservationError";
+  }
+}
 
 /**
  * Atomically claim the status flip from a not-yet-confirmed status to
@@ -42,13 +54,36 @@ export async function claimBookingConfirmation(
     setFields.paidAt = now;
   }
 
-  const claimed = await db
-    .update(bookingsTable)
-    .set(setFields)
-    .where(and(eq(bookingsTable.id, bookingId), inArray(bookingsTable.status, currentStatuses)))
-    .returning();
+  return db.transaction(async (tx) => {
+    // The row lock makes the status check, sponsor redemption ledger entry
+    // and final status change one indivisible operation. This is especially
+    // important when the Stripe webhook and browser confirmation race.
+    await tx.execute(sql`SELECT id FROM bookings WHERE id = ${bookingId} FOR UPDATE`);
+    const [current] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+    if (!current || !currentStatuses.includes(current.status as (typeof currentStatuses)[number])) {
+      return null;
+    }
 
-  return claimed[0] ?? null;
+    // Invoice creation already reserves/increments the promo in its own
+    // transaction. All other confirmation paths reserve here before the
+    // booking can become paid, preventing concurrent VIP oversubscription.
+    if (current.promoCode && current.status !== "invoiced") {
+      const reserved = await reservePromoUsageForBooking(
+        current.promoCode,
+        current.quantity,
+        current.id,
+        tx,
+      );
+      if (!reserved) throw new PromoReservationError();
+    }
+
+    const claimed = await tx
+      .update(bookingsTable)
+      .set(setFields)
+      .where(eq(bookingsTable.id, bookingId))
+      .returning();
+    return claimed[0] ?? null;
+  });
 }
 
 type SideEffectKey =
@@ -84,6 +119,97 @@ const SIDE_EFFECTS: SideEffectSpec[] = [
   },
 ];
 
+async function runSponsorStaffSideEffects(
+  bookingId: number,
+  sponsorId: number,
+): Promise<{ ran: SideEffectKey[]; skipped: SideEffectKey[]; failed: SideEffectKey[] }> {
+  const ran: SideEffectKey[] = [];
+  const skipped: SideEffectKey[] = [];
+  const failed: SideEffectKey[] = [];
+  const [attendee] = await db
+    .select()
+    .from(attendeesTable)
+    .where(and(eq(attendeesTable.bookingId, bookingId), eq(attendeesTable.isLead, true)));
+
+  const mailClaim = await db
+    .update(bookingsTable)
+    .set({ confirmationEmailSent: true, welcomeEmailsSent: true })
+    .where(
+      and(
+        eq(bookingsTable.id, bookingId),
+        or(
+          eq(bookingsTable.confirmationEmailSent, false),
+          eq(bookingsTable.welcomeEmailsSent, false),
+        ),
+      ),
+    )
+    .returning({ id: bookingsTable.id });
+  if (!mailClaim.length) {
+    skipped.push("confirmationEmailSent", "welcomeEmailsSent");
+  } else {
+    const sent = attendee
+      ? await sendSponsorStaffWelcome(sponsorId, bookingId, attendee.id).catch(() => false)
+      : false;
+    if (sent) {
+      ran.push("confirmationEmailSent", "welcomeEmailsSent");
+    } else {
+      failed.push("confirmationEmailSent", "welcomeEmailsSent");
+      await db
+        .update(bookingsTable)
+        .set({ confirmationEmailSent: false, welcomeEmailsSent: false })
+        .where(eq(bookingsTable.id, bookingId));
+    }
+  }
+
+  const organiserClaim = await db
+    .update(bookingsTable)
+    .set({ organiserNotified: true })
+    .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.organiserNotified, false)))
+    .returning({ id: bookingsTable.id });
+  if (!organiserClaim.length) {
+    skipped.push("organiserNotified");
+  } else {
+    const notified = await sendSponsorInternalNotification({
+      sponsorId,
+      category: "passes",
+      event: "Sponsor staff delivery retried",
+      summary: attendee
+        ? `${attendee.firstName} ${attendee.lastName}'s sponsor staff registration was redelivered.`
+        : `Sponsor staff booking #${bookingId} was redelivered.`,
+    }).catch(() => false);
+    if (notified) ran.push("organiserNotified");
+    else {
+      failed.push("organiserNotified");
+      await db
+        .update(bookingsTable)
+        .set({ organiserNotified: false })
+        .where(eq(bookingsTable.id, bookingId));
+    }
+  }
+
+  const sheetsClaim = await db
+    .update(bookingsTable)
+    .set({ sheetsSynced: true })
+    .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.sheetsSynced, false)))
+    .returning({ id: bookingsTable.id });
+  if (!sheetsClaim.length) {
+    skipped.push("sheetsSynced");
+  } else {
+    try {
+      await syncBookingToSheets(bookingId);
+      ran.push("sheetsSynced");
+    } catch {
+      failed.push("sheetsSynced");
+      await db
+        .update(bookingsTable)
+        .set({ sheetsSynced: false })
+        .where(eq(bookingsTable.id, bookingId));
+    }
+  }
+
+  return { ran, skipped, failed };
+}
+
 /**
  * Run any post-confirmation side-effects that haven't yet succeeded for this
  * booking. Safe to call repeatedly — each side-effect uses an atomic
@@ -108,7 +234,12 @@ export async function runConfirmationSideEffects(
   // refunded, disputed, abandoned-draft, etc.) — we must NOT send
   // welcome emails / organiser notifications / sheet syncs in that case.
   const [current] = await db
-    .select({ status: bookingsTable.status, manualEntry: bookingsTable.manualEntry })
+    .select({
+      status: bookingsTable.status,
+      manualEntry: bookingsTable.manualEntry,
+      registrationSource: bookingsTable.registrationSource,
+      sponsorId: bookingsTable.sponsorId,
+    })
     .from(bookingsTable)
     .where(eq(bookingsTable.id, bookingId));
   if (
@@ -121,6 +252,10 @@ export async function runConfirmationSideEffects(
       "runConfirmationSideEffects: booking is manual or not in paid/invoiced state — skipping all side-effects",
     );
     return { ran, skipped: SIDE_EFFECTS.map((s) => s.key), failed };
+  }
+
+  if (current.registrationSource === "sponsor_staff" && current.sponsorId) {
+    return runSponsorStaffSideEffects(bookingId, current.sponsorId);
   }
 
   for (const effect of SIDE_EFFECTS) {
@@ -172,6 +307,13 @@ export async function runConfirmationSideEffects(
       { bookingId, ran, skipped },
       "runConfirmationSideEffects: all eligible side-effects completed",
     );
+  }
+
+  try {
+    const sponsorNotified = await notifySponsorRedemptionForBooking(bookingId);
+    if (!sponsorNotified) failed.push("organiserNotified");
+  } catch (err) {
+    logger.error({ err, bookingId }, "Sponsor redemption notification failed");
   }
 
   return { ran, skipped, failed };

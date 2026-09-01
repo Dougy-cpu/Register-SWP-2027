@@ -14,5 +14,8 @@ export const EmailLogType = {
   welcome: "welcome",
   invoice: "invoice",
   community_social: "community_social",
+  sponsor_welcome: "sponsor_welcome",
+  sponsor_staff: "sponsor_staff",
+  sponsor_internal: "sponsor_internal",
   test: "test",
 } as const;

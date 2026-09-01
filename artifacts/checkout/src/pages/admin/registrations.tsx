@@ -876,64 +876,70 @@ function ExpandedRegistrationDetail({
               )}
             </h4>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                onClick={() => handleEmailResend("confirmation")}
-                disabled={emailResendState.confirmation === "loading"}
-                className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded transition-all ${
-                  emailResendState.confirmation === "loading"
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
-                }`}
-              >
-                {emailResendState.confirmation === "loading" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Send className="h-3 w-3" />
-                )}
-                {emailResendState.confirmation === "loading"
-                  ? "Sending..."
-                  : "Resend confirmation email"}
-              </button>
-              <button
-                onClick={() => handleEmailResend("welcome")}
-                disabled={emailResendState.welcome === "loading"}
-                className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded transition-all ${
-                  emailResendState.welcome === "loading"
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
-                }`}
-              >
-                {emailResendState.welcome === "loading" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Send className="h-3 w-3" />
-                )}
-                {emailResendState.welcome === "loading" ? "Sending..." : "Resend welcome emails"}
-              </button>
-              <button
-                onClick={() => setCommunitySocialConfirmOpen(true)}
-                disabled={
-                  emailResendState.community_social === "loading" ||
-                  communitySocialRecipientCount === 0
-                }
-                className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
-                  emailResendState.community_social === "loading" ||
-                  communitySocialRecipientCount === 0
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
-                }`}
-              >
-                {emailResendState.community_social === "loading" ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Send className="h-3 w-3" />
-                )}
-                {emailResendState.community_social === "loading"
-                  ? "Sending..."
-                  : data.communitySocialEmailSent
-                    ? "Resend Community Social email"
-                    : "Send Community Social email"}
-              </button>
+              {data.registrationSource !== "sponsor_staff" && (
+                <>
+                  <button
+                    onClick={() => handleEmailResend("confirmation")}
+                    disabled={emailResendState.confirmation === "loading"}
+                    className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded transition-all ${
+                      emailResendState.confirmation === "loading"
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                    }`}
+                  >
+                    {emailResendState.confirmation === "loading" ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    {emailResendState.confirmation === "loading"
+                      ? "Sending..."
+                      : "Resend confirmation email"}
+                  </button>
+                  <button
+                    onClick={() => handleEmailResend("welcome")}
+                    disabled={emailResendState.welcome === "loading"}
+                    className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded transition-all ${
+                      emailResendState.welcome === "loading"
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                    }`}
+                  >
+                    {emailResendState.welcome === "loading" ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    {emailResendState.welcome === "loading"
+                      ? "Sending..."
+                      : "Resend welcome emails"}
+                  </button>
+                  <button
+                    onClick={() => setCommunitySocialConfirmOpen(true)}
+                    disabled={
+                      emailResendState.community_social === "loading" ||
+                      communitySocialRecipientCount === 0
+                    }
+                    className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
+                      emailResendState.community_social === "loading" ||
+                      communitySocialRecipientCount === 0
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        : "bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                    }`}
+                  >
+                    {emailResendState.community_social === "loading" ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    {emailResendState.community_social === "loading"
+                      ? "Sending..."
+                      : data.communitySocialEmailSent
+                        ? "Resend Community Social email"
+                        : "Send Community Social email"}
+                  </button>
+                </>
+              )}
               {data.needsAttention && (
                 <button
                   onClick={handleRedeliver}
@@ -1418,7 +1424,7 @@ function ExpandedRegistrationDetail({
           </div>
         )}
 
-      {data?.status === "paid" && (
+      {data?.status === "paid" && data.registrationSource !== "sponsor_staff" && (
         <div className="bg-white border border-border p-3 text-sm">
           <p className="text-xs uppercase tracking-wider text-muted-foreground font-bold mb-2 flex items-center gap-1.5">
             <FileText className="w-3 h-3" />
@@ -1573,20 +1579,21 @@ function ExpandedRegistrationDetail({
                           </button>
                         ) : (
                           <div className="flex items-center gap-1">
-                            {data?.status === "paid" && (
-                              <button
-                                onClick={() => void handleViewReceipt()}
-                                disabled={receiptDownloadState === "loading"}
-                                className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors disabled:pointer-events-none disabled:opacity-60"
-                                title="View/download VAT receipt"
-                              >
-                                {receiptDownloadState === "loading" ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <FileText className="w-4 h-4" />
-                                )}
-                              </button>
-                            )}
+                            {data?.status === "paid" &&
+                              data.registrationSource !== "sponsor_staff" && (
+                                <button
+                                  onClick={() => void handleViewReceipt()}
+                                  disabled={receiptDownloadState === "loading"}
+                                  className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors disabled:pointer-events-none disabled:opacity-60"
+                                  title="View/download VAT receipt"
+                                >
+                                  {receiptDownloadState === "loading" ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <FileText className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
                             <button
                               onClick={() => startEditing(a)}
                               className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
@@ -2406,13 +2413,21 @@ export default function AdminRegistrations() {
                       </TableCell>
                       <TableCell>
                         <span
-                          className={`text-xs font-bold px-2 py-0.5 uppercase rounded ${reg.passType === "business" ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-700"}`}
+                          className={`text-xs font-bold px-2 py-0.5 uppercase rounded ${reg.registrationSource === "sponsor_staff" ? "bg-emerald-100 text-emerald-800" : reg.passType === "business" ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-700"}`}
                         >
-                          {reg.passType === "business" ? "Business" : "Standard"}
+                          {reg.registrationSource === "sponsor_staff"
+                            ? "Sponsor staff"
+                            : reg.passType === "business"
+                              ? "Business"
+                              : "Standard"}
                         </span>
                       </TableCell>
                       <TableCell>{reg.quantity}</TableCell>
-                      <TableCell className="font-medium">£{reg.totalAmount}</TableCell>
+                      <TableCell className="font-medium">
+                        {reg.registrationSource === "sponsor_staff"
+                          ? "Included"
+                          : `£${reg.totalAmount}`}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           {statusBadge(reg.status)}

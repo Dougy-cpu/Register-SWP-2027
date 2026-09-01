@@ -63,6 +63,7 @@ type PromoRow = {
   validUntil: Date | null;
   maxUses: number | null;
   usedCount: number;
+  maxQuantityPerBooking: number | null;
   maxDiscountAmount: string | null;
   applicablePassTypes: string[] | null;
   minQuantity: number | null;
@@ -182,6 +183,7 @@ function seedPromo(over: Partial<PromoRow> = {}): PromoRow {
     validUntil: null,
     maxUses: 5,
     usedCount: 0,
+    maxQuantityPerBooking: null,
     maxDiscountAmount: null,
     applicablePassTypes: null,
     minQuantity: null,
@@ -371,5 +373,38 @@ describe("calculatePricing — complimentary code", () => {
     expect(result.promoDiscountAmount).toBe(result.baseSubtotal);
     expect(result.total).toBe(0);
     expect(result.promoRemainingSeats).toBeNull();
+  });
+
+  it("enforces a sponsor-specific maximum per booking", async () => {
+    seedPromo({ maxUses: 10, maxQuantityPerBooking: 1 });
+    await expect(calculatePricing("single", 2, "FREEPASS")).rejects.toThrow(
+      "no more than 1 passes per booking",
+    );
+  });
+
+  it("rejects a Workforce-only sponsor code on a Business pass", async () => {
+    seedPromo({ applicablePassTypes: ["single"] });
+    await expect(calculatePricing("business", 1, "FREEPASS")).rejects.toThrow(
+      "not valid for this pass type",
+    );
+  });
+});
+
+describe("calculatePricing — sponsor public discount", () => {
+  it("applies 20% after the Workforce group discount", async () => {
+    dbState.tiers.push({ passType: "single", minQuantity: 2, discountPercent: "10" });
+    seedPromo({
+      code: "ACME",
+      discountType: "percentage",
+      discountValue: "20",
+      maxUses: null,
+      applicablePassTypes: ["single"],
+    });
+
+    const result = await calculatePricing("single", 2, "ACME");
+    expect(result.baseSubtotal).toBe(498);
+    expect(result.groupDiscountAmount).toBe(49.8);
+    expect(result.promoDiscountAmount).toBe(89.64);
+    expect(result.subtotalAfterDiscounts).toBe(358.56);
   });
 });

@@ -63,7 +63,7 @@ async function start() {
   const schemaOk = await checkSchemaConsistency();
   if (!schemaOk) {
     logger.error(
-      "Aborting: database schema is out of date. Run 'pnpm --filter @workspace/db run push' then redeploy.",
+      "Aborting: database schema is out of date. Apply the approved versioned migration, verify it, then redeploy.",
     );
     process.exit(1);
   }

@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { bookingsTable, attendeesTable, eventSettingsTable } from "@workspace/db";
-import { calculatePricing, incrementPromoUsage } from "../lib/pricing";
+import { calculatePricing } from "../lib/pricing";
+import { reservePromoUsageForBooking } from "../lib/sponsor-redemptions";
 import { DEFAULT_REF_PREFIX, DEFAULT_REF_OFFSET } from "../lib/order-reference";
 import { promoCodesTable } from "@workspace/db";
 import { isCodeUsedByEmail } from "./promo-codes";
@@ -990,7 +991,12 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
   try {
     await db.transaction(async (tx) => {
       if (existing.promoCode) {
-        const reserved = await incrementPromoUsage(existing.promoCode, existing.quantity, tx);
+        const reserved = await reservePromoUsageForBooking(
+          existing.promoCode,
+          existing.quantity,
+          existing.id,
+          tx,
+        );
         if (!reserved) {
           const [promo] = await tx
             .select()

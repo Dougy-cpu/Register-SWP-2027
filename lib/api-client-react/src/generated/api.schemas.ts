@@ -18,6 +18,384 @@ export interface SuccessResponse {
   message?: string;
 }
 
+export type SponsorStatus = (typeof SponsorStatus)[keyof typeof SponsorStatus];
+
+export const SponsorStatus = {
+  draft: "draft",
+  confirmed: "confirmed",
+  paused: "paused",
+  completed: "completed",
+  cancelled: "cancelled",
+} as const;
+
+export type SponsorAssetCategory = (typeof SponsorAssetCategory)[keyof typeof SponsorAssetCategory];
+
+export const SponsorAssetCategory = {
+  logo: "logo",
+  headshot: "headshot",
+  slides: "slides",
+  session_material: "session_material",
+  logistics: "logistics",
+  other: "other",
+} as const;
+
+export type SponsorContactRole = (typeof SponsorContactRole)[keyof typeof SponsorContactRole];
+
+export const SponsorContactRole = {
+  primary: "primary",
+  onsite: "onsite",
+  marketing: "marketing",
+  other: "other",
+} as const;
+
+export interface SponsorContact {
+  id?: number;
+  role: SponsorContactRole;
+  firstName: string;
+  lastName: string;
+  jobTitle?: string | null;
+  email: string;
+  phone?: string | null;
+  isPrimary: boolean;
+}
+
+export type SponsorTaskStatus = (typeof SponsorTaskStatus)[keyof typeof SponsorTaskStatus];
+
+export const SponsorTaskStatus = {
+  todo: "todo",
+  submitted: "submitted",
+  completed: "completed",
+  overdue: "overdue",
+  not_required: "not_required",
+} as const;
+
+export interface SponsorTask {
+  id: number;
+  taskKey: string;
+  label: string;
+  required: boolean;
+  dueAt?: string | null;
+  status: SponsorTaskStatus;
+  completedAt?: string | null;
+}
+
+/**
+ * Privacy-redacted usage; contact and financial fields are intentionally absent.
+ */
+export interface SponsorUsagePerson {
+  bookingId: number;
+  firstName: string;
+  lastName: string;
+  company: string;
+  jobTitle: string;
+  registeredAt: string;
+}
+
+export type SponsorCodeKind = (typeof SponsorCodeKind)[keyof typeof SponsorCodeKind];
+
+export const SponsorCodeKind = {
+  vip: "vip",
+  public: "public",
+} as const;
+
+export interface SponsorCode {
+  kind: SponsorCodeKind;
+  code: string;
+  active: boolean;
+  workforceUrl: string;
+  allocation?: number | null;
+  used: number;
+  remaining?: number | null;
+  maxPerBooking?: number | null;
+  discountPercent?: number | null;
+  redemptions: SponsorUsagePerson[];
+}
+
+export interface SponsorStaff {
+  bookingId: number;
+  attendeeId: number;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  company: string;
+  workEmail: string;
+  phone?: string | null;
+  dietaryAccessibility?: string | null;
+  communitySocialAttending?: boolean | null;
+  communitySocialDietary?: string | null;
+  marketingConsent: boolean;
+  status: string;
+  registeredAt: string;
+}
+
+export interface SponsorStaffInput {
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  firstName: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  lastName: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  jobTitle: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  company: string;
+  workEmail: string;
+  /** @maxLength 100 */
+  phone?: string | null;
+  /** @maxLength 2000 */
+  dietaryAccessibility?: string | null;
+  communitySocialAttending?: boolean | null;
+  /** @maxLength 2000 */
+  communitySocialDietary?: string | null;
+  marketingConsent?: boolean;
+}
+
+export interface SponsorPresenter {
+  id?: number;
+  name: string;
+  jobTitle: string;
+  company: string;
+  biography?: string | null;
+  displayOrder?: number;
+}
+
+export type SponsorSessionType = (typeof SponsorSessionType)[keyof typeof SponsorSessionType];
+
+export const SponsorSessionType = {
+  quickfire: "quickfire",
+  keynote: "keynote",
+  other: "other",
+} as const;
+
+export type SponsorSessionStatus = (typeof SponsorSessionStatus)[keyof typeof SponsorSessionStatus];
+
+export const SponsorSessionStatus = {
+  draft: "draft",
+  submitted: "submitted",
+  changes_requested: "changes_requested",
+  approved: "approved",
+  exported: "exported",
+} as const;
+
+export type SponsorSessionRevisionsItem = {
+  revision: number;
+  actor: string;
+  createdAt: string;
+};
+
+export interface SponsorSession {
+  id: number;
+  type: SponsorSessionType;
+  entitlementLabel: string;
+  title?: string | null;
+  description?: string | null;
+  /** @maxItems 3 */
+  takeaways: string[];
+  status: SponsorSessionStatus;
+  feedback?: string | null;
+  headshotRequired: boolean;
+  takeawaysRequired: boolean;
+  slidesRequired: boolean;
+  currentRevision: number;
+  exportedRevision?: number | null;
+  exportOutdated: boolean;
+  presenters: SponsorPresenter[];
+  revisions: SponsorSessionRevisionsItem[];
+}
+
+export type SponsorSessionEntitlementInputType =
+  (typeof SponsorSessionEntitlementInputType)[keyof typeof SponsorSessionEntitlementInputType];
+
+export const SponsorSessionEntitlementInputType = {
+  quickfire: "quickfire",
+  keynote: "keynote",
+  other: "other",
+} as const;
+
+export interface SponsorSessionEntitlementInput {
+  type: SponsorSessionEntitlementInputType;
+  /**
+   * @minLength 1
+   * @maxLength 250
+   */
+  entitlementLabel: string;
+  headshotRequired: boolean;
+  takeawaysRequired: boolean;
+  slidesRequired: boolean;
+}
+
+export interface SponsorSessionInput {
+  /** @maxLength 250 */
+  title?: string;
+  /** @maxLength 1500 */
+  description?: string;
+  /** @maxItems 3 */
+  takeaways?: string[];
+  /** @minItems 1 */
+  presenters?: SponsorPresenter[];
+}
+
+export type SponsorAssetStatus = (typeof SponsorAssetStatus)[keyof typeof SponsorAssetStatus];
+
+export const SponsorAssetStatus = {
+  active: "active",
+  archived: "archived",
+  missing: "missing",
+} as const;
+
+export interface SponsorAsset {
+  id: string;
+  sponsorId: number;
+  sponsorCompany?: string | null;
+  sessionId?: number | null;
+  presenterId?: number | null;
+  category: SponsorAssetCategory;
+  originalName: string;
+  mimeType: string;
+  byteSize: number;
+  checksumSha256: string;
+  version: number;
+  status: SponsorAssetStatus;
+  uploaderType: string;
+  uploaderLabel?: string | null;
+  createdAt: string;
+  previewAvailable: boolean;
+}
+
+export interface SponsorAssetUpload {
+  file: Blob;
+  category: SponsorAssetCategory;
+  sessionId?: number | null;
+  presenterId?: number | null;
+}
+
+export interface SponsorDocument {
+  id: number;
+  assetId: string;
+  title: string;
+  required: boolean;
+  acknowledgementVersion: number;
+  acknowledged: boolean;
+  acknowledgedBy?: string | null;
+  acknowledgedAt?: string | null;
+}
+
+export interface SponsorSummary {
+  id: number;
+  company: string;
+  packageLabel: string;
+  status: SponsorStatus;
+  confirmationDate?: string | null;
+  vipAllocation: number;
+  vipUsed: number;
+  staffAllocation: number;
+  staffUsed: number;
+  progressCompleted: number;
+  progressTotal: number;
+  needsAttention: number;
+  updatedAt: string;
+}
+
+export type SponsorUpsertSessionsItemType =
+  (typeof SponsorUpsertSessionsItemType)[keyof typeof SponsorUpsertSessionsItemType];
+
+export const SponsorUpsertSessionsItemType = {
+  quickfire: "quickfire",
+  keynote: "keynote",
+  other: "other",
+} as const;
+
+export type SponsorUpsertSessionsItem = {
+  type: SponsorUpsertSessionsItemType;
+  entitlementLabel: string;
+  headshotRequired?: boolean;
+  takeawaysRequired?: boolean;
+  slidesRequired?: boolean;
+};
+
+export interface SponsorUpsert {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  company: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  packageLabel: string;
+  status?: SponsorStatus;
+  confirmationDate?: string | null;
+  /** @maxLength 10000 */
+  notes?: string | null;
+  /** @minimum 0 */
+  vipAllocation: number;
+  /** @minimum 1 */
+  vipMaxPerBooking: number;
+  /** @minimum 0 */
+  staffAllocation: number;
+  /** @pattern ^[A-Z0-9]+$ */
+  vipCode?: string;
+  /** @pattern ^[A-Z0-9]+$ */
+  publicCode?: string;
+  contacts?: SponsorContact[];
+  tasks?: SponsorTask[];
+  sessions?: SponsorUpsertSessionsItem[];
+}
+
+export type SponsorWorkspaceAdminActivityItem = { [key: string]: unknown };
+
+export type SponsorWorkspaceAdmin = SponsorSummary & {
+  notes?: string | null;
+  accessUrl?: string | null;
+  welcomeEmailSentAt?: string | null;
+  contacts: SponsorContact[];
+  codes: SponsorCode[];
+  staff: SponsorStaff[];
+  tasks: SponsorTask[];
+  sessions: SponsorSession[];
+  assets: SponsorAsset[];
+  documents: SponsorDocument[];
+  activity: SponsorWorkspaceAdminActivityItem[];
+};
+
+export type SponsorWorkspacePublicInvitationCopy = {
+  vip: string;
+  public: string;
+};
+
+/**
+ * Sponsor-facing projection. Guest emails, phones, payments and revenue are never included.
+ */
+export interface SponsorWorkspacePublic {
+  sponsor: SponsorSummary;
+  contacts: SponsorContact[];
+  codes: SponsorCode[];
+  staff: SponsorStaff[];
+  tasks: SponsorTask[];
+  sessions: SponsorSession[];
+  assets: SponsorAsset[];
+  documents: SponsorDocument[];
+  invitationCopy: SponsorWorkspacePublicInvitationCopy;
+}
+
+export interface EmailPreview {
+  to: string[];
+  subject: string;
+  html: string;
+  previewHash: string;
+}
+
 export type BookingStatus = (typeof BookingStatus)[keyof typeof BookingStatus];
 
 export const BookingStatus = {
@@ -57,6 +435,15 @@ export const BookingPaymentMethod = {
   invoice: "invoice",
 } as const;
 
+export type BookingRegistrationSource =
+  (typeof BookingRegistrationSource)[keyof typeof BookingRegistrationSource];
+
+export const BookingRegistrationSource = {
+  checkout: "checkout",
+  manual: "manual",
+  sponsor_staff: "sponsor_staff",
+} as const;
+
 export type BookingInvoiceBadgeStatus =
   (typeof BookingInvoiceBadgeStatus)[keyof typeof BookingInvoiceBadgeStatus];
 
@@ -87,6 +474,9 @@ export interface Booking {
   /** @nullable */
   paymentMethod?: BookingPaymentMethod;
   manualEntry: boolean;
+  registrationSource?: BookingRegistrationSource;
+  /** @nullable */
+  sponsorId?: number | null;
   /** @nullable */
   stripeSessionId?: string | null;
   /** @nullable */
@@ -729,6 +1119,9 @@ export const EmailLogType = {
   welcome: "welcome",
   invoice: "invoice",
   community_social: "community_social",
+  sponsor_welcome: "sponsor_welcome",
+  sponsor_staff: "sponsor_staff",
+  sponsor_internal: "sponsor_internal",
   test: "test",
 } as const;
 
@@ -744,6 +1137,8 @@ export interface EmailLog {
   id: number;
   /** @nullable */
   bookingId?: number | null;
+  /** @nullable */
+  sponsorId?: number | null;
   recipient: string;
   type: EmailLogType;
   status: EmailLogStatus;
@@ -768,6 +1163,15 @@ export interface AdminLoginResponse {
   expiresAt: string;
 }
 
+export type RegistrationSummaryRegistrationSource =
+  (typeof RegistrationSummaryRegistrationSource)[keyof typeof RegistrationSummaryRegistrationSource];
+
+export const RegistrationSummaryRegistrationSource = {
+  checkout: "checkout",
+  manual: "manual",
+  sponsor_staff: "sponsor_staff",
+} as const;
+
 export type RegistrationSummaryInvoiceBadgeStatus =
   (typeof RegistrationSummaryInvoiceBadgeStatus)[keyof typeof RegistrationSummaryInvoiceBadgeStatus];
 
@@ -791,6 +1195,9 @@ export interface RegistrationSummary {
   /** @nullable */
   paymentMethod?: string | null;
   manualEntry: boolean;
+  registrationSource?: RegistrationSummaryRegistrationSource;
+  /** @nullable */
+  sponsorId?: number | null;
   /** @nullable */
   leadName?: string | null;
   /** @nullable */
@@ -1046,6 +1453,7 @@ export type AdminStatsPaymentMethodCounts = {
 export interface AdminStats {
   totalRegistrations: number;
   completedRegistrations: number;
+  sponsorStaffCount: number;
   partialRegistrations: number;
   totalRevenue: number;
   totalVat: number;
@@ -1130,4 +1538,148 @@ export const ListRegistrationsNeedsAttention = {
 
 export type ExportRegistrationsParams = {
   status?: string;
+};
+
+export type ListSponsorsParams = {
+  status?: SponsorStatus;
+  search?: string;
+};
+
+export type ListSponsors200 = {
+  sponsors: SponsorSummary[];
+};
+
+export type RotateSponsorAccess200 = {
+  accessUrl: string;
+};
+
+export type SendSponsorWelcomeBody = {
+  /** Hash returned by the preview endpoint */
+  expectedPreviewHash: string;
+};
+
+export type SendSponsorWelcome200 = {
+  sent: boolean;
+};
+
+export type UpdateAdminSponsorTaskBody = {
+  status: SponsorTaskStatus;
+};
+
+export type ReviewSponsorSessionBodyStatus =
+  (typeof ReviewSponsorSessionBodyStatus)[keyof typeof ReviewSponsorSessionBodyStatus];
+
+export const ReviewSponsorSessionBodyStatus = {
+  changes_requested: "changes_requested",
+  approved: "approved",
+} as const;
+
+export type ReviewSponsorSessionBody = {
+  status: ReviewSponsorSessionBodyStatus;
+  feedback?: string | null;
+};
+
+export type ListSponsorAssetsParams = {
+  category?: SponsorAssetCategory;
+  status?: ListSponsorAssetsStatus;
+};
+
+export type ListSponsorAssetsStatus =
+  (typeof ListSponsorAssetsStatus)[keyof typeof ListSponsorAssetsStatus];
+
+export const ListSponsorAssetsStatus = {
+  active: "active",
+  archived: "archived",
+  missing: "missing",
+} as const;
+
+export type ListSponsorAssets200 = {
+  assets: SponsorAsset[];
+};
+
+export type UpdateSponsorAssetStatusBodyStatus =
+  (typeof UpdateSponsorAssetStatusBodyStatus)[keyof typeof UpdateSponsorAssetStatusBodyStatus];
+
+export const UpdateSponsorAssetStatusBodyStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export type UpdateSponsorAssetStatusBody = {
+  status: UpdateSponsorAssetStatusBodyStatus;
+};
+
+export type ReplaceSponsorAssetBody = {
+  file: Blob;
+};
+
+export type AdminDownloadSponsorAssetParams = {
+  preview?: boolean;
+};
+
+export type DownloadSponsorAssetSelectionBody = {
+  /** @minItems 1 */
+  assetIds: string[];
+};
+
+export type ListAdminSponsorAssetLibraryParams = {
+  sponsorId?: number;
+  category?: SponsorAssetCategory;
+  status?: ListAdminSponsorAssetLibraryStatus;
+  search?: string;
+  from?: string;
+  to?: string;
+};
+
+export type ListAdminSponsorAssetLibraryStatus =
+  (typeof ListAdminSponsorAssetLibraryStatus)[keyof typeof ListAdminSponsorAssetLibraryStatus];
+
+export const ListAdminSponsorAssetLibraryStatus = {
+  active: "active",
+  archived: "archived",
+  missing: "missing",
+} as const;
+
+export type ListAdminSponsorAssetLibrary200 = {
+  assets: SponsorAsset[];
+};
+
+export type PlanAllSponsorBackupBody = {
+  /** @minimum 10485760 */
+  maxBytesPerZip?: number;
+};
+
+export type PlanAllSponsorBackup200BatchesItem = {
+  sponsorIds: number[];
+  byteSize: number;
+};
+
+export type PlanAllSponsorBackup200 = {
+  batches: PlanAllSponsorBackup200BatchesItem[];
+};
+
+export type DownloadAllSponsorBackupBatchBody = {
+  /** @minItems 1 */
+  assetIds: string[];
+};
+
+export type RequestMoreSponsorPassesBody = {
+  /** @minimum 0 */
+  requestedVip: number;
+  /** @minimum 0 */
+  requestedStaff: number;
+  /** @maxLength 2000 */
+  message?: string;
+};
+
+export type ReplaceSponsorWorkspaceAssetBody = {
+  file: Blob;
+};
+
+export type AcknowledgeSponsorDocumentBody = {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  acknowledgedBy: string;
 };

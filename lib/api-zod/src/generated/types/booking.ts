@@ -9,6 +9,7 @@ import type { BookingAttendeeType } from "./bookingAttendeeType";
 import type { BookingInvoiceBadgeStatus } from "./bookingInvoiceBadgeStatus";
 import type { BookingPassType } from "./bookingPassType";
 import type { BookingPaymentMethod } from "./bookingPaymentMethod";
+import type { BookingRegistrationSource } from "./bookingRegistrationSource";
 import type { BookingStatus } from "./bookingStatus";
 
 export interface Booking {
@@ -30,6 +31,9 @@ export interface Booking {
   /** @nullable */
   paymentMethod?: BookingPaymentMethod;
   manualEntry: boolean;
+  registrationSource?: BookingRegistrationSource;
+  /** @nullable */
+  sponsorId?: number | null;
   /** @nullable */
   stripeSessionId?: string | null;
   /** @nullable */

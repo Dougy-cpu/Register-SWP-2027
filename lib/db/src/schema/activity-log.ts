@@ -31,6 +31,23 @@ export const activityTypeEnum = [
   "admin_hear_about_us_moved",
   "admin_booking_redelivered",
   "admin_community_social_email_sent",
+  "sponsor_created",
+  "sponsor_updated",
+  "sponsor_status_changed",
+  "sponsor_access_rotated",
+  "sponsor_welcome_sent",
+  "sponsor_staff_registered",
+  "sponsor_staff_updated",
+  "sponsor_staff_cancelled",
+  "sponsor_pass_requested",
+  "sponsor_session_submitted",
+  "sponsor_session_reviewed",
+  "sponsor_session_exported",
+  "sponsor_asset_uploaded",
+  "sponsor_asset_downloaded",
+  "sponsor_asset_archived",
+  "sponsor_asset_restored",
+  "sponsor_document_acknowledged",
 ] as const;
 
 export type ActivityType = (typeof activityTypeEnum)[number];

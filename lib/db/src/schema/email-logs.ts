@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, pgEnum, index } from "drizzl
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { bookingsTable } from "./bookings";
+import { sponsorsTable } from "./sponsors";
 
 export const emailLogTypeEnum = pgEnum("email_log_type", [
   "confirmation",
@@ -9,6 +10,9 @@ export const emailLogTypeEnum = pgEnum("email_log_type", [
   "welcome",
   "invoice",
   "community_social",
+  "sponsor_welcome",
+  "sponsor_staff",
+  "sponsor_internal",
   "test",
 ]);
 
@@ -19,6 +23,9 @@ export const emailLogsTable = pgTable(
   {
     id: serial("id").primaryKey(),
     bookingId: integer("booking_id").references(() => bookingsTable.id, { onDelete: "set null" }),
+    sponsorId: integer("sponsor_id").references(() => sponsorsTable.id, {
+      onDelete: "set null",
+    }),
     recipient: text("recipient").notNull(),
     type: emailLogTypeEnum("type").notNull(),
     status: emailStatusEnum("status").notNull().default("pending"),
@@ -28,6 +35,7 @@ export const emailLogsTable = pgTable(
   (table) => ({
     // Admin booking detail page lists every email sent for a booking.
     bookingIdIdx: index("email_logs_booking_id_idx").on(table.bookingId),
+    sponsorIdIdx: index("email_logs_sponsor_id_idx").on(table.sponsorId),
   }),
 );
 

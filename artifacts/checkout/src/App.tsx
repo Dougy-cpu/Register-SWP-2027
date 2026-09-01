@@ -15,6 +15,11 @@ import AdminNotifications from "@/pages/admin/notifications";
 import AdminPasses from "@/pages/admin/passes";
 import AdminSettings from "@/pages/admin/settings";
 import AdminActivity from "@/pages/admin/activity";
+import AdminSponsors from "@/pages/admin/sponsors";
+import AdminSponsorDetail from "@/pages/admin/sponsor-detail";
+import AdminSponsorAssets from "@/pages/admin/sponsor-assets";
+import SponsorAccess from "@/pages/sponsor/access";
+import SponsorPortal from "@/pages/sponsor/portal";
 import ManageAttendees from "@/pages/manage/ManageAttendees";
 import EditBilling from "@/pages/manage/EditBilling";
 
@@ -41,6 +46,11 @@ function Router() {
       <Route path="/admin/passes" component={AdminPasses} />
       <Route path="/admin/settings" component={AdminSettings} />
       <Route path="/admin/activity" component={AdminActivity} />
+      <Route path="/admin/sponsors/:sponsorId" component={AdminSponsorDetail} />
+      <Route path="/admin/sponsors" component={AdminSponsors} />
+      <Route path="/admin/sponsor-assets" component={AdminSponsorAssets} />
+      <Route path="/sponsor/access/:token" component={SponsorAccess} />
+      <Route path="/sponsor" component={SponsorPortal} />
       <Route path="/manage/:token/billing" component={EditBilling} />
       <Route path="/manage/:token" component={ManageAttendees} />
       <Route component={NotFound} />

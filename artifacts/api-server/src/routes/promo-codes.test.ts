@@ -10,6 +10,7 @@ type PromoRow = {
   validUntil: Date | null;
   maxUses: number | null;
   usedCount: number;
+  maxQuantityPerBooking: number | null;
   maxDiscountAmount: string | null;
   applicablePassTypes: string[] | null;
   minQuantity: number | null;
@@ -25,8 +26,23 @@ function resetPromos(...rows: PromoRow[]): void {
 }
 
 vi.mock("@workspace/db", () => {
+  function rowsFor(table: { __name?: string }) {
+    return table?.__name === "promoCodes" ? promos : [];
+  }
+  function chain(table: { __name?: string }) {
+    const rows = rowsFor(table);
+    const value = {
+      where: () => value,
+      orderBy: () => value,
+      then: (
+        onFulfilled?: (rows: PromoRow[]) => unknown,
+        onRejected?: (error: unknown) => unknown,
+      ) => Promise.resolve(rows).then(onFulfilled, onRejected),
+    };
+    return value;
+  }
   const db = {
-    select: () => ({ from: () => ({ where: async () => promos }) }),
+    select: () => ({ from: (table: { __name?: string }) => chain(table) }),
   };
   return {
     db,
@@ -37,6 +53,8 @@ vi.mock("@workspace/db", () => {
       validFrom: {},
       validUntil: {},
     },
+    discountTiersTable: { __name: "discountTiers", passType: {}, minQuantity: {} },
+    passConfigTable: { __name: "passConfig" },
     bookingsTable: { __name: "bookings" },
     attendeesTable: { __name: "attendees" },
   };
@@ -97,6 +115,7 @@ function basePromo(over: Partial<PromoRow> = {}): PromoRow {
     validUntil: null,
     maxUses: 5,
     usedCount: 0,
+    maxQuantityPerBooking: null,
     maxDiscountAmount: null,
     applicablePassTypes: null,
     minQuantity: null,

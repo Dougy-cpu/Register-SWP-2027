@@ -28,6 +28,10 @@ tags:
     description: Admin panel operations
   - name: calendar
     description: Public iCalendar (.ics) downloads for the event and pre-event social
+  - name: sponsors-admin
+    description: Sponsor administration, review, communications and reporting
+  - name: sponsor-workspace
+    description: Cookie-authenticated private sponsor workspace
 paths:
   /calendar/main.ics:
     get:
@@ -1431,12 +1435,751 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ==================== SPONSOR ADMIN ====================
+  /admin/sponsors:
+    get:
+      operationId: listSponsors
+      tags: [sponsors-admin]
+      summary: List sponsor records with progress and allocation usage
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SponsorStatus" } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Sponsor list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sponsors: { type: array, items: { $ref: "#/components/schemas/SponsorSummary" } }
+                required: [sponsors]
+    post:
+      operationId: createSponsor
+      tags: [sponsors-admin]
+      summary: Create a draft sponsor record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorUpsert" }
+      responses:
+        "201":
+          description: Draft sponsor created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" }
+        "409":
+          {
+            description: Promo code collision,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /admin/sponsors/{sponsorId}:
+    parameters:
+      - { $ref: "#/components/parameters/SponsorId" }
+    get:
+      operationId: getAdminSponsor
+      tags: [sponsors-admin]
+      summary: Get a complete sponsor administration record
+      responses:
+        "200":
+          {
+            description: Sponsor record,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" } },
+              },
+          }
+    patch:
+      operationId: updateAdminSponsor
+      tags: [sponsors-admin]
+      summary: Update sponsor details, allocations, contacts, deadlines or status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorUpsert" }
+      responses:
+        "200":
+          {
+            description: Updated sponsor,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" } },
+              },
+          }
+        "409":
+          {
+            description: Allocation below active use or promo collision,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/confirm:
+    post:
+      operationId: confirmSponsor
+      tags: [sponsors-admin]
+      summary: Transactionally confirm a draft sponsor and create codes and checklist
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      responses:
+        "200":
+          {
+            description: Confirmed sponsor,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" } },
+              },
+          }
+        "409":
+          {
+            description: Code collision,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/access/rotate:
+    post:
+      operationId: rotateSponsorAccess
+      tags: [sponsors-admin]
+      summary: Revoke existing sponsor sessions and issue a new private link
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      responses:
+        "200":
+          description: New private link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { accessUrl: { type: string, format: uri } }
+                required: [accessUrl]
+
+  /admin/sponsors/{sponsorId}/welcome/preview:
+    get:
+      operationId: previewSponsorWelcome
+      tags: [sponsors-admin]
+      summary: Render the sponsor welcome email using current live sponsor data
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      responses:
+        "200":
+          description: Email preview only; no message is sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmailPreview" }
+
+  /admin/sponsors/{sponsorId}/welcome/send:
+    post:
+      operationId: sendSponsorWelcome
+      tags: [sponsors-admin]
+      summary: Explicitly send the reviewed sponsor welcome email
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedPreviewHash:
+                  { type: string, description: Hash returned by the preview endpoint }
+              required: [expectedPreviewHash]
+      responses:
+        "200":
+          {
+            description: Delivery result,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      { type: object, properties: { sent: { type: boolean } }, required: [sent] },
+                  },
+              },
+          }
+        "409":
+          {
+            description: Sponsor data changed after preview,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/tasks/{taskId}:
+    patch:
+      operationId: updateAdminSponsorTask
+      tags: [sponsors-admin]
+      summary: Update a sponsor deliverable tracker status
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { name: taskId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { status: { $ref: "#/components/schemas/SponsorTaskStatus" } }
+              required: [status]
+      responses:
+        "200":
+          {
+            description: Updated tracker item,
+            content: { application/json: { schema: { $ref: "#/components/schemas/SponsorTask" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/sessions:
+    post:
+      operationId: addAdminSponsorSessionEntitlement
+      tags: [sponsors-admin]
+      summary: Add an explicit session entitlement to a sponsor workspace
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorSessionEntitlementInput" }
+      responses:
+        "201":
+          {
+            description: Sponsor workspace with the new entitlement,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" } },
+              },
+          }
+
+  /admin/sponsors/{sponsorId}/sessions/{sessionId}/entitlement:
+    patch:
+      operationId: updateAdminSponsorSessionEntitlement
+      tags: [sponsors-admin]
+      summary: Update a sponsor session entitlement and its required deliverables
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { $ref: "#/components/parameters/SessionId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorSessionEntitlementInput" }
+      responses:
+        "200":
+          {
+            description: Updated sponsor workspace,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspaceAdmin" } },
+              },
+          }
+
+  /admin/sponsors/{sponsorId}/sessions/{sessionId}/review:
+    patch:
+      operationId: reviewSponsorSession
+      tags: [sponsors-admin]
+      summary: Approve a submission or request changes with feedback
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { $ref: "#/components/parameters/SessionId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [changes_requested, approved] }
+                feedback: { type: string, nullable: true }
+              required: [status]
+      responses:
+        "200":
+          {
+            description: Reviewed session,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorSession" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/sessions/export.csv:
+    get:
+      operationId: exportSponsorSessions
+      tags: [sponsors-admin]
+      summary: Export approved sponsor sessions and mark their current revisions exported
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      responses:
+        "200": { description: CSV export, content: { text/csv: { schema: { type: string } } } }
+
+  /admin/sponsors/{sponsorId}/assets:
+    get:
+      operationId: listSponsorAssets
+      tags: [sponsors-admin]
+      summary: List all active and archived versions for a sponsor
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - {
+            name: category,
+            in: query,
+            schema: { $ref: "#/components/schemas/SponsorAssetCategory" },
+          }
+        - { name: status, in: query, schema: { type: string, enum: [active, archived, missing] } }
+      responses:
+        "200":
+          description: Sponsor assets
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      assets: { type: array, items: { $ref: "#/components/schemas/SponsorAsset" } },
+                    },
+                  required: [assets],
+                }
+    post:
+      operationId: adminUploadSponsorAsset
+      tags: [sponsors-admin]
+      summary: Upload a validated sponsor file to App Storage
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/SponsorAssetUpload" }
+      responses:
+        "201":
+          {
+            description: Uploaded asset,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorAsset" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/assets/{assetId}:
+    patch:
+      operationId: updateSponsorAssetStatus
+      tags: [sponsors-admin]
+      summary: Archive or restore an asset version
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { $ref: "#/components/parameters/AssetId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { status: { type: string, enum: [active, archived] } }
+              required: [status]
+      responses:
+        "200":
+          {
+            description: Updated asset,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorAsset" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/assets/{assetId}/replace:
+    post:
+      operationId: replaceSponsorAsset
+      tags: [sponsors-admin]
+      summary: Upload a new version and archive the previous version
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { $ref: "#/components/parameters/AssetId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+              required: [file]
+      responses:
+        "201":
+          {
+            description: Replacement version,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorAsset" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/assets/{assetId}/download:
+    get:
+      operationId: adminDownloadSponsorAsset
+      tags: [sponsors-admin]
+      summary: Authenticated individual file download or safe raster preview
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { $ref: "#/components/parameters/AssetId" }
+        - { name: preview, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          {
+            description: File stream,
+            content: { application/octet-stream: { schema: { type: string, format: binary } } },
+          }
+
+  /admin/sponsors/{sponsorId}/assets/download.zip:
+    post:
+      operationId: downloadSponsorAssetSelection
+      tags: [sponsors-admin]
+      summary: Stream selected assets as a ZIP with manifest.csv
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { assetIds: { type: array, items: { type: string }, minItems: 1 } }
+              required: [assetIds]
+      responses:
+        "200":
+          {
+            description: ZIP stream,
+            content: { application/zip: { schema: { type: string, format: binary } } },
+          }
+        "409":
+          {
+            description: Storage metadata drift found before streaming,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /admin/sponsors/{sponsorId}/assets/complete.zip:
+    get:
+      operationId: downloadCompleteSponsorFolder
+      tags: [sponsors-admin]
+      summary: Stream the complete active sponsor folder with manifest.csv
+      parameters: [{ $ref: "#/components/parameters/SponsorId" }]
+      responses:
+        "200":
+          {
+            description: ZIP stream,
+            content: { application/zip: { schema: { type: string, format: binary } } },
+          }
+
+  /admin/sponsor-assets:
+    get:
+      operationId: listAdminSponsorAssetLibrary
+      tags: [sponsors-admin]
+      summary: Search and filter the all-sponsor asset library
+      parameters:
+        - { name: sponsorId, in: query, schema: { type: integer } }
+        - {
+            name: category,
+            in: query,
+            schema: { $ref: "#/components/schemas/SponsorAssetCategory" },
+          }
+        - { name: status, in: query, schema: { type: string, enum: [active, archived, missing] } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Asset library
+          content:
+            application/json:
+              schema:
+                {
+                  type: object,
+                  properties:
+                    {
+                      assets: { type: array, items: { $ref: "#/components/schemas/SponsorAsset" } },
+                    },
+                  required: [assets],
+                }
+
+  /admin/sponsor-assets/backup-plan:
+    post:
+      operationId: planAllSponsorBackup
+      tags: [sponsors-admin]
+      summary: Build safe-size ZIP batches for a complete offline backup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                { maxBytesPerZip: { type: integer, minimum: 10485760, default: 524288000 } }
+      responses:
+        "200":
+          description: Download batches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sponsorIds: { type: array, items: { type: integer } }
+                        byteSize: { type: integer }
+                      required: [sponsorIds, byteSize]
+                required: [batches]
+
+  /admin/sponsor-assets/backup.zip:
+    post:
+      operationId: downloadAllSponsorBackupBatch
+      tags: [sponsors-admin]
+      summary: Stream one planned all-sponsor backup batch without temporary files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { assetIds: { type: array, minItems: 1, items: { type: string } } }
+              required: [assetIds]
+      responses:
+        "200":
+          {
+            description: ZIP backup stream,
+            content: { application/zip: { schema: { type: string, format: binary } } },
+          }
+        "409":
+          {
+            description: Batch changed or storage drift found,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  # ==================== PRIVATE SPONSOR WORKSPACE ====================
+  /sponsor/access/{token}:
+    post:
+      operationId: exchangeSponsorAccessToken
+      tags: [sponsor-workspace]
+      summary: Exchange a private signed link for an HttpOnly SameSite session cookie
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Cookie issued; token should be removed from the visible address }
+        "401":
+          {
+            description: Invalid or revoked link,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /sponsor/logout:
+    post:
+      operationId: logoutSponsor
+      tags: [sponsor-workspace]
+      summary: Clear the sponsor workspace session cookie
+      responses: { "204": { description: Logged out } }
+
+  /sponsor/workspace:
+    get:
+      operationId: getSponsorWorkspace
+      tags: [sponsor-workspace]
+      summary: Get the private privacy-redacted sponsor workspace
+      responses:
+        "200":
+          {
+            description: Sponsor workspace,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/SponsorWorkspacePublic" } },
+              },
+          }
+
+  /sponsor/staff:
+    post:
+      operationId: registerSponsorStaff
+      tags: [sponsor-workspace]
+      summary: Explicitly confirm one zero-value Sponsor staff registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorStaffInput" }
+      responses:
+        "201":
+          {
+            description: Registered staff attendee,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorStaff" } } },
+          }
+        "409":
+          {
+            description: Allocation full or active email duplicate,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          }
+
+  /sponsor/staff/{bookingId}:
+    parameters:
+      - { name: bookingId, in: path, required: true, schema: { type: integer } }
+    patch:
+      operationId: updateSponsorStaff
+      tags: [sponsor-workspace]
+      summary: Change or replace a sponsor staff attendee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorStaffInput" }
+      responses:
+        "200":
+          {
+            description: Updated attendee,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorStaff" } } },
+          }
+    delete:
+      operationId: cancelSponsorStaff
+      tags: [sponsor-workspace]
+      summary: Cancel sponsor staff attendance and restore the staff allocation
+      responses: { "204": { description: Registration cancelled } }
+
+  /sponsor/pass-requests:
+    post:
+      operationId: requestMoreSponsorPasses
+      tags: [sponsor-workspace]
+      summary: Request more VIP or staff places and immediately notify the internal team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requestedVip: { type: integer, minimum: 0 }
+                requestedStaff: { type: integer, minimum: 0 }
+                message: { type: string, maxLength: 2000 }
+              required: [requestedVip, requestedStaff]
+      responses: { "201": { description: Request recorded } }
+
+  /sponsor/sessions/{sessionId}:
+    patch:
+      operationId: updateSponsorSession
+      tags: [sponsor-workspace]
+      summary: Save a sponsor session draft; approved edits return it to submitted
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorSessionInput" }
+      responses:
+        "200":
+          {
+            description: Saved session,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorSession" } } },
+          }
+
+  /sponsor/sessions/{sessionId}/submit:
+    post:
+      operationId: submitSponsorSession
+      tags: [sponsor-workspace]
+      summary: Validate and submit a sponsor session for review
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200":
+          {
+            description: Submitted session,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorSession" } } },
+          }
+
+  /sponsor/assets:
+    post:
+      operationId: uploadSponsorAsset
+      tags: [sponsor-workspace]
+      summary: Upload a validated sponsor deliverable to App Storage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/SponsorAssetUpload" }
+      responses:
+        "201":
+          {
+            description: Uploaded asset,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorAsset" } } },
+          }
+
+  /sponsor/assets/{assetId}/replace:
+    post:
+      operationId: replaceSponsorWorkspaceAsset
+      tags: [sponsor-workspace]
+      summary: Upload a new version and archive the previous sponsor file
+      parameters: [{ $ref: "#/components/parameters/AssetId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+              required: [file]
+      responses:
+        "201":
+          {
+            description: Replacement asset,
+            content:
+              { application/json: { schema: { $ref: "#/components/schemas/SponsorAsset" } } },
+          }
+
+  /sponsor/assets/{assetId}/download:
+    get:
+      operationId: downloadSponsorWorkspaceAsset
+      tags: [sponsor-workspace]
+      summary: Download an authenticated sponsor file
+      parameters: [{ $ref: "#/components/parameters/AssetId" }]
+      responses:
+        "200":
+          {
+            description: File stream,
+            content: { application/octet-stream: { schema: { type: string, format: binary } } },
+          }
+
+  /sponsor/documents/{documentId}/acknowledge:
+    post:
+      operationId: acknowledgeSponsorDocument
+      tags: [sponsor-workspace]
+      summary: Acknowledge the current version of a required logistics document
+      parameters:
+        - { name: documentId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { acknowledgedBy: { type: string, minLength: 2, maxLength: 200 } }
+              required: [acknowledgedBy]
+      responses: { "201": { description: Current version acknowledged } }
+
 components:
   securitySchemes:
     AdminToken:
       type: apiKey
       in: header
       name: x-admin-token
+
+  parameters:
+    SponsorId:
+      name: sponsorId
+      in: path
+      required: true
+      schema: { type: integer }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: integer }
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema: { type: string }
 
   schemas:
     HealthStatus:
@@ -1464,6 +2207,351 @@ components:
           type: string
       required:
         - success
+
+    # ==================== SPONSOR SCHEMAS ====================
+    SponsorStatus:
+      type: string
+      enum: [draft, confirmed, paused, completed, cancelled]
+
+    SponsorAssetCategory:
+      type: string
+      enum: [logo, headshot, slides, session_material, logistics, other]
+
+    SponsorContact:
+      type: object
+      properties:
+        id: { type: integer }
+        role: { type: string, enum: [primary, onsite, marketing, other] }
+        firstName: { type: string }
+        lastName: { type: string }
+        jobTitle: { type: string, nullable: true }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        isPrimary: { type: boolean }
+      required: [role, firstName, lastName, email, isPrimary]
+
+    SponsorTask:
+      type: object
+      properties:
+        id: { type: integer }
+        taskKey: { type: string }
+        label: { type: string }
+        required: { type: boolean }
+        dueAt: { type: string, format: date-time, nullable: true }
+        status: { type: string, enum: [todo, submitted, completed, overdue, not_required] }
+        completedAt: { type: string, format: date-time, nullable: true }
+      required: [id, taskKey, label, required, status]
+
+    SponsorUsagePerson:
+      type: object
+      description: Privacy-redacted usage; contact and financial fields are intentionally absent.
+      properties:
+        bookingId: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        company: { type: string }
+        jobTitle: { type: string }
+        registeredAt: { type: string, format: date-time }
+      required: [bookingId, firstName, lastName, company, jobTitle, registeredAt]
+
+    SponsorCode:
+      type: object
+      properties:
+        kind: { type: string, enum: [vip, public] }
+        code: { type: string }
+        active: { type: boolean }
+        workforceUrl: { type: string, format: uri }
+        allocation: { type: integer, nullable: true }
+        used: { type: integer }
+        remaining: { type: integer, nullable: true }
+        maxPerBooking: { type: integer, nullable: true }
+        discountPercent: { type: number, nullable: true }
+        redemptions: { type: array, items: { $ref: "#/components/schemas/SponsorUsagePerson" } }
+      required: [kind, code, active, workforceUrl, used, redemptions]
+
+    SponsorStaff:
+      type: object
+      properties:
+        bookingId: { type: integer }
+        attendeeId: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        jobTitle: { type: string }
+        company: { type: string }
+        workEmail: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        dietaryAccessibility: { type: string, nullable: true }
+        communitySocialAttending: { type: boolean, nullable: true }
+        communitySocialDietary: { type: string, nullable: true }
+        marketingConsent: { type: boolean }
+        status: { type: string }
+        registeredAt: { type: string, format: date-time }
+      required:
+        [
+          bookingId,
+          attendeeId,
+          firstName,
+          lastName,
+          jobTitle,
+          company,
+          workEmail,
+          marketingConsent,
+          status,
+          registeredAt,
+        ]
+
+    SponsorStaffInput:
+      type: object
+      properties:
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        jobTitle: { type: string, minLength: 1, maxLength: 200 }
+        company: { type: string, minLength: 1, maxLength: 200 }
+        workEmail: { type: string, format: email }
+        phone: { type: string, nullable: true, maxLength: 100 }
+        dietaryAccessibility: { type: string, nullable: true, maxLength: 2000 }
+        communitySocialAttending: { type: boolean, nullable: true }
+        communitySocialDietary: { type: string, nullable: true, maxLength: 2000 }
+        marketingConsent: { type: boolean, default: false }
+      required: [firstName, lastName, jobTitle, company, workEmail]
+
+    SponsorPresenter:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        jobTitle: { type: string }
+        company: { type: string }
+        biography: { type: string, nullable: true }
+        displayOrder: { type: integer }
+      required: [name, jobTitle, company]
+
+    SponsorSession:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [quickfire, keynote, other] }
+        entitlementLabel: { type: string }
+        title: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        takeaways: { type: array, maxItems: 3, items: { type: string } }
+        status: { type: string, enum: [draft, submitted, changes_requested, approved, exported] }
+        feedback: { type: string, nullable: true }
+        headshotRequired: { type: boolean }
+        takeawaysRequired: { type: boolean }
+        slidesRequired: { type: boolean }
+        currentRevision: { type: integer }
+        exportedRevision: { type: integer, nullable: true }
+        exportOutdated: { type: boolean }
+        presenters: { type: array, items: { $ref: "#/components/schemas/SponsorPresenter" } }
+        revisions:
+          type: array
+          items:
+            type: object
+            properties:
+              revision: { type: integer }
+              actor: { type: string }
+              createdAt: { type: string, format: date-time }
+            required: [revision, actor, createdAt]
+      required:
+        [
+          id,
+          type,
+          entitlementLabel,
+          takeaways,
+          status,
+          headshotRequired,
+          takeawaysRequired,
+          slidesRequired,
+          currentRevision,
+          exportOutdated,
+          presenters,
+          revisions,
+        ]
+
+    SponsorSessionEntitlementInput:
+      type: object
+      properties:
+        type: { type: string, enum: [quickfire, keynote, other] }
+        entitlementLabel: { type: string, minLength: 1, maxLength: 250 }
+        headshotRequired: { type: boolean, default: true }
+        takeawaysRequired: { type: boolean, default: true }
+        slidesRequired: { type: boolean, default: false }
+      required: [type, entitlementLabel, headshotRequired, takeawaysRequired, slidesRequired]
+
+    SponsorSessionInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 250 }
+        description: { type: string, maxLength: 1500 }
+        takeaways: { type: array, maxItems: 3, items: { type: string, maxLength: 300 } }
+        presenters:
+          { type: array, minItems: 1, items: { $ref: "#/components/schemas/SponsorPresenter" } }
+
+    SponsorAsset:
+      type: object
+      properties:
+        id: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string, nullable: true }
+        sessionId: { type: integer, nullable: true }
+        presenterId: { type: integer, nullable: true }
+        category: { $ref: "#/components/schemas/SponsorAssetCategory" }
+        originalName: { type: string }
+        mimeType: { type: string }
+        byteSize: { type: integer }
+        checksumSha256: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [active, archived, missing] }
+        uploaderType: { type: string }
+        uploaderLabel: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        previewAvailable: { type: boolean }
+      required:
+        [
+          id,
+          sponsorId,
+          category,
+          originalName,
+          mimeType,
+          byteSize,
+          checksumSha256,
+          version,
+          status,
+          uploaderType,
+          createdAt,
+          previewAvailable,
+        ]
+
+    SponsorAssetUpload:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+        category: { $ref: "#/components/schemas/SponsorAssetCategory" }
+        sessionId: { type: integer, nullable: true }
+        presenterId: { type: integer, nullable: true }
+      required: [file, category]
+
+    SponsorDocument:
+      type: object
+      properties:
+        id: { type: integer }
+        assetId: { type: string }
+        title: { type: string }
+        required: { type: boolean }
+        acknowledgementVersion: { type: integer }
+        acknowledged: { type: boolean }
+        acknowledgedBy: { type: string, nullable: true }
+        acknowledgedAt: { type: string, format: date-time, nullable: true }
+      required: [id, assetId, title, required, acknowledgementVersion, acknowledged]
+
+    SponsorSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        company: { type: string }
+        packageLabel: { type: string }
+        status: { $ref: "#/components/schemas/SponsorStatus" }
+        confirmationDate: { type: string, format: date, nullable: true }
+        vipAllocation: { type: integer }
+        vipUsed: { type: integer }
+        staffAllocation: { type: integer }
+        staffUsed: { type: integer }
+        progressCompleted: { type: integer }
+        progressTotal: { type: integer }
+        needsAttention: { type: integer }
+        updatedAt: { type: string, format: date-time }
+      required:
+        [
+          id,
+          company,
+          packageLabel,
+          status,
+          vipAllocation,
+          vipUsed,
+          staffAllocation,
+          staffUsed,
+          progressCompleted,
+          progressTotal,
+          needsAttention,
+          updatedAt,
+        ]
+
+    SponsorUpsert:
+      type: object
+      properties:
+        company: { type: string, minLength: 1, maxLength: 200 }
+        packageLabel: { type: string, minLength: 1, maxLength: 200 }
+        status: { $ref: "#/components/schemas/SponsorStatus" }
+        confirmationDate: { type: string, format: date, nullable: true }
+        notes: { type: string, nullable: true, maxLength: 10000 }
+        vipAllocation: { type: integer, minimum: 0 }
+        vipMaxPerBooking: { type: integer, minimum: 1 }
+        staffAllocation: { type: integer, minimum: 0 }
+        vipCode: { type: string, pattern: "^[A-Z0-9]+$" }
+        publicCode: { type: string, pattern: "^[A-Z0-9]+$" }
+        contacts: { type: array, items: { $ref: "#/components/schemas/SponsorContact" } }
+        tasks: { type: array, items: { $ref: "#/components/schemas/SponsorTask" } }
+        sessions:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string, enum: [quickfire, keynote, other] }
+              entitlementLabel: { type: string }
+              headshotRequired: { type: boolean }
+              takeawaysRequired: { type: boolean }
+              slidesRequired: { type: boolean }
+            required: [type, entitlementLabel]
+      required: [company, packageLabel, vipAllocation, vipMaxPerBooking, staffAllocation]
+
+    SponsorWorkspaceAdmin:
+      allOf:
+        - { $ref: "#/components/schemas/SponsorSummary" }
+        - type: object
+          properties:
+            notes: { type: string, nullable: true }
+            accessUrl: { type: string, format: uri, nullable: true }
+            welcomeEmailSentAt: { type: string, format: date-time, nullable: true }
+            contacts: { type: array, items: { $ref: "#/components/schemas/SponsorContact" } }
+            codes: { type: array, items: { $ref: "#/components/schemas/SponsorCode" } }
+            staff: { type: array, items: { $ref: "#/components/schemas/SponsorStaff" } }
+            tasks: { type: array, items: { $ref: "#/components/schemas/SponsorTask" } }
+            sessions: { type: array, items: { $ref: "#/components/schemas/SponsorSession" } }
+            assets: { type: array, items: { $ref: "#/components/schemas/SponsorAsset" } }
+            documents: { type: array, items: { $ref: "#/components/schemas/SponsorDocument" } }
+            activity: { type: array, items: { type: object, additionalProperties: true } }
+          required: [contacts, codes, staff, tasks, sessions, assets, documents, activity]
+
+    SponsorWorkspacePublic:
+      type: object
+      description: Sponsor-facing projection. Guest emails, phones, payments and revenue are never included.
+      properties:
+        sponsor: { $ref: "#/components/schemas/SponsorSummary" }
+        contacts: { type: array, items: { $ref: "#/components/schemas/SponsorContact" } }
+        codes: { type: array, items: { $ref: "#/components/schemas/SponsorCode" } }
+        staff: { type: array, items: { $ref: "#/components/schemas/SponsorStaff" } }
+        tasks: { type: array, items: { $ref: "#/components/schemas/SponsorTask" } }
+        sessions: { type: array, items: { $ref: "#/components/schemas/SponsorSession" } }
+        assets: { type: array, items: { $ref: "#/components/schemas/SponsorAsset" } }
+        documents: { type: array, items: { $ref: "#/components/schemas/SponsorDocument" } }
+        invitationCopy:
+          type: object
+          properties:
+            vip: { type: string }
+            public: { type: string }
+          required: [vip, public]
+      required:
+        [sponsor, contacts, codes, staff, tasks, sessions, assets, documents, invitationCopy]
+
+    EmailPreview:
+      type: object
+      properties:
+        to: { type: array, items: { type: string, format: email } }
+        subject: { type: string }
+        html: { type: string }
+        previewHash: { type: string }
+      required: [to, subject, html, previewHash]
 
     # ==================== BOOKING SCHEMAS ====================
     Booking:
@@ -1502,6 +2590,11 @@ components:
           enum: ["card", "invoice", null]
         manualEntry:
           type: boolean
+        registrationSource:
+          type: string
+          enum: [checkout, manual, sponsor_staff]
+        sponsorId:
+          type: ["integer", "null"]
         stripeSessionId:
           type: ["string", "null"]
         stripePaymentIntentId:
@@ -2295,11 +3388,24 @@ components:
           type: integer
         bookingId:
           type: ["integer", "null"]
+        sponsorId:
+          type: ["integer", "null"]
         recipient:
           type: string
         type:
           type: string
-          enum: [confirmation, receipt, welcome, invoice, community_social, test]
+          enum:
+            [
+              confirmation,
+              receipt,
+              welcome,
+              invoice,
+              community_social,
+              sponsor_welcome,
+              sponsor_staff,
+              sponsor_internal,
+              test,
+            ]
         status:
           type: string
           enum: [sent, failed, pending]
@@ -2376,6 +3482,11 @@ components:
           type: ["string", "null"]
         manualEntry:
           type: boolean
+        registrationSource:
+          type: string
+          enum: [checkout, manual, sponsor_staff]
+        sponsorId:
+          type: ["integer", "null"]
         leadName:
           type: ["string", "null"]
         leadEmail:
@@ -2787,6 +3898,8 @@ components:
           type: integer
         completedRegistrations:
           type: integer
+        sponsorStaffCount:
+          type: integer
         partialRegistrations:
           type: integer
         totalRevenue:
@@ -2820,6 +3933,7 @@ components:
       required:
         - totalRegistrations
         - completedRegistrations
+        - sponsorStaffCount
         - partialRegistrations
         - totalRevenue
         - totalVat

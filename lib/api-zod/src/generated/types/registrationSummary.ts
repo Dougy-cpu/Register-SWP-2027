@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { RegistrationSummaryInvoiceBadgeStatus } from "./registrationSummaryInvoiceBadgeStatus";
+import type { RegistrationSummaryRegistrationSource } from "./registrationSummaryRegistrationSource";
 
 export interface RegistrationSummary {
   id: number;
@@ -19,6 +20,9 @@ export interface RegistrationSummary {
   /** @nullable */
   paymentMethod?: string | null;
   manualEntry: boolean;
+  registrationSource?: RegistrationSummaryRegistrationSource;
+  /** @nullable */
+  sponsorId?: number | null;
   /** @nullable */
   leadName?: string | null;
   /** @nullable */

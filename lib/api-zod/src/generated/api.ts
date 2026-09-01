@@ -60,6 +60,8 @@ export const GetBookingResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -193,6 +195,8 @@ export const UpdateBookingResponse = zod.object({
     .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
     .nullish(),
   manualEntry: zod.boolean(),
+  registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+  sponsorId: zod.number().nullish(),
   stripeSessionId: zod.string().nullish(),
   stripePaymentIntentId: zod.string().nullish(),
   stripeInvoiceId: zod.string().nullish(),
@@ -263,6 +267,8 @@ export const GetBookingBySessionResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -749,8 +755,19 @@ export const ListEmailLogsResponse = zod.object({
     zod.object({
       id: zod.number(),
       bookingId: zod.number().nullish(),
+      sponsorId: zod.number().nullish(),
       recipient: zod.string(),
-      type: zod.enum(["confirmation", "receipt", "welcome", "invoice", "community_social", "test"]),
+      type: zod.enum([
+        "confirmation",
+        "receipt",
+        "welcome",
+        "invoice",
+        "community_social",
+        "sponsor_welcome",
+        "sponsor_staff",
+        "sponsor_internal",
+        "test",
+      ]),
       status: zod.enum(["sent", "failed", "pending"]),
       errorMessage: zod.string().nullish(),
       sentAt: zod.coerce.date(),
@@ -906,6 +923,8 @@ export const ListRegistrationsResponse = zod.object({
       totalAmount: zod.number(),
       paymentMethod: zod.string().nullish(),
       manualEntry: zod.boolean(),
+      registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+      sponsorId: zod.number().nullish(),
       leadName: zod.string().nullish(),
       leadEmail: zod.string().nullish(),
       leadCompany: zod.string().nullish(),
@@ -1019,6 +1038,8 @@ export const RedeliverRegistrationResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1101,6 +1122,8 @@ export const ResendRegistrationConfirmationEmailResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1184,6 +1207,8 @@ export const ResendRegistrationWelcomeEmailsResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1268,6 +1293,8 @@ export const SendRegistrationCommunitySocialEmailResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1367,6 +1394,8 @@ export const UpdateRegistrationStatusResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1448,6 +1477,8 @@ export const GetRegistrationResponse = zod
       .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
       .nullish(),
     manualEntry: zod.boolean(),
+    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+    sponsorId: zod.number().nullish(),
     stripeSessionId: zod.string().nullish(),
     stripePaymentIntentId: zod.string().nullish(),
     stripeInvoiceId: zod.string().nullish(),
@@ -1697,6 +1728,7 @@ export const UpdateAdminEventSettingsResponse = zod
 export const GetAdminStatsResponse = zod.object({
   totalRegistrations: zod.number(),
   completedRegistrations: zod.number(),
+  sponsorStaffCount: zod.number(),
   partialRegistrations: zod.number(),
   totalRevenue: zod.number(),
   totalVat: zod.number(),
@@ -1719,6 +1751,8 @@ export const GetAdminStatsResponse = zod.object({
       totalAmount: zod.number(),
       paymentMethod: zod.string().nullish(),
       manualEntry: zod.boolean(),
+      registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+      sponsorId: zod.number().nullish(),
       leadName: zod.string().nullish(),
       leadEmail: zod.string().nullish(),
       leadCompany: zod.string().nullish(),
@@ -1761,4 +1795,1690 @@ export const GetAdminStatsResponse = zod.object({
       updatedAt: zod.coerce.date(),
     }),
   ),
+});
+
+/**
+ * @summary List sponsor records with progress and allocation usage
+ */
+export const ListSponsorsQueryParams = zod.object({
+  status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]).optional(),
+  search: zod.coerce.string().optional(),
+});
+
+export const ListSponsorsResponse = zod.object({
+  sponsors: zod.array(
+    zod.object({
+      id: zod.number(),
+      company: zod.string(),
+      packageLabel: zod.string(),
+      status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+      confirmationDate: zod.coerce.date().nullish(),
+      vipAllocation: zod.number(),
+      vipUsed: zod.number(),
+      staffAllocation: zod.number(),
+      staffUsed: zod.number(),
+      progressCompleted: zod.number(),
+      progressTotal: zod.number(),
+      needsAttention: zod.number(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Create a draft sponsor record
+ */
+export const createSponsorBodyCompanyMax = 200;
+
+export const createSponsorBodyPackageLabelMax = 200;
+
+export const createSponsorBodyNotesMax = 10000;
+
+export const createSponsorBodyVipAllocationMin = 0;
+
+export const createSponsorBodyStaffAllocationMin = 0;
+
+export const createSponsorBodyVipCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const createSponsorBodyPublicCodeRegExp = new RegExp("^[A-Z0-9]+$");
+
+export const CreateSponsorBody = zod.object({
+  company: zod.string().min(1).max(createSponsorBodyCompanyMax),
+  packageLabel: zod.string().min(1).max(createSponsorBodyPackageLabelMax),
+  status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]).optional(),
+  confirmationDate: zod.coerce.date().nullish(),
+  notes: zod.string().max(createSponsorBodyNotesMax).nullish(),
+  vipAllocation: zod.number().min(createSponsorBodyVipAllocationMin),
+  vipMaxPerBooking: zod.number().min(1),
+  staffAllocation: zod.number().min(createSponsorBodyStaffAllocationMin),
+  vipCode: zod.string().regex(createSponsorBodyVipCodeRegExp).optional(),
+  publicCode: zod.string().regex(createSponsorBodyPublicCodeRegExp).optional(),
+  contacts: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        role: zod.enum(["primary", "onsite", "marketing", "other"]),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        jobTitle: zod.string().nullish(),
+        email: zod.string().email(),
+        phone: zod.string().nullish(),
+        isPrimary: zod.boolean(),
+      }),
+    )
+    .optional(),
+  tasks: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        taskKey: zod.string(),
+        label: zod.string(),
+        required: zod.boolean(),
+        dueAt: zod.coerce.date().nullish(),
+        status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+        completedAt: zod.coerce.date().nullish(),
+      }),
+    )
+    .optional(),
+  sessions: zod
+    .array(
+      zod.object({
+        type: zod.enum(["quickfire", "keynote", "other"]),
+        entitlementLabel: zod.string(),
+        headshotRequired: zod.boolean().optional(),
+        takeawaysRequired: zod.boolean().optional(),
+        slidesRequired: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Get a complete sponsor administration record
+ */
+export const GetAdminSponsorParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const getAdminSponsorResponseTwoSessionsItemTakeawaysMax = 3;
+
+export const GetAdminSponsorResponse = zod
+  .object({
+    id: zod.number(),
+    company: zod.string(),
+    packageLabel: zod.string(),
+    status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+    confirmationDate: zod.coerce.date().nullish(),
+    vipAllocation: zod.number(),
+    vipUsed: zod.number(),
+    staffAllocation: zod.number(),
+    staffUsed: zod.number(),
+    progressCompleted: zod.number(),
+    progressTotal: zod.number(),
+    needsAttention: zod.number(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      notes: zod.string().nullish(),
+      accessUrl: zod.string().url().nullish(),
+      welcomeEmailSentAt: zod.coerce.date().nullish(),
+      contacts: zod.array(
+        zod.object({
+          id: zod.number().optional(),
+          role: zod.enum(["primary", "onsite", "marketing", "other"]),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string().nullish(),
+          email: zod.string().email(),
+          phone: zod.string().nullish(),
+          isPrimary: zod.boolean(),
+        }),
+      ),
+      codes: zod.array(
+        zod.object({
+          kind: zod.enum(["vip", "public"]),
+          code: zod.string(),
+          active: zod.boolean(),
+          workforceUrl: zod.string().url(),
+          allocation: zod.number().nullish(),
+          used: zod.number(),
+          remaining: zod.number().nullish(),
+          maxPerBooking: zod.number().nullish(),
+          discountPercent: zod.number().nullish(),
+          redemptions: zod.array(
+            zod
+              .object({
+                bookingId: zod.number(),
+                firstName: zod.string(),
+                lastName: zod.string(),
+                company: zod.string(),
+                jobTitle: zod.string(),
+                registeredAt: zod.coerce.date(),
+              })
+              .describe(
+                "Privacy-redacted usage; contact and financial fields are intentionally absent.",
+              ),
+          ),
+        }),
+      ),
+      staff: zod.array(
+        zod.object({
+          bookingId: zod.number(),
+          attendeeId: zod.number(),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string(),
+          company: zod.string(),
+          workEmail: zod.string().email(),
+          phone: zod.string().nullish(),
+          dietaryAccessibility: zod.string().nullish(),
+          communitySocialAttending: zod.boolean().nullish(),
+          communitySocialDietary: zod.string().nullish(),
+          marketingConsent: zod.boolean(),
+          status: zod.string(),
+          registeredAt: zod.coerce.date(),
+        }),
+      ),
+      tasks: zod.array(
+        zod.object({
+          id: zod.number(),
+          taskKey: zod.string(),
+          label: zod.string(),
+          required: zod.boolean(),
+          dueAt: zod.coerce.date().nullish(),
+          status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+          completedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      sessions: zod.array(
+        zod.object({
+          id: zod.number(),
+          type: zod.enum(["quickfire", "keynote", "other"]),
+          entitlementLabel: zod.string(),
+          title: zod.string().nullish(),
+          description: zod.string().nullish(),
+          takeaways: zod
+            .array(zod.string())
+            .max(getAdminSponsorResponseTwoSessionsItemTakeawaysMax),
+          status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+          feedback: zod.string().nullish(),
+          headshotRequired: zod.boolean(),
+          takeawaysRequired: zod.boolean(),
+          slidesRequired: zod.boolean(),
+          currentRevision: zod.number(),
+          exportedRevision: zod.number().nullish(),
+          exportOutdated: zod.boolean(),
+          presenters: zod.array(
+            zod.object({
+              id: zod.number().optional(),
+              name: zod.string(),
+              jobTitle: zod.string(),
+              company: zod.string(),
+              biography: zod.string().nullish(),
+              displayOrder: zod.number().optional(),
+            }),
+          ),
+          revisions: zod.array(
+            zod.object({
+              revision: zod.number(),
+              actor: zod.string(),
+              createdAt: zod.coerce.date(),
+            }),
+          ),
+        }),
+      ),
+      assets: zod.array(
+        zod.object({
+          id: zod.string(),
+          sponsorId: zod.number(),
+          sponsorCompany: zod.string().nullish(),
+          sessionId: zod.number().nullish(),
+          presenterId: zod.number().nullish(),
+          category: zod.enum([
+            "logo",
+            "headshot",
+            "slides",
+            "session_material",
+            "logistics",
+            "other",
+          ]),
+          originalName: zod.string(),
+          mimeType: zod.string(),
+          byteSize: zod.number(),
+          checksumSha256: zod.string(),
+          version: zod.number(),
+          status: zod.enum(["active", "archived", "missing"]),
+          uploaderType: zod.string(),
+          uploaderLabel: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          previewAvailable: zod.boolean(),
+        }),
+      ),
+      documents: zod.array(
+        zod.object({
+          id: zod.number(),
+          assetId: zod.string(),
+          title: zod.string(),
+          required: zod.boolean(),
+          acknowledgementVersion: zod.number(),
+          acknowledged: zod.boolean(),
+          acknowledgedBy: zod.string().nullish(),
+          acknowledgedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      activity: zod.array(zod.record(zod.string(), zod.unknown())),
+    }),
+  );
+
+/**
+ * @summary Update sponsor details, allocations, contacts, deadlines or status
+ */
+export const UpdateAdminSponsorParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const updateAdminSponsorBodyCompanyMax = 200;
+
+export const updateAdminSponsorBodyPackageLabelMax = 200;
+
+export const updateAdminSponsorBodyNotesMax = 10000;
+
+export const updateAdminSponsorBodyVipAllocationMin = 0;
+
+export const updateAdminSponsorBodyStaffAllocationMin = 0;
+
+export const updateAdminSponsorBodyVipCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const updateAdminSponsorBodyPublicCodeRegExp = new RegExp("^[A-Z0-9]+$");
+
+export const UpdateAdminSponsorBody = zod.object({
+  company: zod.string().min(1).max(updateAdminSponsorBodyCompanyMax),
+  packageLabel: zod.string().min(1).max(updateAdminSponsorBodyPackageLabelMax),
+  status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]).optional(),
+  confirmationDate: zod.coerce.date().nullish(),
+  notes: zod.string().max(updateAdminSponsorBodyNotesMax).nullish(),
+  vipAllocation: zod.number().min(updateAdminSponsorBodyVipAllocationMin),
+  vipMaxPerBooking: zod.number().min(1),
+  staffAllocation: zod.number().min(updateAdminSponsorBodyStaffAllocationMin),
+  vipCode: zod.string().regex(updateAdminSponsorBodyVipCodeRegExp).optional(),
+  publicCode: zod.string().regex(updateAdminSponsorBodyPublicCodeRegExp).optional(),
+  contacts: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        role: zod.enum(["primary", "onsite", "marketing", "other"]),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        jobTitle: zod.string().nullish(),
+        email: zod.string().email(),
+        phone: zod.string().nullish(),
+        isPrimary: zod.boolean(),
+      }),
+    )
+    .optional(),
+  tasks: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        taskKey: zod.string(),
+        label: zod.string(),
+        required: zod.boolean(),
+        dueAt: zod.coerce.date().nullish(),
+        status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+        completedAt: zod.coerce.date().nullish(),
+      }),
+    )
+    .optional(),
+  sessions: zod
+    .array(
+      zod.object({
+        type: zod.enum(["quickfire", "keynote", "other"]),
+        entitlementLabel: zod.string(),
+        headshotRequired: zod.boolean().optional(),
+        takeawaysRequired: zod.boolean().optional(),
+        slidesRequired: zod.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const updateAdminSponsorResponseTwoSessionsItemTakeawaysMax = 3;
+
+export const UpdateAdminSponsorResponse = zod
+  .object({
+    id: zod.number(),
+    company: zod.string(),
+    packageLabel: zod.string(),
+    status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+    confirmationDate: zod.coerce.date().nullish(),
+    vipAllocation: zod.number(),
+    vipUsed: zod.number(),
+    staffAllocation: zod.number(),
+    staffUsed: zod.number(),
+    progressCompleted: zod.number(),
+    progressTotal: zod.number(),
+    needsAttention: zod.number(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      notes: zod.string().nullish(),
+      accessUrl: zod.string().url().nullish(),
+      welcomeEmailSentAt: zod.coerce.date().nullish(),
+      contacts: zod.array(
+        zod.object({
+          id: zod.number().optional(),
+          role: zod.enum(["primary", "onsite", "marketing", "other"]),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string().nullish(),
+          email: zod.string().email(),
+          phone: zod.string().nullish(),
+          isPrimary: zod.boolean(),
+        }),
+      ),
+      codes: zod.array(
+        zod.object({
+          kind: zod.enum(["vip", "public"]),
+          code: zod.string(),
+          active: zod.boolean(),
+          workforceUrl: zod.string().url(),
+          allocation: zod.number().nullish(),
+          used: zod.number(),
+          remaining: zod.number().nullish(),
+          maxPerBooking: zod.number().nullish(),
+          discountPercent: zod.number().nullish(),
+          redemptions: zod.array(
+            zod
+              .object({
+                bookingId: zod.number(),
+                firstName: zod.string(),
+                lastName: zod.string(),
+                company: zod.string(),
+                jobTitle: zod.string(),
+                registeredAt: zod.coerce.date(),
+              })
+              .describe(
+                "Privacy-redacted usage; contact and financial fields are intentionally absent.",
+              ),
+          ),
+        }),
+      ),
+      staff: zod.array(
+        zod.object({
+          bookingId: zod.number(),
+          attendeeId: zod.number(),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string(),
+          company: zod.string(),
+          workEmail: zod.string().email(),
+          phone: zod.string().nullish(),
+          dietaryAccessibility: zod.string().nullish(),
+          communitySocialAttending: zod.boolean().nullish(),
+          communitySocialDietary: zod.string().nullish(),
+          marketingConsent: zod.boolean(),
+          status: zod.string(),
+          registeredAt: zod.coerce.date(),
+        }),
+      ),
+      tasks: zod.array(
+        zod.object({
+          id: zod.number(),
+          taskKey: zod.string(),
+          label: zod.string(),
+          required: zod.boolean(),
+          dueAt: zod.coerce.date().nullish(),
+          status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+          completedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      sessions: zod.array(
+        zod.object({
+          id: zod.number(),
+          type: zod.enum(["quickfire", "keynote", "other"]),
+          entitlementLabel: zod.string(),
+          title: zod.string().nullish(),
+          description: zod.string().nullish(),
+          takeaways: zod
+            .array(zod.string())
+            .max(updateAdminSponsorResponseTwoSessionsItemTakeawaysMax),
+          status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+          feedback: zod.string().nullish(),
+          headshotRequired: zod.boolean(),
+          takeawaysRequired: zod.boolean(),
+          slidesRequired: zod.boolean(),
+          currentRevision: zod.number(),
+          exportedRevision: zod.number().nullish(),
+          exportOutdated: zod.boolean(),
+          presenters: zod.array(
+            zod.object({
+              id: zod.number().optional(),
+              name: zod.string(),
+              jobTitle: zod.string(),
+              company: zod.string(),
+              biography: zod.string().nullish(),
+              displayOrder: zod.number().optional(),
+            }),
+          ),
+          revisions: zod.array(
+            zod.object({
+              revision: zod.number(),
+              actor: zod.string(),
+              createdAt: zod.coerce.date(),
+            }),
+          ),
+        }),
+      ),
+      assets: zod.array(
+        zod.object({
+          id: zod.string(),
+          sponsorId: zod.number(),
+          sponsorCompany: zod.string().nullish(),
+          sessionId: zod.number().nullish(),
+          presenterId: zod.number().nullish(),
+          category: zod.enum([
+            "logo",
+            "headshot",
+            "slides",
+            "session_material",
+            "logistics",
+            "other",
+          ]),
+          originalName: zod.string(),
+          mimeType: zod.string(),
+          byteSize: zod.number(),
+          checksumSha256: zod.string(),
+          version: zod.number(),
+          status: zod.enum(["active", "archived", "missing"]),
+          uploaderType: zod.string(),
+          uploaderLabel: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          previewAvailable: zod.boolean(),
+        }),
+      ),
+      documents: zod.array(
+        zod.object({
+          id: zod.number(),
+          assetId: zod.string(),
+          title: zod.string(),
+          required: zod.boolean(),
+          acknowledgementVersion: zod.number(),
+          acknowledged: zod.boolean(),
+          acknowledgedBy: zod.string().nullish(),
+          acknowledgedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      activity: zod.array(zod.record(zod.string(), zod.unknown())),
+    }),
+  );
+
+/**
+ * @summary Transactionally confirm a draft sponsor and create codes and checklist
+ */
+export const ConfirmSponsorParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const confirmSponsorResponseTwoSessionsItemTakeawaysMax = 3;
+
+export const ConfirmSponsorResponse = zod
+  .object({
+    id: zod.number(),
+    company: zod.string(),
+    packageLabel: zod.string(),
+    status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+    confirmationDate: zod.coerce.date().nullish(),
+    vipAllocation: zod.number(),
+    vipUsed: zod.number(),
+    staffAllocation: zod.number(),
+    staffUsed: zod.number(),
+    progressCompleted: zod.number(),
+    progressTotal: zod.number(),
+    needsAttention: zod.number(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      notes: zod.string().nullish(),
+      accessUrl: zod.string().url().nullish(),
+      welcomeEmailSentAt: zod.coerce.date().nullish(),
+      contacts: zod.array(
+        zod.object({
+          id: zod.number().optional(),
+          role: zod.enum(["primary", "onsite", "marketing", "other"]),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string().nullish(),
+          email: zod.string().email(),
+          phone: zod.string().nullish(),
+          isPrimary: zod.boolean(),
+        }),
+      ),
+      codes: zod.array(
+        zod.object({
+          kind: zod.enum(["vip", "public"]),
+          code: zod.string(),
+          active: zod.boolean(),
+          workforceUrl: zod.string().url(),
+          allocation: zod.number().nullish(),
+          used: zod.number(),
+          remaining: zod.number().nullish(),
+          maxPerBooking: zod.number().nullish(),
+          discountPercent: zod.number().nullish(),
+          redemptions: zod.array(
+            zod
+              .object({
+                bookingId: zod.number(),
+                firstName: zod.string(),
+                lastName: zod.string(),
+                company: zod.string(),
+                jobTitle: zod.string(),
+                registeredAt: zod.coerce.date(),
+              })
+              .describe(
+                "Privacy-redacted usage; contact and financial fields are intentionally absent.",
+              ),
+          ),
+        }),
+      ),
+      staff: zod.array(
+        zod.object({
+          bookingId: zod.number(),
+          attendeeId: zod.number(),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string(),
+          company: zod.string(),
+          workEmail: zod.string().email(),
+          phone: zod.string().nullish(),
+          dietaryAccessibility: zod.string().nullish(),
+          communitySocialAttending: zod.boolean().nullish(),
+          communitySocialDietary: zod.string().nullish(),
+          marketingConsent: zod.boolean(),
+          status: zod.string(),
+          registeredAt: zod.coerce.date(),
+        }),
+      ),
+      tasks: zod.array(
+        zod.object({
+          id: zod.number(),
+          taskKey: zod.string(),
+          label: zod.string(),
+          required: zod.boolean(),
+          dueAt: zod.coerce.date().nullish(),
+          status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+          completedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      sessions: zod.array(
+        zod.object({
+          id: zod.number(),
+          type: zod.enum(["quickfire", "keynote", "other"]),
+          entitlementLabel: zod.string(),
+          title: zod.string().nullish(),
+          description: zod.string().nullish(),
+          takeaways: zod.array(zod.string()).max(confirmSponsorResponseTwoSessionsItemTakeawaysMax),
+          status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+          feedback: zod.string().nullish(),
+          headshotRequired: zod.boolean(),
+          takeawaysRequired: zod.boolean(),
+          slidesRequired: zod.boolean(),
+          currentRevision: zod.number(),
+          exportedRevision: zod.number().nullish(),
+          exportOutdated: zod.boolean(),
+          presenters: zod.array(
+            zod.object({
+              id: zod.number().optional(),
+              name: zod.string(),
+              jobTitle: zod.string(),
+              company: zod.string(),
+              biography: zod.string().nullish(),
+              displayOrder: zod.number().optional(),
+            }),
+          ),
+          revisions: zod.array(
+            zod.object({
+              revision: zod.number(),
+              actor: zod.string(),
+              createdAt: zod.coerce.date(),
+            }),
+          ),
+        }),
+      ),
+      assets: zod.array(
+        zod.object({
+          id: zod.string(),
+          sponsorId: zod.number(),
+          sponsorCompany: zod.string().nullish(),
+          sessionId: zod.number().nullish(),
+          presenterId: zod.number().nullish(),
+          category: zod.enum([
+            "logo",
+            "headshot",
+            "slides",
+            "session_material",
+            "logistics",
+            "other",
+          ]),
+          originalName: zod.string(),
+          mimeType: zod.string(),
+          byteSize: zod.number(),
+          checksumSha256: zod.string(),
+          version: zod.number(),
+          status: zod.enum(["active", "archived", "missing"]),
+          uploaderType: zod.string(),
+          uploaderLabel: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          previewAvailable: zod.boolean(),
+        }),
+      ),
+      documents: zod.array(
+        zod.object({
+          id: zod.number(),
+          assetId: zod.string(),
+          title: zod.string(),
+          required: zod.boolean(),
+          acknowledgementVersion: zod.number(),
+          acknowledged: zod.boolean(),
+          acknowledgedBy: zod.string().nullish(),
+          acknowledgedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      activity: zod.array(zod.record(zod.string(), zod.unknown())),
+    }),
+  );
+
+/**
+ * @summary Revoke existing sponsor sessions and issue a new private link
+ */
+export const RotateSponsorAccessParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const RotateSponsorAccessResponse = zod.object({
+  accessUrl: zod.string().url(),
+});
+
+/**
+ * @summary Render the sponsor welcome email using current live sponsor data
+ */
+export const PreviewSponsorWelcomeParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const PreviewSponsorWelcomeResponse = zod.object({
+  to: zod.array(zod.string().email()),
+  subject: zod.string(),
+  html: zod.string(),
+  previewHash: zod.string(),
+});
+
+/**
+ * @summary Explicitly send the reviewed sponsor welcome email
+ */
+export const SendSponsorWelcomeParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const SendSponsorWelcomeBody = zod.object({
+  expectedPreviewHash: zod.string().describe("Hash returned by the preview endpoint"),
+});
+
+export const SendSponsorWelcomeResponse = zod.object({
+  sent: zod.boolean(),
+});
+
+/**
+ * @summary Update a sponsor deliverable tracker status
+ */
+export const UpdateAdminSponsorTaskParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  taskId: zod.coerce.number(),
+});
+
+export const UpdateAdminSponsorTaskBody = zod.object({
+  status: zod.unknown(),
+});
+
+export const UpdateAdminSponsorTaskResponse = zod.object({
+  id: zod.number(),
+  taskKey: zod.string(),
+  label: zod.string(),
+  required: zod.boolean(),
+  dueAt: zod.coerce.date().nullish(),
+  status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+  completedAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Add an explicit session entitlement to a sponsor workspace
+ */
+export const AddAdminSponsorSessionEntitlementParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const addAdminSponsorSessionEntitlementBodyEntitlementLabelMax = 250;
+
+export const addAdminSponsorSessionEntitlementBodyHeadshotRequiredDefault = true;
+export const addAdminSponsorSessionEntitlementBodyTakeawaysRequiredDefault = true;
+export const addAdminSponsorSessionEntitlementBodySlidesRequiredDefault = false;
+
+export const AddAdminSponsorSessionEntitlementBody = zod.object({
+  type: zod.enum(["quickfire", "keynote", "other"]),
+  entitlementLabel: zod
+    .string()
+    .min(1)
+    .max(addAdminSponsorSessionEntitlementBodyEntitlementLabelMax),
+  headshotRequired: zod
+    .boolean()
+    .default(addAdminSponsorSessionEntitlementBodyHeadshotRequiredDefault),
+  takeawaysRequired: zod
+    .boolean()
+    .default(addAdminSponsorSessionEntitlementBodyTakeawaysRequiredDefault),
+  slidesRequired: zod.boolean().default(addAdminSponsorSessionEntitlementBodySlidesRequiredDefault),
+});
+
+/**
+ * @summary Update a sponsor session entitlement and its required deliverables
+ */
+export const UpdateAdminSponsorSessionEntitlementParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  sessionId: zod.coerce.number(),
+});
+
+export const updateAdminSponsorSessionEntitlementBodyEntitlementLabelMax = 250;
+
+export const updateAdminSponsorSessionEntitlementBodyHeadshotRequiredDefault = true;
+export const updateAdminSponsorSessionEntitlementBodyTakeawaysRequiredDefault = true;
+export const updateAdminSponsorSessionEntitlementBodySlidesRequiredDefault = false;
+
+export const UpdateAdminSponsorSessionEntitlementBody = zod.object({
+  type: zod.enum(["quickfire", "keynote", "other"]),
+  entitlementLabel: zod
+    .string()
+    .min(1)
+    .max(updateAdminSponsorSessionEntitlementBodyEntitlementLabelMax),
+  headshotRequired: zod
+    .boolean()
+    .default(updateAdminSponsorSessionEntitlementBodyHeadshotRequiredDefault),
+  takeawaysRequired: zod
+    .boolean()
+    .default(updateAdminSponsorSessionEntitlementBodyTakeawaysRequiredDefault),
+  slidesRequired: zod
+    .boolean()
+    .default(updateAdminSponsorSessionEntitlementBodySlidesRequiredDefault),
+});
+
+export const updateAdminSponsorSessionEntitlementResponseTwoSessionsItemTakeawaysMax = 3;
+
+export const UpdateAdminSponsorSessionEntitlementResponse = zod
+  .object({
+    id: zod.number(),
+    company: zod.string(),
+    packageLabel: zod.string(),
+    status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+    confirmationDate: zod.coerce.date().nullish(),
+    vipAllocation: zod.number(),
+    vipUsed: zod.number(),
+    staffAllocation: zod.number(),
+    staffUsed: zod.number(),
+    progressCompleted: zod.number(),
+    progressTotal: zod.number(),
+    needsAttention: zod.number(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      notes: zod.string().nullish(),
+      accessUrl: zod.string().url().nullish(),
+      welcomeEmailSentAt: zod.coerce.date().nullish(),
+      contacts: zod.array(
+        zod.object({
+          id: zod.number().optional(),
+          role: zod.enum(["primary", "onsite", "marketing", "other"]),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string().nullish(),
+          email: zod.string().email(),
+          phone: zod.string().nullish(),
+          isPrimary: zod.boolean(),
+        }),
+      ),
+      codes: zod.array(
+        zod.object({
+          kind: zod.enum(["vip", "public"]),
+          code: zod.string(),
+          active: zod.boolean(),
+          workforceUrl: zod.string().url(),
+          allocation: zod.number().nullish(),
+          used: zod.number(),
+          remaining: zod.number().nullish(),
+          maxPerBooking: zod.number().nullish(),
+          discountPercent: zod.number().nullish(),
+          redemptions: zod.array(
+            zod
+              .object({
+                bookingId: zod.number(),
+                firstName: zod.string(),
+                lastName: zod.string(),
+                company: zod.string(),
+                jobTitle: zod.string(),
+                registeredAt: zod.coerce.date(),
+              })
+              .describe(
+                "Privacy-redacted usage; contact and financial fields are intentionally absent.",
+              ),
+          ),
+        }),
+      ),
+      staff: zod.array(
+        zod.object({
+          bookingId: zod.number(),
+          attendeeId: zod.number(),
+          firstName: zod.string(),
+          lastName: zod.string(),
+          jobTitle: zod.string(),
+          company: zod.string(),
+          workEmail: zod.string().email(),
+          phone: zod.string().nullish(),
+          dietaryAccessibility: zod.string().nullish(),
+          communitySocialAttending: zod.boolean().nullish(),
+          communitySocialDietary: zod.string().nullish(),
+          marketingConsent: zod.boolean(),
+          status: zod.string(),
+          registeredAt: zod.coerce.date(),
+        }),
+      ),
+      tasks: zod.array(
+        zod.object({
+          id: zod.number(),
+          taskKey: zod.string(),
+          label: zod.string(),
+          required: zod.boolean(),
+          dueAt: zod.coerce.date().nullish(),
+          status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+          completedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      sessions: zod.array(
+        zod.object({
+          id: zod.number(),
+          type: zod.enum(["quickfire", "keynote", "other"]),
+          entitlementLabel: zod.string(),
+          title: zod.string().nullish(),
+          description: zod.string().nullish(),
+          takeaways: zod
+            .array(zod.string())
+            .max(updateAdminSponsorSessionEntitlementResponseTwoSessionsItemTakeawaysMax),
+          status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+          feedback: zod.string().nullish(),
+          headshotRequired: zod.boolean(),
+          takeawaysRequired: zod.boolean(),
+          slidesRequired: zod.boolean(),
+          currentRevision: zod.number(),
+          exportedRevision: zod.number().nullish(),
+          exportOutdated: zod.boolean(),
+          presenters: zod.array(
+            zod.object({
+              id: zod.number().optional(),
+              name: zod.string(),
+              jobTitle: zod.string(),
+              company: zod.string(),
+              biography: zod.string().nullish(),
+              displayOrder: zod.number().optional(),
+            }),
+          ),
+          revisions: zod.array(
+            zod.object({
+              revision: zod.number(),
+              actor: zod.string(),
+              createdAt: zod.coerce.date(),
+            }),
+          ),
+        }),
+      ),
+      assets: zod.array(
+        zod.object({
+          id: zod.string(),
+          sponsorId: zod.number(),
+          sponsorCompany: zod.string().nullish(),
+          sessionId: zod.number().nullish(),
+          presenterId: zod.number().nullish(),
+          category: zod.enum([
+            "logo",
+            "headshot",
+            "slides",
+            "session_material",
+            "logistics",
+            "other",
+          ]),
+          originalName: zod.string(),
+          mimeType: zod.string(),
+          byteSize: zod.number(),
+          checksumSha256: zod.string(),
+          version: zod.number(),
+          status: zod.enum(["active", "archived", "missing"]),
+          uploaderType: zod.string(),
+          uploaderLabel: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          previewAvailable: zod.boolean(),
+        }),
+      ),
+      documents: zod.array(
+        zod.object({
+          id: zod.number(),
+          assetId: zod.string(),
+          title: zod.string(),
+          required: zod.boolean(),
+          acknowledgementVersion: zod.number(),
+          acknowledged: zod.boolean(),
+          acknowledgedBy: zod.string().nullish(),
+          acknowledgedAt: zod.coerce.date().nullish(),
+        }),
+      ),
+      activity: zod.array(zod.record(zod.string(), zod.unknown())),
+    }),
+  );
+
+/**
+ * @summary Approve a submission or request changes with feedback
+ */
+export const ReviewSponsorSessionParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  sessionId: zod.coerce.number(),
+});
+
+export const ReviewSponsorSessionBody = zod.object({
+  status: zod.enum(["changes_requested", "approved"]),
+  feedback: zod.string().nullish(),
+});
+
+export const reviewSponsorSessionResponseTakeawaysMax = 3;
+
+export const ReviewSponsorSessionResponse = zod.object({
+  id: zod.number(),
+  type: zod.enum(["quickfire", "keynote", "other"]),
+  entitlementLabel: zod.string(),
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  takeaways: zod.array(zod.string()).max(reviewSponsorSessionResponseTakeawaysMax),
+  status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+  feedback: zod.string().nullish(),
+  headshotRequired: zod.boolean(),
+  takeawaysRequired: zod.boolean(),
+  slidesRequired: zod.boolean(),
+  currentRevision: zod.number(),
+  exportedRevision: zod.number().nullish(),
+  exportOutdated: zod.boolean(),
+  presenters: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      biography: zod.string().nullish(),
+      displayOrder: zod.number().optional(),
+    }),
+  ),
+  revisions: zod.array(
+    zod.object({
+      revision: zod.number(),
+      actor: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Export approved sponsor sessions and mark their current revisions exported
+ */
+export const ExportSponsorSessionsParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+/**
+ * @summary List all active and archived versions for a sponsor
+ */
+export const ListSponsorAssetsParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const ListSponsorAssetsQueryParams = zod.object({
+  category: zod
+    .enum(["logo", "headshot", "slides", "session_material", "logistics", "other"])
+    .optional(),
+  status: zod.enum(["active", "archived", "missing"]).optional(),
+});
+
+export const ListSponsorAssetsResponse = zod.object({
+  assets: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string().nullish(),
+      sessionId: zod.number().nullish(),
+      presenterId: zod.number().nullish(),
+      category: zod.enum(["logo", "headshot", "slides", "session_material", "logistics", "other"]),
+      originalName: zod.string(),
+      mimeType: zod.string(),
+      byteSize: zod.number(),
+      checksumSha256: zod.string(),
+      version: zod.number(),
+      status: zod.enum(["active", "archived", "missing"]),
+      uploaderType: zod.string(),
+      uploaderLabel: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      previewAvailable: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Upload a validated sponsor file to App Storage
+ */
+export const AdminUploadSponsorAssetParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const AdminUploadSponsorAssetBody = zod.object({
+  file: zod.instanceof(File),
+  category: zod.enum(["logo", "headshot", "slides", "session_material", "logistics", "other"]),
+  sessionId: zod.number().nullish(),
+  presenterId: zod.number().nullish(),
+});
+
+/**
+ * @summary Archive or restore an asset version
+ */
+export const UpdateSponsorAssetStatusParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  assetId: zod.coerce.string(),
+});
+
+export const UpdateSponsorAssetStatusBody = zod.object({
+  status: zod.enum(["active", "archived"]),
+});
+
+export const UpdateSponsorAssetStatusResponse = zod.object({
+  id: zod.string(),
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string().nullish(),
+  sessionId: zod.number().nullish(),
+  presenterId: zod.number().nullish(),
+  category: zod.enum(["logo", "headshot", "slides", "session_material", "logistics", "other"]),
+  originalName: zod.string(),
+  mimeType: zod.string(),
+  byteSize: zod.number(),
+  checksumSha256: zod.string(),
+  version: zod.number(),
+  status: zod.enum(["active", "archived", "missing"]),
+  uploaderType: zod.string(),
+  uploaderLabel: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  previewAvailable: zod.boolean(),
+});
+
+/**
+ * @summary Upload a new version and archive the previous version
+ */
+export const ReplaceSponsorAssetParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  assetId: zod.coerce.string(),
+});
+
+export const ReplaceSponsorAssetBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+/**
+ * @summary Authenticated individual file download or safe raster preview
+ */
+export const AdminDownloadSponsorAssetParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  assetId: zod.coerce.string(),
+});
+
+export const adminDownloadSponsorAssetQueryPreviewDefault = false;
+
+export const AdminDownloadSponsorAssetQueryParams = zod.object({
+  preview: zod.coerce.boolean().default(adminDownloadSponsorAssetQueryPreviewDefault),
+});
+
+/**
+ * @summary Stream selected assets as a ZIP with manifest.csv
+ */
+export const DownloadSponsorAssetSelectionParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+export const DownloadSponsorAssetSelectionBody = zod.object({
+  assetIds: zod.array(zod.string()).min(1),
+});
+
+/**
+ * @summary Stream the complete active sponsor folder with manifest.csv
+ */
+export const DownloadCompleteSponsorFolderParams = zod.object({
+  sponsorId: zod.coerce.number(),
+});
+
+/**
+ * @summary Search and filter the all-sponsor asset library
+ */
+export const ListAdminSponsorAssetLibraryQueryParams = zod.object({
+  sponsorId: zod.coerce.number().optional(),
+  category: zod
+    .enum(["logo", "headshot", "slides", "session_material", "logistics", "other"])
+    .optional(),
+  status: zod.enum(["active", "archived", "missing"]).optional(),
+  search: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const ListAdminSponsorAssetLibraryResponse = zod.object({
+  assets: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string().nullish(),
+      sessionId: zod.number().nullish(),
+      presenterId: zod.number().nullish(),
+      category: zod.enum(["logo", "headshot", "slides", "session_material", "logistics", "other"]),
+      originalName: zod.string(),
+      mimeType: zod.string(),
+      byteSize: zod.number(),
+      checksumSha256: zod.string(),
+      version: zod.number(),
+      status: zod.enum(["active", "archived", "missing"]),
+      uploaderType: zod.string(),
+      uploaderLabel: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      previewAvailable: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Build safe-size ZIP batches for a complete offline backup
+ */
+export const planAllSponsorBackupBodyMaxBytesPerZipDefault = 524288000;
+export const planAllSponsorBackupBodyMaxBytesPerZipMin = 10485760;
+
+export const PlanAllSponsorBackupBody = zod.object({
+  maxBytesPerZip: zod
+    .number()
+    .min(planAllSponsorBackupBodyMaxBytesPerZipMin)
+    .default(planAllSponsorBackupBodyMaxBytesPerZipDefault),
+});
+
+export const PlanAllSponsorBackupResponse = zod.object({
+  batches: zod.array(
+    zod.object({
+      sponsorIds: zod.array(zod.number()),
+      byteSize: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Stream one planned all-sponsor backup batch without temporary files
+ */
+
+export const DownloadAllSponsorBackupBatchBody = zod.object({
+  assetIds: zod.array(zod.string()).min(1),
+});
+
+/**
+ * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
+ */
+export const ExchangeSponsorAccessTokenParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+/**
+ * @summary Get the private privacy-redacted sponsor workspace
+ */
+export const getSponsorWorkspaceResponseSessionsItemTakeawaysMax = 3;
+
+export const GetSponsorWorkspaceResponse = zod
+  .object({
+    sponsor: zod.object({
+      id: zod.number(),
+      company: zod.string(),
+      packageLabel: zod.string(),
+      status: zod.enum(["draft", "confirmed", "paused", "completed", "cancelled"]),
+      confirmationDate: zod.coerce.date().nullish(),
+      vipAllocation: zod.number(),
+      vipUsed: zod.number(),
+      staffAllocation: zod.number(),
+      staffUsed: zod.number(),
+      progressCompleted: zod.number(),
+      progressTotal: zod.number(),
+      needsAttention: zod.number(),
+      updatedAt: zod.coerce.date(),
+    }),
+    contacts: zod.array(
+      zod.object({
+        id: zod.number().optional(),
+        role: zod.enum(["primary", "onsite", "marketing", "other"]),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        jobTitle: zod.string().nullish(),
+        email: zod.string().email(),
+        phone: zod.string().nullish(),
+        isPrimary: zod.boolean(),
+      }),
+    ),
+    codes: zod.array(
+      zod.object({
+        kind: zod.enum(["vip", "public"]),
+        code: zod.string(),
+        active: zod.boolean(),
+        workforceUrl: zod.string().url(),
+        allocation: zod.number().nullish(),
+        used: zod.number(),
+        remaining: zod.number().nullish(),
+        maxPerBooking: zod.number().nullish(),
+        discountPercent: zod.number().nullish(),
+        redemptions: zod.array(
+          zod
+            .object({
+              bookingId: zod.number(),
+              firstName: zod.string(),
+              lastName: zod.string(),
+              company: zod.string(),
+              jobTitle: zod.string(),
+              registeredAt: zod.coerce.date(),
+            })
+            .describe(
+              "Privacy-redacted usage; contact and financial fields are intentionally absent.",
+            ),
+        ),
+      }),
+    ),
+    staff: zod.array(
+      zod.object({
+        bookingId: zod.number(),
+        attendeeId: zod.number(),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        jobTitle: zod.string(),
+        company: zod.string(),
+        workEmail: zod.string().email(),
+        phone: zod.string().nullish(),
+        dietaryAccessibility: zod.string().nullish(),
+        communitySocialAttending: zod.boolean().nullish(),
+        communitySocialDietary: zod.string().nullish(),
+        marketingConsent: zod.boolean(),
+        status: zod.string(),
+        registeredAt: zod.coerce.date(),
+      }),
+    ),
+    tasks: zod.array(
+      zod.object({
+        id: zod.number(),
+        taskKey: zod.string(),
+        label: zod.string(),
+        required: zod.boolean(),
+        dueAt: zod.coerce.date().nullish(),
+        status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+        completedAt: zod.coerce.date().nullish(),
+      }),
+    ),
+    sessions: zod.array(
+      zod.object({
+        id: zod.number(),
+        type: zod.enum(["quickfire", "keynote", "other"]),
+        entitlementLabel: zod.string(),
+        title: zod.string().nullish(),
+        description: zod.string().nullish(),
+        takeaways: zod.array(zod.string()).max(getSponsorWorkspaceResponseSessionsItemTakeawaysMax),
+        status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+        feedback: zod.string().nullish(),
+        headshotRequired: zod.boolean(),
+        takeawaysRequired: zod.boolean(),
+        slidesRequired: zod.boolean(),
+        currentRevision: zod.number(),
+        exportedRevision: zod.number().nullish(),
+        exportOutdated: zod.boolean(),
+        presenters: zod.array(
+          zod.object({
+            id: zod.number().optional(),
+            name: zod.string(),
+            jobTitle: zod.string(),
+            company: zod.string(),
+            biography: zod.string().nullish(),
+            displayOrder: zod.number().optional(),
+          }),
+        ),
+        revisions: zod.array(
+          zod.object({
+            revision: zod.number(),
+            actor: zod.string(),
+            createdAt: zod.coerce.date(),
+          }),
+        ),
+      }),
+    ),
+    assets: zod.array(
+      zod.object({
+        id: zod.string(),
+        sponsorId: zod.number(),
+        sponsorCompany: zod.string().nullish(),
+        sessionId: zod.number().nullish(),
+        presenterId: zod.number().nullish(),
+        category: zod.enum([
+          "logo",
+          "headshot",
+          "slides",
+          "session_material",
+          "logistics",
+          "other",
+        ]),
+        originalName: zod.string(),
+        mimeType: zod.string(),
+        byteSize: zod.number(),
+        checksumSha256: zod.string(),
+        version: zod.number(),
+        status: zod.enum(["active", "archived", "missing"]),
+        uploaderType: zod.string(),
+        uploaderLabel: zod.string().nullish(),
+        createdAt: zod.coerce.date(),
+        previewAvailable: zod.boolean(),
+      }),
+    ),
+    documents: zod.array(
+      zod.object({
+        id: zod.number(),
+        assetId: zod.string(),
+        title: zod.string(),
+        required: zod.boolean(),
+        acknowledgementVersion: zod.number(),
+        acknowledged: zod.boolean(),
+        acknowledgedBy: zod.string().nullish(),
+        acknowledgedAt: zod.coerce.date().nullish(),
+      }),
+    ),
+    invitationCopy: zod.object({
+      vip: zod.string(),
+      public: zod.string(),
+    }),
+  })
+  .describe(
+    "Sponsor-facing projection. Guest emails, phones, payments and revenue are never included.",
+  );
+
+/**
+ * @summary Explicitly confirm one zero-value Sponsor staff registration
+ */
+export const registerSponsorStaffBodyFirstNameMax = 100;
+
+export const registerSponsorStaffBodyLastNameMax = 100;
+
+export const registerSponsorStaffBodyJobTitleMax = 200;
+
+export const registerSponsorStaffBodyCompanyMax = 200;
+
+export const registerSponsorStaffBodyPhoneMax = 100;
+
+export const registerSponsorStaffBodyDietaryAccessibilityMax = 2000;
+
+export const registerSponsorStaffBodyCommunitySocialDietaryMax = 2000;
+
+export const registerSponsorStaffBodyMarketingConsentDefault = false;
+
+export const RegisterSponsorStaffBody = zod.object({
+  firstName: zod.string().min(1).max(registerSponsorStaffBodyFirstNameMax),
+  lastName: zod.string().min(1).max(registerSponsorStaffBodyLastNameMax),
+  jobTitle: zod.string().min(1).max(registerSponsorStaffBodyJobTitleMax),
+  company: zod.string().min(1).max(registerSponsorStaffBodyCompanyMax),
+  workEmail: zod.string().email(),
+  phone: zod.string().max(registerSponsorStaffBodyPhoneMax).nullish(),
+  dietaryAccessibility: zod.string().max(registerSponsorStaffBodyDietaryAccessibilityMax).nullish(),
+  communitySocialAttending: zod.boolean().nullish(),
+  communitySocialDietary: zod
+    .string()
+    .max(registerSponsorStaffBodyCommunitySocialDietaryMax)
+    .nullish(),
+  marketingConsent: zod.boolean().default(registerSponsorStaffBodyMarketingConsentDefault),
+});
+
+/**
+ * @summary Change or replace a sponsor staff attendee
+ */
+export const UpdateSponsorStaffParams = zod.object({
+  bookingId: zod.coerce.number(),
+});
+
+export const updateSponsorStaffBodyFirstNameMax = 100;
+
+export const updateSponsorStaffBodyLastNameMax = 100;
+
+export const updateSponsorStaffBodyJobTitleMax = 200;
+
+export const updateSponsorStaffBodyCompanyMax = 200;
+
+export const updateSponsorStaffBodyPhoneMax = 100;
+
+export const updateSponsorStaffBodyDietaryAccessibilityMax = 2000;
+
+export const updateSponsorStaffBodyCommunitySocialDietaryMax = 2000;
+
+export const updateSponsorStaffBodyMarketingConsentDefault = false;
+
+export const UpdateSponsorStaffBody = zod.object({
+  firstName: zod.string().min(1).max(updateSponsorStaffBodyFirstNameMax),
+  lastName: zod.string().min(1).max(updateSponsorStaffBodyLastNameMax),
+  jobTitle: zod.string().min(1).max(updateSponsorStaffBodyJobTitleMax),
+  company: zod.string().min(1).max(updateSponsorStaffBodyCompanyMax),
+  workEmail: zod.string().email(),
+  phone: zod.string().max(updateSponsorStaffBodyPhoneMax).nullish(),
+  dietaryAccessibility: zod.string().max(updateSponsorStaffBodyDietaryAccessibilityMax).nullish(),
+  communitySocialAttending: zod.boolean().nullish(),
+  communitySocialDietary: zod
+    .string()
+    .max(updateSponsorStaffBodyCommunitySocialDietaryMax)
+    .nullish(),
+  marketingConsent: zod.boolean().default(updateSponsorStaffBodyMarketingConsentDefault),
+});
+
+export const UpdateSponsorStaffResponse = zod.object({
+  bookingId: zod.number(),
+  attendeeId: zod.number(),
+  firstName: zod.string(),
+  lastName: zod.string(),
+  jobTitle: zod.string(),
+  company: zod.string(),
+  workEmail: zod.string().email(),
+  phone: zod.string().nullish(),
+  dietaryAccessibility: zod.string().nullish(),
+  communitySocialAttending: zod.boolean().nullish(),
+  communitySocialDietary: zod.string().nullish(),
+  marketingConsent: zod.boolean(),
+  status: zod.string(),
+  registeredAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Cancel sponsor staff attendance and restore the staff allocation
+ */
+export const CancelSponsorStaffParams = zod.object({
+  bookingId: zod.coerce.number(),
+});
+
+/**
+ * @summary Request more VIP or staff places and immediately notify the internal team
+ */
+export const requestMoreSponsorPassesBodyRequestedVipMin = 0;
+
+export const requestMoreSponsorPassesBodyRequestedStaffMin = 0;
+
+export const requestMoreSponsorPassesBodyMessageMax = 2000;
+
+export const RequestMoreSponsorPassesBody = zod.object({
+  requestedVip: zod.number().min(requestMoreSponsorPassesBodyRequestedVipMin),
+  requestedStaff: zod.number().min(requestMoreSponsorPassesBodyRequestedStaffMin),
+  message: zod.string().max(requestMoreSponsorPassesBodyMessageMax).optional(),
+});
+
+/**
+ * @summary Save a sponsor session draft; approved edits return it to submitted
+ */
+export const UpdateSponsorSessionParams = zod.object({
+  sessionId: zod.coerce.number(),
+});
+
+export const updateSponsorSessionBodyTitleMax = 250;
+
+export const updateSponsorSessionBodyDescriptionMax = 1500;
+
+export const updateSponsorSessionBodyTakeawaysItemMax = 300;
+
+export const updateSponsorSessionBodyTakeawaysMax = 3;
+
+export const UpdateSponsorSessionBody = zod.object({
+  title: zod.string().max(updateSponsorSessionBodyTitleMax).optional(),
+  description: zod.string().max(updateSponsorSessionBodyDescriptionMax).optional(),
+  takeaways: zod
+    .array(zod.string().max(updateSponsorSessionBodyTakeawaysItemMax))
+    .max(updateSponsorSessionBodyTakeawaysMax)
+    .optional(),
+  presenters: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        name: zod.string(),
+        jobTitle: zod.string(),
+        company: zod.string(),
+        biography: zod.string().nullish(),
+        displayOrder: zod.number().optional(),
+      }),
+    )
+    .min(1)
+    .optional(),
+});
+
+export const updateSponsorSessionResponseTakeawaysMax = 3;
+
+export const UpdateSponsorSessionResponse = zod.object({
+  id: zod.number(),
+  type: zod.enum(["quickfire", "keynote", "other"]),
+  entitlementLabel: zod.string(),
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  takeaways: zod.array(zod.string()).max(updateSponsorSessionResponseTakeawaysMax),
+  status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+  feedback: zod.string().nullish(),
+  headshotRequired: zod.boolean(),
+  takeawaysRequired: zod.boolean(),
+  slidesRequired: zod.boolean(),
+  currentRevision: zod.number(),
+  exportedRevision: zod.number().nullish(),
+  exportOutdated: zod.boolean(),
+  presenters: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      biography: zod.string().nullish(),
+      displayOrder: zod.number().optional(),
+    }),
+  ),
+  revisions: zod.array(
+    zod.object({
+      revision: zod.number(),
+      actor: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Validate and submit a sponsor session for review
+ */
+export const SubmitSponsorSessionParams = zod.object({
+  sessionId: zod.coerce.number(),
+});
+
+export const submitSponsorSessionResponseTakeawaysMax = 3;
+
+export const SubmitSponsorSessionResponse = zod.object({
+  id: zod.number(),
+  type: zod.enum(["quickfire", "keynote", "other"]),
+  entitlementLabel: zod.string(),
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  takeaways: zod.array(zod.string()).max(submitSponsorSessionResponseTakeawaysMax),
+  status: zod.enum(["draft", "submitted", "changes_requested", "approved", "exported"]),
+  feedback: zod.string().nullish(),
+  headshotRequired: zod.boolean(),
+  takeawaysRequired: zod.boolean(),
+  slidesRequired: zod.boolean(),
+  currentRevision: zod.number(),
+  exportedRevision: zod.number().nullish(),
+  exportOutdated: zod.boolean(),
+  presenters: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      biography: zod.string().nullish(),
+      displayOrder: zod.number().optional(),
+    }),
+  ),
+  revisions: zod.array(
+    zod.object({
+      revision: zod.number(),
+      actor: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Upload a validated sponsor deliverable to App Storage
+ */
+export const UploadSponsorAssetBody = zod.object({
+  file: zod.instanceof(File),
+  category: zod.enum(["logo", "headshot", "slides", "session_material", "logistics", "other"]),
+  sessionId: zod.number().nullish(),
+  presenterId: zod.number().nullish(),
+});
+
+/**
+ * @summary Upload a new version and archive the previous sponsor file
+ */
+export const ReplaceSponsorWorkspaceAssetParams = zod.object({
+  assetId: zod.coerce.string(),
+});
+
+export const ReplaceSponsorWorkspaceAssetBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+/**
+ * @summary Download an authenticated sponsor file
+ */
+export const DownloadSponsorWorkspaceAssetParams = zod.object({
+  assetId: zod.coerce.string(),
+});
+
+/**
+ * @summary Acknowledge the current version of a required logistics document
+ */
+export const AcknowledgeSponsorDocumentParams = zod.object({
+  documentId: zod.coerce.number(),
+});
+
+export const acknowledgeSponsorDocumentBodyAcknowledgedByMin = 2;
+export const acknowledgeSponsorDocumentBodyAcknowledgedByMax = 200;
+
+export const AcknowledgeSponsorDocumentBody = zod.object({
+  acknowledgedBy: zod
+    .string()
+    .min(acknowledgeSponsorDocumentBodyAcknowledgedByMin)
+    .max(acknowledgeSponsorDocumentBodyAcknowledgedByMax),
 });

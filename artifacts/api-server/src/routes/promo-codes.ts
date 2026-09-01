@@ -2,7 +2,7 @@
 import { eq, and, lte, gte, or, isNull, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { promoCodesTable, bookingsTable, attendeesTable } from "@workspace/db";
-import { PASS_PRICES } from "../lib/pricing";
+import { calculatePricing } from "../lib/pricing";
 
 const router: IRouter = Router();
 
@@ -67,6 +67,13 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
     return;
   }
 
+  if (promo.maxQuantityPerBooking !== null && qty > promo.maxQuantityPerBooking) {
+    res.status(400).json({
+      error: `This code can be used for a maximum of ${promo.maxQuantityPerBooking} ${promo.maxQuantityPerBooking === 1 ? "pass" : "passes"} per booking`,
+    });
+    return;
+  }
+
   if (promo.oncePerCustomer) {
     const email = typeof leadEmail === "string" ? leadEmail.trim().toLowerCase() : "";
     if (email) {
@@ -80,29 +87,20 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
     }
   }
 
-  const passInfo = PASS_PRICES[passType as string];
-  if (!passInfo) {
+  let pricing;
+  try {
+    pricing = await calculatePricing(passType as string, qty, promo.code);
+  } catch {
     res.status(400).json({ error: "Invalid pass type" });
     return;
   }
-
-  const baseSubtotal = passInfo.price * qty;
-  let discountAmount: number;
+  let discountAmount = pricing.promoDiscountAmount;
   let remainingSeats: number | null = null;
 
   if (promo.discountType === "percentage") {
-    discountAmount = parseFloat(
-      ((baseSubtotal * parseFloat(promo.discountValue.toString())) / 100).toFixed(2),
-    );
-    if (promo.maxDiscountAmount !== null) {
-      const cap = parseFloat(promo.maxDiscountAmount.toString());
-      if (discountAmount > cap) discountAmount = cap;
-    }
+    // calculatePricing applies percentage codes after the group discount.
   } else if (promo.discountType === "per_ticket") {
-    discountAmount = Math.min(
-      parseFloat((parseFloat(promo.discountValue.toString()) * qty).toFixed(2)),
-      baseSubtotal,
-    );
+    // Per-ticket calculation is also centralised in calculatePricing.
   } else if (promo.discountType === "complimentary") {
     // For comp codes we surface remainingSeats but allow apply-with-shortfall
     // so the UI can prompt the user to reduce or remove the code. Pricing
@@ -116,9 +114,11 @@ export async function validatePromoCodeHandler(req: Request, res: Response): Pro
         return;
       }
     }
-    discountAmount = baseSubtotal;
-  } else {
-    discountAmount = Math.min(parseFloat(promo.discountValue.toString()), baseSubtotal);
+    // Validation reports the value of the complimentary benefit even when
+    // the requested quantity exceeds the remaining allocation. The checkout
+    // uses remainingSeats to ask the buyer to reduce the quantity; the actual
+    // pricing path still refuses to zero an over-cap basket.
+    discountAmount = pricing.baseSubtotal - pricing.groupDiscountAmount;
   }
 
   res.json({

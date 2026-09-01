@@ -185,6 +185,17 @@ export async function calculatePricing(
       );
 
     if (promo) {
+      if (promo.applicablePassTypes && !promo.applicablePassTypes.includes(passType)) {
+        throw new Error("Promo code is not valid for this pass type");
+      }
+      if (promo.minQuantity !== null && quantity < promo.minQuantity) {
+        throw new Error(`Promo code requires at least ${promo.minQuantity} passes`);
+      }
+      if (promo.maxQuantityPerBooking !== null && quantity > promo.maxQuantityPerBooking) {
+        throw new Error(
+          `Promo code allows no more than ${promo.maxQuantityPerBooking} passes per booking`,
+        );
+      }
       promoDiscountType = promo.discountType;
       const afterGroupP = baseSubtotalP - groupDiscountP;
       if (promo.discountType === "percentage") {

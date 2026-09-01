@@ -14,6 +14,7 @@ import {
   passConfigTable,
   activityLogTable,
   emailLogsTable,
+  sponsorsTable,
 } from "@workspace/db";
 import {
   adminAuth,
@@ -45,6 +46,7 @@ import {
   createSessionSchedulerWorkbook,
   getSessionSchedulerExportFilename,
 } from "../lib/session-scheduler-export";
+import { releaseSponsorRedemption, restoreSponsorRedemption } from "../lib/sponsor-redemptions";
 
 const router: IRouter = Router();
 const INVOICE_PAYMENT_TERMS_DAYS = 14;
@@ -190,29 +192,31 @@ router.get("/admin/stats", adminAuth, async (_req, res): Promise<void> => {
   const allBookings = await db.select().from(bookingsTable);
 
   const completed = allBookings.filter((b) => b.status === "paid" || b.status === "invoiced");
+  const sponsorStaff = completed.filter((b) => b.registrationSource === "sponsor_staff");
+  const commercialCompleted = completed.filter((b) => b.registrationSource !== "sponsor_staff");
   const partial = allBookings.filter((b) => b.status === "partial");
 
-  const totalRevenue = completed.reduce(
+  const totalRevenue = commercialCompleted.reduce(
     (sum, b) => sum + parseFloat(b.totalAmount?.toString() || "0"),
     0,
   );
-  const totalVat = completed.reduce(
+  const totalVat = commercialCompleted.reduce(
     (sum, b) => sum + parseFloat(b.vatAmount?.toString() || "0"),
     0,
   );
 
   const passCounts = {
-    single: completed
+    single: commercialCompleted
       .filter((b) => b.passType === "single")
       .reduce((sum, booking) => sum + booking.quantity, 0),
-    business: completed
+    business: commercialCompleted
       .filter((b) => b.passType === "business")
       .reduce((sum, booking) => sum + booking.quantity, 0),
   };
 
   const paymentMethodCounts = {
-    card: completed.filter((b) => b.paymentMethod === "card").length,
-    invoice: completed.filter((b) => b.paymentMethod === "invoice").length,
+    card: commercialCompleted.filter((b) => b.paymentMethod === "card").length,
+    invoice: commercialCompleted.filter((b) => b.paymentMethod === "invoice").length,
   };
 
   const allAttendees = await db.select().from(attendeesTable);
@@ -243,7 +247,8 @@ router.get("/admin/stats", adminAuth, async (_req, res): Promise<void> => {
 
   res.json({
     totalRegistrations: allBookings.length,
-    completedRegistrations: completed.length,
+    completedRegistrations: commercialCompleted.length,
+    sponsorStaffCount: sponsorStaff.reduce((sum, booking) => sum + booking.quantity, 0),
     partialRegistrations: partial.length,
     totalRevenue: parseFloat(totalRevenue.toFixed(2)),
     totalVat: parseFloat(totalVat.toFixed(2)),
@@ -404,6 +409,7 @@ router.post("/admin/registrations", adminAuth, async (req, res): Promise<void> =
         promoDiscountAmount: null,
         paymentMethod: "invoice",
         manualEntry: true,
+        registrationSource: "manual",
         currentStep: 4,
         billingName: `${cleanFirstName} ${cleanLastName}`,
         billingCompany: cleanCompany,
@@ -710,6 +716,7 @@ router.post("/admin/registrations/:id/redeliver", adminAuth, async (req, res): P
     res.status(404).json({ error: "Booking not found" });
     return;
   }
+
   if (existing.status !== "paid" && existing.status !== "invoiced") {
     res.status(400).json({
       error: "Only confirmed (paid/invoiced) bookings can be redelivered",
@@ -744,6 +751,13 @@ router.post(
 
     if (!booking) {
       res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.registrationSource === "sponsor_staff") {
+      res.status(409).json({
+        error:
+          "Sponsor staff do not receive a receipt email. Use Redeliver failed delivery instead.",
+      });
       return;
     }
     if (booking.status !== "paid" && booking.status !== "invoiced") {
@@ -813,6 +827,12 @@ router.post(
 
     if (!booking) {
       res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.registrationSource === "sponsor_staff") {
+      res.status(409).json({
+        error: "Use Redeliver failed delivery for the sponsor staff welcome email.",
+      });
       return;
     }
     if (booking.status !== "paid" && booking.status !== "invoiced") {
@@ -996,6 +1016,9 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
     return;
   }
 
+  const terminalStatuses = new Set(["cancelled", "refunded", "transferred"]);
+  const activeStatuses = new Set(["paid", "invoiced"]);
+
   let finalStatus = status;
   let stripeAction: AdminStatusStripeAction = "skipped";
   const statusUpdateOverrides: BookingUpdate = {};
@@ -1101,15 +1124,92 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
     }
   }
 
-  const [updated] = await db
-    .update(bookingsTable)
-    .set({
-      status: finalStatus as typeof existing.status,
-      updatedAt: new Date(),
-      ...statusUpdateOverrides,
-    })
-    .where(eq(bookingsTable.id, id))
-    .returning();
+  let sponsorAllocationRestored = false;
+  if (
+    typeof existing.sponsorId === "number" &&
+    existing.registrationSource !== "sponsor_staff" &&
+    terminalStatuses.has(existing.status) &&
+    activeStatuses.has(finalStatus)
+  ) {
+    sponsorAllocationRestored = await restoreSponsorRedemption(existing.id);
+    if (!sponsorAllocationRestored) {
+      res.status(409).json({
+        error: "This sponsor allocation no longer has capacity, so the booking cannot be restored",
+      });
+      return;
+    }
+  }
+
+  let updated: typeof bookingsTable.$inferSelect;
+  try {
+    if (
+      existing.registrationSource === "sponsor_staff" &&
+      typeof existing.sponsorId === "number" &&
+      terminalStatuses.has(existing.status) &&
+      activeStatuses.has(finalStatus)
+    ) {
+      const restored = await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT id FROM sponsors WHERE id = ${existing.sponsorId} FOR UPDATE`);
+        const [sponsor] = await tx
+          .select({ staffAllocation: sponsorsTable.staffAllocation })
+          .from(sponsorsTable)
+          .where(eq(sponsorsTable.id, existing.sponsorId!));
+        if (!sponsor) return null;
+        const [usage] = await tx
+          .select({ active: count() })
+          .from(bookingsTable)
+          .where(
+            and(
+              eq(bookingsTable.sponsorId, existing.sponsorId!),
+              eq(bookingsTable.registrationSource, "sponsor_staff"),
+              or(eq(bookingsTable.status, "paid"), eq(bookingsTable.status, "invoiced")),
+            ),
+          );
+        if (Number(usage?.active ?? 0) + existing.quantity > sponsor.staffAllocation) return null;
+        const [row] = await tx
+          .update(bookingsTable)
+          .set({
+            status: finalStatus as typeof existing.status,
+            updatedAt: new Date(),
+            ...statusUpdateOverrides,
+          })
+          .where(eq(bookingsTable.id, id))
+          .returning();
+        return row ?? null;
+      });
+      if (!restored) {
+        res.status(409).json({
+          error: "This sponsor's staff allocation is full, so the registration cannot be restored",
+        });
+        return;
+      }
+      updated = restored;
+    } else {
+      [updated] = await db
+        .update(bookingsTable)
+        .set({
+          status: finalStatus as typeof existing.status,
+          updatedAt: new Date(),
+          ...statusUpdateOverrides,
+        })
+        .where(eq(bookingsTable.id, id))
+        .returning();
+    }
+  } catch (error) {
+    if (sponsorAllocationRestored) {
+      await releaseSponsorRedemption(existing.id, "admin_restore_database_update_failed");
+    }
+    throw error;
+  }
+
+  if (
+    typeof existing.sponsorId === "number" &&
+    existing.registrationSource !== "sponsor_staff" &&
+    activeStatuses.has(existing.status) &&
+    terminalStatuses.has(finalStatus)
+  ) {
+    await releaseSponsorRedemption(existing.id, `admin_status_${finalStatus}`);
+  }
 
   await logAdminAction({
     type: "admin_booking_status_changed",
@@ -1444,6 +1544,10 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
     notifyIncomplete,
     notifyCheckoutExpired,
     notifyBillingEdit,
+    notifySponsorAdmin,
+    notifySponsorPasses,
+    notifySponsorContent,
+    notifySponsorDeadlines,
   } = req.body;
   if (!email || typeof email !== "string" || !email.includes("@")) {
     res.status(400).json({ error: "A valid email address is required" });
@@ -1459,6 +1563,10 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
         notifyIncomplete: notifyIncomplete !== false,
         notifyCheckoutExpired: notifyCheckoutExpired === true,
         notifyBillingEdit: notifyBillingEdit !== false,
+        notifySponsorAdmin: notifySponsorAdmin !== false,
+        notifySponsorPasses: notifySponsorPasses !== false,
+        notifySponsorContent: notifySponsorContent !== false,
+        notifySponsorDeadlines: notifySponsorDeadlines !== false,
       })
       .returning();
     await logAdminAction({
@@ -1471,6 +1579,10 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
         notifyIncomplete: inserted.notifyIncomplete,
         notifyCheckoutExpired: inserted.notifyCheckoutExpired,
         notifyBillingEdit: inserted.notifyBillingEdit,
+        notifySponsorAdmin: inserted.notifySponsorAdmin,
+        notifySponsorPasses: inserted.notifySponsorPasses,
+        notifySponsorContent: inserted.notifySponsorContent,
+        notifySponsorDeadlines: inserted.notifySponsorDeadlines,
       },
       meta: { notificationEmailId: inserted.id },
     });
@@ -1482,13 +1594,28 @@ router.post("/admin/notification-emails", adminAuth, async (req, res): Promise<v
 
 router.patch("/admin/notification-emails/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"] as string, 10);
-  const { notifyComplete, notifyIncomplete, notifyCheckoutExpired, notifyBillingEdit } = req.body;
+  const {
+    notifyComplete,
+    notifyIncomplete,
+    notifyCheckoutExpired,
+    notifyBillingEdit,
+    notifySponsorAdmin,
+    notifySponsorPasses,
+    notifySponsorContent,
+    notifySponsorDeadlines,
+  } = req.body;
   const updates: Record<string, boolean> = {};
   if (typeof notifyComplete === "boolean") updates.notifyComplete = notifyComplete;
   if (typeof notifyIncomplete === "boolean") updates.notifyIncomplete = notifyIncomplete;
   if (typeof notifyCheckoutExpired === "boolean")
     updates.notifyCheckoutExpired = notifyCheckoutExpired;
   if (typeof notifyBillingEdit === "boolean") updates.notifyBillingEdit = notifyBillingEdit;
+  if (typeof notifySponsorAdmin === "boolean") updates.notifySponsorAdmin = notifySponsorAdmin;
+  if (typeof notifySponsorPasses === "boolean") updates.notifySponsorPasses = notifySponsorPasses;
+  if (typeof notifySponsorContent === "boolean")
+    updates.notifySponsorContent = notifySponsorContent;
+  if (typeof notifySponsorDeadlines === "boolean")
+    updates.notifySponsorDeadlines = notifySponsorDeadlines;
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "Nothing to update" });
     return;
@@ -1515,6 +1642,10 @@ router.patch("/admin/notification-emails/:id", adminAuth, async (req, res): Prom
           notifyIncomplete: prev.notifyIncomplete,
           notifyCheckoutExpired: prev.notifyCheckoutExpired,
           notifyBillingEdit: prev.notifyBillingEdit,
+          notifySponsorAdmin: prev.notifySponsorAdmin,
+          notifySponsorPasses: prev.notifySponsorPasses,
+          notifySponsorContent: prev.notifySponsorContent,
+          notifySponsorDeadlines: prev.notifySponsorDeadlines,
         }
       : undefined,
     after: {
@@ -1522,6 +1653,10 @@ router.patch("/admin/notification-emails/:id", adminAuth, async (req, res): Prom
       notifyIncomplete: updated.notifyIncomplete,
       notifyCheckoutExpired: updated.notifyCheckoutExpired,
       notifyBillingEdit: updated.notifyBillingEdit,
+      notifySponsorAdmin: updated.notifySponsorAdmin,
+      notifySponsorPasses: updated.notifySponsorPasses,
+      notifySponsorContent: updated.notifySponsorContent,
+      notifySponsorDeadlines: updated.notifySponsorDeadlines,
     },
     meta: { notificationEmailId: id },
   });

@@ -11,3 +11,5 @@ export * from "./event-settings";
 export * from "./pass-config";
 export * from "./activity-log";
 export * from "./hear-about-us";
+export * from "./sponsors";
+export * from "./sponsor-redemptions";

@@ -19,6 +19,8 @@ export const attendeesTable = pgTable(
     workEmail: text("work_email").notNull(),
     phone: text("phone"),
     dietaryAccessibility: text("dietary_accessibility"),
+    communitySocialAttending: boolean("community_social_attending"),
+    communitySocialDietary: text("community_social_dietary"),
     notes: text("notes"),
     isTbc: boolean("is_tbc").notNull().default(false),
     gdprConsent: boolean("gdpr_consent").notNull().default(false),

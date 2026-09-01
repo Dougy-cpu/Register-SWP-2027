@@ -12,6 +12,7 @@ import type { RegistrationSummary } from "./registrationSummary";
 export interface AdminStats {
   totalRegistrations: number;
   completedRegistrations: number;
+  sponsorStaffCount: number;
   partialRegistrations: number;
   totalRevenue: number;
   totalVat: number;

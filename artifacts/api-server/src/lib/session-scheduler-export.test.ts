@@ -171,6 +171,35 @@ describe("buildSessionSchedulerExportRows", () => {
     ]);
     expect(refreshedRows[0]?.Name).toBe("Alice Smith");
   });
+
+  it("includes a confirmed sponsor-staff registration in the Scheduler export", () => {
+    const sponsorStaffBooking = {
+      ...booking(44, "paid"),
+      registrationSource: "sponsor_staff" as const,
+    };
+    const rows = buildSessionSchedulerExportRows(
+      [sponsorStaffBooking],
+      [
+        attendee({
+          id: 404,
+          bookingId: 44,
+          firstName: "Sponsor",
+          lastName: "Colleague",
+          company: "Acme Ltd",
+          jobTitle: "Partnerships Director",
+          workEmail: "sponsor.colleague@example.com",
+        }),
+      ],
+    );
+    expect(rows).toEqual([
+      {
+        Name: "Sponsor Colleague",
+        Email: "sponsor.colleague@example.com",
+        Company: "Acme Ltd",
+        "Job Title": "Partnerships Director",
+      },
+    ]);
+  });
 });
 
 describe("Session Scheduler workbook", () => {

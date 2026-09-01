@@ -1,7 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { emailTemplatesTable, emailLogsTable, eventSettingsTable } from "@workspace/db";
+import {
+  bookingsTable,
+  emailTemplatesTable,
+  emailLogsTable,
+  eventSettingsTable,
+} from "@workspace/db";
 import {
   getEventSettings,
   DEFAULT_INVOICE_HELP_CONTENT,
@@ -615,6 +620,22 @@ router.get("/admin/email-logs", adminAuth, async (req, res): Promise<void> => {
 router.post("/admin/email-logs/:bookingId/resend", adminAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.bookingId) ? req.params.bookingId[0] : req.params.bookingId;
   const bookingId = parseInt(raw, 10);
+
+  const [booking] = await db
+    .select({ registrationSource: bookingsTable.registrationSource })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId));
+  if (!booking) {
+    res.status(404).json({ error: "Booking not found" });
+    return;
+  }
+  if (booking.registrationSource === "sponsor_staff") {
+    res.status(409).json({
+      error:
+        "Sponsor staff receive a sponsor welcome without a receipt. Use Redeliver failed delivery from the registration instead.",
+    });
+    return;
+  }
 
   const { resendConfirmationAndReceipt } = await import("../lib/email");
   await resendConfirmationAndReceipt(bookingId);

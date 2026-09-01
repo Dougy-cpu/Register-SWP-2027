@@ -12,6 +12,8 @@ export interface EmailLog {
   id: number;
   /** @nullable */
   bookingId?: number | null;
+  /** @nullable */
+  sponsorId?: number | null;
   recipient: string;
   type: EmailLogType;
   status: EmailLogStatus;

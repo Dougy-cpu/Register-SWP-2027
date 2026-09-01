@@ -39,6 +39,7 @@ export const promoCodesTable = pgTable(
     description: text("description"),
     oncePerCustomer: boolean("once_per_customer").notNull().default(false),
     minQuantity: integer("min_quantity"),
+    maxQuantityPerBooking: integer("max_quantity_per_booking"),
     maxDiscountAmount: numeric("max_discount_amount", { precision: 10, scale: 2 }),
     internalNote: text("internal_note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

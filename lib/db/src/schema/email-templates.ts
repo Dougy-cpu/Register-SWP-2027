@@ -8,6 +8,8 @@ export const emailTemplateTypeEnum = pgEnum("email_template_type", [
   "receipt",
   "invoice_reminder",
   "community_social",
+  "sponsor_welcome",
+  "sponsor_staff",
 ]);
 
 export const emailTemplatesTable = pgTable("email_templates", {

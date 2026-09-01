@@ -1,7 +1,7 @@
 ﻿import { useGetAdminStats } from "@workspace/api-client-react";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { Card } from "@/components/ui/card";
-import { Users, CreditCard, Receipt, TrendingUp, Clock } from "lucide-react";
+import { Users, CreditCard, Receipt, TrendingUp, Clock, Handshake } from "lucide-react";
 import UnpaidInvoicesWidget from "@/components/admin/UnpaidInvoicesWidget";
 
 type RegRow = {
@@ -22,6 +22,7 @@ type RegRow = {
   billingCompany?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  registrationSource?: "checkout" | "manual" | "sponsor_staff";
 };
 
 function fmtDate(iso: string | null | undefined) {
@@ -75,12 +76,20 @@ function CompletedTable({ rows }: { rows: RegRow[] }) {
                   </p>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="capitalize">{reg.passType}</span>
+                  <span className="capitalize">
+                    {reg.registrationSource === "sponsor_staff" ? "Sponsor staff" : reg.passType}
+                  </span>
                   <span className="text-muted-foreground ml-1">(x{reg.quantity})</span>
                 </td>
                 <td className="px-6 py-4 font-medium">
-                  {"\u00a3"}
-                  {Number(reg.totalAmount).toLocaleString()}
+                  {reg.registrationSource === "sponsor_staff" ? (
+                    "Included"
+                  ) : (
+                    <>
+                      {"\u00a3"}
+                      {Number(reg.totalAmount).toLocaleString()}
+                    </>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={reg.status} />
@@ -185,7 +194,7 @@ export default function AdminDashboard() {
   return (
     <AdminLayout title="Dashboard">
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         <Card className="p-5 border-l-4 border-l-primary rounded-sm shadow-sm col-span-2 lg:col-span-1">
           <div className="flex justify-between items-start">
             <div>
@@ -205,6 +214,21 @@ export default function AdminDashboard() {
             + {"\u00a3"}
             {stats.totalVat.toLocaleString()} VAT
           </p>
+        </Card>
+
+        <Card className="p-5 border-l-4 border-l-emerald-500 rounded-sm shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                Sponsor Staff
+              </p>
+              <h2 className="text-3xl font-bold">{stats.sponsorStaffCount}</h2>
+            </div>
+            <div className="p-2 bg-emerald-100 rounded-full">
+              <Handshake className="w-5 h-5 text-emerald-700" />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">attendees, excluded from sales</p>
         </Card>
 
         <Card className="p-5 border-l-4 border-l-secondary rounded-sm shadow-sm">

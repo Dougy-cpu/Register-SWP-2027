@@ -82,6 +82,7 @@ const corsOptions: cors.CorsOptions = isProduction
         "Authorization",
         "x-admin-token",
         "x-booking-session",
+        "x-sponsor-csrf",
         "stripe-signature",
       ],
     }
@@ -100,10 +101,13 @@ app.use(
     logger,
     serializers: {
       req(req) {
+        const pathname = req.url?.split("?")[0] ?? "";
         return {
           id: req.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: pathname.startsWith("/api/sponsor/access/")
+            ? "/api/sponsor/access/[redacted]"
+            : pathname,
         };
       },
       res(res) {

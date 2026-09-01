@@ -2,9 +2,14 @@
 import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookingsTable, attendeesTable, promoCodesTable } from "@workspace/db";
+import {
+  bookingsTable,
+  attendeesTable,
+  promoCodesTable,
+  sponsorPromoCodesTable,
+} from "@workspace/db";
 import { isCodeUsedByEmail } from "./promo-codes";
-import { incrementPromoUsage } from "../lib/pricing";
+import { releaseSponsorRedemption, reservePromoUsageForBooking } from "../lib/sponsor-redemptions";
 import {
   sendCheckoutExpiredEmail,
   sendRefundConfirmationEmail,
@@ -318,24 +323,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
         paymentMethod: "card",
       });
 
-      if (claimed) {
-        // Bump the promo counter ONCE, only on the path that actually flipped
-        // the status - preserves the previous "atomic with the status flip"
-        // intent (Task #59) and prevents double-increment on webhook replays.
-        if (existing.promoCode) {
-          try {
-            const reserved = await incrementPromoUsage(existing.promoCode, existing.quantity);
-            if (!reserved) {
-              logger.warn(
-                { bookingId, promoCode: existing.promoCode, quantity: existing.quantity },
-                "Promo cap exceeded after successful card payment - booking confirmed but usage not incremented",
-              );
-            }
-          } catch (err) {
-            logger.error({ err, bookingId }, "Failed to increment promo usage after card payment");
-          }
-        }
-      } else {
+      if (!claimed) {
         logger.info(
           { bookingId, status: existing.status },
           "checkout.session.completed: already confirmed - retrying any unfinished side-effects",
@@ -376,6 +364,9 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
         updates.status = "cancelled";
       }
       await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, booking.id));
+      if (updates.status === "cancelled") {
+        await releaseSponsorRedemption(booking.id, "stripe_invoice_voided");
+      }
       logger.info(
         { bookingId: booking.id, invoiceId, prevStatus: booking.status },
         "invoice.voided: booking updated",
@@ -476,6 +467,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
           .update(bookingsTable)
           .set({ status: "refunded", updatedAt: new Date() })
           .where(eq(bookingsTable.id, booking.id));
+        await releaseSponsorRedemption(booking.id, "stripe_charge_refunded");
 
         logger.info(
           { bookingId: booking.id, paymentIntentId, amountRefunded: charge.amount_refunded },
@@ -731,22 +723,6 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
     });
 
     if (claimed) {
-      if (existing.promoCode) {
-        try {
-          const reserved = await incrementPromoUsage(existing.promoCode, existing.quantity);
-          if (!reserved) {
-            logger.warn(
-              { bookingId: id, promoCode: existing.promoCode, quantity: existing.quantity },
-              "Promo cap exceeded after successful card payment - booking confirmed but usage not incremented",
-            );
-          }
-        } catch (err) {
-          logger.error(
-            { err, bookingId: id },
-            "Failed to increment promo usage after card payment",
-          );
-        }
-      }
       logger.info(
         { bookingId: id, orderRef },
         "confirm-card-payment: booking confirmed - running side-effects",
@@ -824,20 +800,52 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
   }
 
   const orderRef = booking.orderReference || defaultOrderRef(id);
+  let sponsorPromoReserved = false;
+  let invoicePersisted = false;
+  let externalInvoiceIssued = false;
 
   try {
+    // Sponsor allocations are reserved before Stripe creates an invoice. This
+    // prevents an externally-issued discounted invoice from being created
+    // after a concurrent VIP booking has consumed the final allocation.
+    if (booking.promoCode) {
+      const [sponsorMapping] = await db
+        .select({ sponsorId: sponsorPromoCodesTable.sponsorId })
+        .from(promoCodesTable)
+        .innerJoin(
+          sponsorPromoCodesTable,
+          eq(sponsorPromoCodesTable.promoCodeId, promoCodesTable.id),
+        )
+        .where(eq(promoCodesTable.code, booking.promoCode));
+      if (sponsorMapping?.sponsorId) {
+        sponsorPromoReserved = await reservePromoUsageForBooking(
+          booking.promoCode,
+          booking.quantity,
+          booking.id,
+        );
+        if (!sponsorPromoReserved) {
+          res.status(409).json({
+            error: "This sponsor pass allocation no longer has enough availability",
+          });
+          return;
+        }
+      }
+    }
+
     // Delegate the customer-sync + invoice-create + finalize + send to the
     // shared helper so the create and re-issue flows can never drift apart.
     // The helper performs ONLY external Stripe ops - the resulting booking-row
     // writes are applied below inside a transaction so they commit atomically
     // with the promo counter increment.
     const result = await reissueBookingInvoice(stripe, id);
+    externalInvoiceIssued = true;
     if (result.alreadyPaid) {
       // Persist status="paid" (if not already) atomically in case our DB row
       // was still showing partial/invoiced.
       await db.transaction(async (tx) => {
         await applyReissueInvoiceResultTx(tx, id, result);
       });
+      invoicePersisted = true;
       const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
       res.json({
         invoiceId: refreshed.stripeInvoiceId || `manual-${refreshed.orderReference}`,
@@ -862,7 +870,12 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
       });
 
       if (booking.promoCode) {
-        const reserved = await incrementPromoUsage(booking.promoCode, booking.quantity, tx);
+        const reserved = await reservePromoUsageForBooking(
+          booking.promoCode,
+          booking.quantity,
+          booking.id,
+          tx,
+        );
         if (!reserved) {
           // The Stripe invoice has already been issued - log but do not throw.
           logger.warn(
@@ -872,6 +885,7 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
         }
       }
     });
+    invoicePersisted = true;
 
     // Run the same per-flag retry pipeline as the card paths so a failed
     // confirmation email here is automatically retried on the next webhook
@@ -886,6 +900,19 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
     });
     return;
   } catch (err) {
+    if (sponsorPromoReserved && !externalInvoiceIssued && !invoicePersisted) {
+      await releaseSponsorRedemption(booking.id, "invoice_creation_failed").catch((releaseError) =>
+        logger.error(
+          { releaseError, bookingId: booking.id },
+          "Failed to release sponsor allocation after invoice creation failure",
+        ),
+      );
+    } else if (sponsorPromoReserved && externalInvoiceIssued && !invoicePersisted) {
+      logger.error(
+        { bookingId: booking.id },
+        "Stripe issued a sponsor invoice but local persistence failed; allocation remains reserved for manual reconciliation",
+      );
+    }
     const e = err as { raw?: { message?: string }; message?: string };
     const msg = e?.raw?.message || e?.message || "Stripe error";
     logger.error({ err, bookingId: id }, "Failed to create Stripe invoice");

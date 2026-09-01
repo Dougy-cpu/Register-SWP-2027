@@ -17,7 +17,9 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AcknowledgeSponsorDocumentBody,
   AdminBookingWithAttendees,
+  AdminDownloadSponsorAssetParams,
   AdminLoginBody,
   AdminLoginResponse,
   AdminRegistrationStatusErrorResponse,
@@ -37,7 +39,10 @@ import type {
   CreatePromoCodeBody,
   CreateStripeSessionBody,
   DiscountTier,
+  DownloadAllSponsorBackupBatchBody,
+  DownloadSponsorAssetSelectionBody,
   EmailLogList,
+  EmailPreview,
   EmailTemplate,
   ErrorResponse,
   EventSettings,
@@ -46,10 +51,18 @@ import type {
   GetBookingPricingParams,
   HealthStatus,
   InvoiceResponse,
+  ListAdminSponsorAssetLibrary200,
+  ListAdminSponsorAssetLibraryParams,
   ListEmailLogsParams,
   ListRegistrationsParams,
+  ListSponsorAssets200,
+  ListSponsorAssetsParams,
+  ListSponsors200,
+  ListSponsorsParams,
   ListUnpaidInvoicesParams,
   ManualRegistrationBody,
+  PlanAllSponsorBackup200,
+  PlanAllSponsorBackupBody,
   PricingBreakdown,
   PricingRequest,
   PromoCode,
@@ -58,16 +71,36 @@ import type {
   RegistrationEmailResendResult,
   RegistrationList,
   RegistrationRedeliveryResult,
+  ReplaceSponsorAssetBody,
+  ReplaceSponsorWorkspaceAssetBody,
+  RequestMoreSponsorPassesBody,
+  ReviewSponsorSessionBody,
+  RotateSponsorAccess200,
+  SendSponsorWelcome200,
+  SendSponsorWelcomeBody,
+  SponsorAsset,
+  SponsorAssetUpload,
+  SponsorSession,
+  SponsorSessionEntitlementInput,
+  SponsorSessionInput,
+  SponsorStaff,
+  SponsorStaffInput,
+  SponsorTask,
+  SponsorUpsert,
+  SponsorWorkspaceAdmin,
+  SponsorWorkspacePublic,
   StripeSessionResponse,
   SuccessResponse,
   TestEmailBody,
   UnpaidInvoiceList,
   UnpaidInvoicesSummary,
+  UpdateAdminSponsorTaskBody,
   UpdateAttendeeBody,
   UpdateBookingBody,
   UpdateDiscountTiersBody,
   UpdateEmailTemplateBody,
   UpdatePromoCodeBody,
+  UpdateSponsorAssetStatusBody,
   ValidatePromoCodeBody,
 } from "./api.schemas";
 
@@ -3886,3 +3919,2963 @@ export function useGetAdminStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List sponsor records with progress and allocation usage
+ */
+export const getListSponsorsUrl = (params?: ListSponsorsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/sponsors?${stringifiedParams}`
+    : `/api/admin/sponsors`;
+};
+
+export const listSponsors = async (
+  params?: ListSponsorsParams,
+  options?: RequestInit,
+): Promise<ListSponsors200> => {
+  return customFetch<ListSponsors200>(getListSponsorsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSponsorsQueryKey = (params?: ListSponsorsParams) => {
+  return [`/api/admin/sponsors`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSponsorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSponsors>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSponsorsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsors>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSponsorsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSponsors>>> = ({ signal }) =>
+    listSponsors(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSponsors>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSponsorsQueryResult = NonNullable<Awaited<ReturnType<typeof listSponsors>>>;
+export type ListSponsorsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List sponsor records with progress and allocation usage
+ */
+
+export function useListSponsors<
+  TData = Awaited<ReturnType<typeof listSponsors>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSponsorsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsors>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSponsorsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a draft sponsor record
+ */
+export const getCreateSponsorUrl = () => {
+  return `/api/admin/sponsors`;
+};
+
+export const createSponsor = async (
+  sponsorUpsert: SponsorUpsert,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(getCreateSponsorUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorUpsert),
+  });
+};
+
+export const getCreateSponsorMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSponsor>>,
+    TError,
+    { data: BodyType<SponsorUpsert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSponsor>>,
+  TError,
+  { data: BodyType<SponsorUpsert> },
+  TContext
+> => {
+  const mutationKey = ["createSponsor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSponsor>>,
+    { data: BodyType<SponsorUpsert> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSponsor(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSponsorMutationResult = NonNullable<Awaited<ReturnType<typeof createSponsor>>>;
+export type CreateSponsorMutationBody = BodyType<SponsorUpsert>;
+export type CreateSponsorMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a draft sponsor record
+ */
+export const useCreateSponsor = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSponsor>>,
+    TError,
+    { data: BodyType<SponsorUpsert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSponsor>>,
+  TError,
+  { data: BodyType<SponsorUpsert> },
+  TContext
+> => {
+  return useMutation(getCreateSponsorMutationOptions(options));
+};
+
+/**
+ * @summary Get a complete sponsor administration record
+ */
+export const getGetAdminSponsorUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}`;
+};
+
+export const getAdminSponsor = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(getGetAdminSponsorUrl(sponsorId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminSponsorQueryKey = (sponsorId: number) => {
+  return [`/api/admin/sponsors/${sponsorId}`] as const;
+};
+
+export const getGetAdminSponsorQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminSponsor>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAdminSponsor>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminSponsorQueryKey(sponsorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminSponsor>>> = ({ signal }) =>
+    getAdminSponsor(sponsorId, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!sponsorId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminSponsor>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminSponsorQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminSponsor>>>;
+export type GetAdminSponsorQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a complete sponsor administration record
+ */
+
+export function useGetAdminSponsor<
+  TData = Awaited<ReturnType<typeof getAdminSponsor>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAdminSponsor>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminSponsorQueryOptions(sponsorId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update sponsor details, allocations, contacts, deadlines or status
+ */
+export const getUpdateAdminSponsorUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}`;
+};
+
+export const updateAdminSponsor = async (
+  sponsorId: number,
+  sponsorUpsert: SponsorUpsert,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(getUpdateAdminSponsorUrl(sponsorId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorUpsert),
+  });
+};
+
+export const getUpdateAdminSponsorMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsor>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorUpsert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminSponsor>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorUpsert> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminSponsor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminSponsor>>,
+    { sponsorId: number; data: BodyType<SponsorUpsert> }
+  > = (props) => {
+    const { sponsorId, data } = props ?? {};
+
+    return updateAdminSponsor(sponsorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminSponsorMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminSponsor>>
+>;
+export type UpdateAdminSponsorMutationBody = BodyType<SponsorUpsert>;
+export type UpdateAdminSponsorMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update sponsor details, allocations, contacts, deadlines or status
+ */
+export const useUpdateAdminSponsor = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsor>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorUpsert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminSponsor>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorUpsert> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminSponsorMutationOptions(options));
+};
+
+/**
+ * @summary Transactionally confirm a draft sponsor and create codes and checklist
+ */
+export const getConfirmSponsorUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/confirm`;
+};
+
+export const confirmSponsor = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(getConfirmSponsorUrl(sponsorId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getConfirmSponsorMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmSponsor>>,
+    TError,
+    { sponsorId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmSponsor>>,
+  TError,
+  { sponsorId: number },
+  TContext
+> => {
+  const mutationKey = ["confirmSponsor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmSponsor>>,
+    { sponsorId: number }
+  > = (props) => {
+    const { sponsorId } = props ?? {};
+
+    return confirmSponsor(sponsorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmSponsorMutationResult = NonNullable<Awaited<ReturnType<typeof confirmSponsor>>>;
+
+export type ConfirmSponsorMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Transactionally confirm a draft sponsor and create codes and checklist
+ */
+export const useConfirmSponsor = <TError = ErrorType<ErrorResponse>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmSponsor>>,
+    TError,
+    { sponsorId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof confirmSponsor>>,
+  TError,
+  { sponsorId: number },
+  TContext
+> => {
+  return useMutation(getConfirmSponsorMutationOptions(options));
+};
+
+/**
+ * @summary Revoke existing sponsor sessions and issue a new private link
+ */
+export const getRotateSponsorAccessUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/access/rotate`;
+};
+
+export const rotateSponsorAccess = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<RotateSponsorAccess200> => {
+  return customFetch<RotateSponsorAccess200>(getRotateSponsorAccessUrl(sponsorId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRotateSponsorAccessMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateSponsorAccess>>,
+    TError,
+    { sponsorId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rotateSponsorAccess>>,
+  TError,
+  { sponsorId: number },
+  TContext
+> => {
+  const mutationKey = ["rotateSponsorAccess"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rotateSponsorAccess>>,
+    { sponsorId: number }
+  > = (props) => {
+    const { sponsorId } = props ?? {};
+
+    return rotateSponsorAccess(sponsorId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RotateSponsorAccessMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rotateSponsorAccess>>
+>;
+
+export type RotateSponsorAccessMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Revoke existing sponsor sessions and issue a new private link
+ */
+export const useRotateSponsorAccess = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateSponsorAccess>>,
+    TError,
+    { sponsorId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rotateSponsorAccess>>,
+  TError,
+  { sponsorId: number },
+  TContext
+> => {
+  return useMutation(getRotateSponsorAccessMutationOptions(options));
+};
+
+/**
+ * @summary Render the sponsor welcome email using current live sponsor data
+ */
+export const getPreviewSponsorWelcomeUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/welcome/preview`;
+};
+
+export const previewSponsorWelcome = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<EmailPreview> => {
+  return customFetch<EmailPreview>(getPreviewSponsorWelcomeUrl(sponsorId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getPreviewSponsorWelcomeQueryKey = (sponsorId: number) => {
+  return [`/api/admin/sponsors/${sponsorId}/welcome/preview`] as const;
+};
+
+export const getPreviewSponsorWelcomeQueryOptions = <
+  TData = Awaited<ReturnType<typeof previewSponsorWelcome>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof previewSponsorWelcome>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPreviewSponsorWelcomeQueryKey(sponsorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof previewSponsorWelcome>>> = ({ signal }) =>
+    previewSponsorWelcome(sponsorId, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!sponsorId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof previewSponsorWelcome>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type PreviewSponsorWelcomeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof previewSponsorWelcome>>
+>;
+export type PreviewSponsorWelcomeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Render the sponsor welcome email using current live sponsor data
+ */
+
+export function usePreviewSponsorWelcome<
+  TData = Awaited<ReturnType<typeof previewSponsorWelcome>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof previewSponsorWelcome>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getPreviewSponsorWelcomeQueryOptions(sponsorId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Explicitly send the reviewed sponsor welcome email
+ */
+export const getSendSponsorWelcomeUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/welcome/send`;
+};
+
+export const sendSponsorWelcome = async (
+  sponsorId: number,
+  sendSponsorWelcomeBody: SendSponsorWelcomeBody,
+  options?: RequestInit,
+): Promise<SendSponsorWelcome200> => {
+  return customFetch<SendSponsorWelcome200>(getSendSponsorWelcomeUrl(sponsorId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendSponsorWelcomeBody),
+  });
+};
+
+export const getSendSponsorWelcomeMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendSponsorWelcome>>,
+    TError,
+    { sponsorId: number; data: BodyType<SendSponsorWelcomeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendSponsorWelcome>>,
+  TError,
+  { sponsorId: number; data: BodyType<SendSponsorWelcomeBody> },
+  TContext
+> => {
+  const mutationKey = ["sendSponsorWelcome"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendSponsorWelcome>>,
+    { sponsorId: number; data: BodyType<SendSponsorWelcomeBody> }
+  > = (props) => {
+    const { sponsorId, data } = props ?? {};
+
+    return sendSponsorWelcome(sponsorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendSponsorWelcomeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendSponsorWelcome>>
+>;
+export type SendSponsorWelcomeMutationBody = BodyType<SendSponsorWelcomeBody>;
+export type SendSponsorWelcomeMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Explicitly send the reviewed sponsor welcome email
+ */
+export const useSendSponsorWelcome = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendSponsorWelcome>>,
+    TError,
+    { sponsorId: number; data: BodyType<SendSponsorWelcomeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendSponsorWelcome>>,
+  TError,
+  { sponsorId: number; data: BodyType<SendSponsorWelcomeBody> },
+  TContext
+> => {
+  return useMutation(getSendSponsorWelcomeMutationOptions(options));
+};
+
+/**
+ * @summary Update a sponsor deliverable tracker status
+ */
+export const getUpdateAdminSponsorTaskUrl = (sponsorId: number, taskId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/tasks/${taskId}`;
+};
+
+export const updateAdminSponsorTask = async (
+  sponsorId: number,
+  taskId: number,
+  updateAdminSponsorTaskBody: UpdateAdminSponsorTaskBody,
+  options?: RequestInit,
+): Promise<SponsorTask> => {
+  return customFetch<SponsorTask>(getUpdateAdminSponsorTaskUrl(sponsorId, taskId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAdminSponsorTaskBody),
+  });
+};
+
+export const getUpdateAdminSponsorTaskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsorTask>>,
+    TError,
+    { sponsorId: number; taskId: number; data: BodyType<UpdateAdminSponsorTaskBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminSponsorTask>>,
+  TError,
+  { sponsorId: number; taskId: number; data: BodyType<UpdateAdminSponsorTaskBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminSponsorTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminSponsorTask>>,
+    { sponsorId: number; taskId: number; data: BodyType<UpdateAdminSponsorTaskBody> }
+  > = (props) => {
+    const { sponsorId, taskId, data } = props ?? {};
+
+    return updateAdminSponsorTask(sponsorId, taskId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminSponsorTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminSponsorTask>>
+>;
+export type UpdateAdminSponsorTaskMutationBody = BodyType<UpdateAdminSponsorTaskBody>;
+export type UpdateAdminSponsorTaskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a sponsor deliverable tracker status
+ */
+export const useUpdateAdminSponsorTask = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsorTask>>,
+    TError,
+    { sponsorId: number; taskId: number; data: BodyType<UpdateAdminSponsorTaskBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminSponsorTask>>,
+  TError,
+  { sponsorId: number; taskId: number; data: BodyType<UpdateAdminSponsorTaskBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminSponsorTaskMutationOptions(options));
+};
+
+/**
+ * @summary Add an explicit session entitlement to a sponsor workspace
+ */
+export const getAddAdminSponsorSessionEntitlementUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/sessions`;
+};
+
+export const addAdminSponsorSessionEntitlement = async (
+  sponsorId: number,
+  sponsorSessionEntitlementInput: SponsorSessionEntitlementInput,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(getAddAdminSponsorSessionEntitlementUrl(sponsorId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorSessionEntitlementInput),
+  });
+};
+
+export const getAddAdminSponsorSessionEntitlementMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorSessionEntitlementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorSessionEntitlementInput> },
+  TContext
+> => {
+  const mutationKey = ["addAdminSponsorSessionEntitlement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>,
+    { sponsorId: number; data: BodyType<SponsorSessionEntitlementInput> }
+  > = (props) => {
+    const { sponsorId, data } = props ?? {};
+
+    return addAdminSponsorSessionEntitlement(sponsorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddAdminSponsorSessionEntitlementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>
+>;
+export type AddAdminSponsorSessionEntitlementMutationBody =
+  BodyType<SponsorSessionEntitlementInput>;
+export type AddAdminSponsorSessionEntitlementMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an explicit session entitlement to a sponsor workspace
+ */
+export const useAddAdminSponsorSessionEntitlement = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorSessionEntitlementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addAdminSponsorSessionEntitlement>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorSessionEntitlementInput> },
+  TContext
+> => {
+  return useMutation(getAddAdminSponsorSessionEntitlementMutationOptions(options));
+};
+
+/**
+ * @summary Update a sponsor session entitlement and its required deliverables
+ */
+export const getUpdateAdminSponsorSessionEntitlementUrl = (
+  sponsorId: number,
+  sessionId: number,
+) => {
+  return `/api/admin/sponsors/${sponsorId}/sessions/${sessionId}/entitlement`;
+};
+
+export const updateAdminSponsorSessionEntitlement = async (
+  sponsorId: number,
+  sessionId: number,
+  sponsorSessionEntitlementInput: SponsorSessionEntitlementInput,
+  options?: RequestInit,
+): Promise<SponsorWorkspaceAdmin> => {
+  return customFetch<SponsorWorkspaceAdmin>(
+    getUpdateAdminSponsorSessionEntitlementUrl(sponsorId, sessionId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(sponsorSessionEntitlementInput),
+    },
+  );
+};
+
+export const getUpdateAdminSponsorSessionEntitlementMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>,
+    TError,
+    { sponsorId: number; sessionId: number; data: BodyType<SponsorSessionEntitlementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>,
+  TError,
+  { sponsorId: number; sessionId: number; data: BodyType<SponsorSessionEntitlementInput> },
+  TContext
+> => {
+  const mutationKey = ["updateAdminSponsorSessionEntitlement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>,
+    { sponsorId: number; sessionId: number; data: BodyType<SponsorSessionEntitlementInput> }
+  > = (props) => {
+    const { sponsorId, sessionId, data } = props ?? {};
+
+    return updateAdminSponsorSessionEntitlement(sponsorId, sessionId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAdminSponsorSessionEntitlementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>
+>;
+export type UpdateAdminSponsorSessionEntitlementMutationBody =
+  BodyType<SponsorSessionEntitlementInput>;
+export type UpdateAdminSponsorSessionEntitlementMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a sponsor session entitlement and its required deliverables
+ */
+export const useUpdateAdminSponsorSessionEntitlement = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>,
+    TError,
+    { sponsorId: number; sessionId: number; data: BodyType<SponsorSessionEntitlementInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAdminSponsorSessionEntitlement>>,
+  TError,
+  { sponsorId: number; sessionId: number; data: BodyType<SponsorSessionEntitlementInput> },
+  TContext
+> => {
+  return useMutation(getUpdateAdminSponsorSessionEntitlementMutationOptions(options));
+};
+
+/**
+ * @summary Approve a submission or request changes with feedback
+ */
+export const getReviewSponsorSessionUrl = (sponsorId: number, sessionId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/sessions/${sessionId}/review`;
+};
+
+export const reviewSponsorSession = async (
+  sponsorId: number,
+  sessionId: number,
+  reviewSponsorSessionBody: ReviewSponsorSessionBody,
+  options?: RequestInit,
+): Promise<SponsorSession> => {
+  return customFetch<SponsorSession>(getReviewSponsorSessionUrl(sponsorId, sessionId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reviewSponsorSessionBody),
+  });
+};
+
+export const getReviewSponsorSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reviewSponsorSession>>,
+    TError,
+    { sponsorId: number; sessionId: number; data: BodyType<ReviewSponsorSessionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reviewSponsorSession>>,
+  TError,
+  { sponsorId: number; sessionId: number; data: BodyType<ReviewSponsorSessionBody> },
+  TContext
+> => {
+  const mutationKey = ["reviewSponsorSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reviewSponsorSession>>,
+    { sponsorId: number; sessionId: number; data: BodyType<ReviewSponsorSessionBody> }
+  > = (props) => {
+    const { sponsorId, sessionId, data } = props ?? {};
+
+    return reviewSponsorSession(sponsorId, sessionId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReviewSponsorSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reviewSponsorSession>>
+>;
+export type ReviewSponsorSessionMutationBody = BodyType<ReviewSponsorSessionBody>;
+export type ReviewSponsorSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Approve a submission or request changes with feedback
+ */
+export const useReviewSponsorSession = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reviewSponsorSession>>,
+    TError,
+    { sponsorId: number; sessionId: number; data: BodyType<ReviewSponsorSessionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reviewSponsorSession>>,
+  TError,
+  { sponsorId: number; sessionId: number; data: BodyType<ReviewSponsorSessionBody> },
+  TContext
+> => {
+  return useMutation(getReviewSponsorSessionMutationOptions(options));
+};
+
+/**
+ * @summary Export approved sponsor sessions and mark their current revisions exported
+ */
+export const getExportSponsorSessionsUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/sessions/export.csv`;
+};
+
+export const exportSponsorSessions = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<string> => {
+  return customFetch<string>(getExportSponsorSessionsUrl(sponsorId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportSponsorSessionsQueryKey = (sponsorId: number) => {
+  return [`/api/admin/sponsors/${sponsorId}/sessions/export.csv`] as const;
+};
+
+export const getExportSponsorSessionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportSponsorSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportSponsorSessions>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportSponsorSessionsQueryKey(sponsorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportSponsorSessions>>> = ({ signal }) =>
+    exportSponsorSessions(sponsorId, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!sponsorId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportSponsorSessions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportSponsorSessionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportSponsorSessions>>
+>;
+export type ExportSponsorSessionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export approved sponsor sessions and mark their current revisions exported
+ */
+
+export function useExportSponsorSessions<
+  TData = Awaited<ReturnType<typeof exportSponsorSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportSponsorSessions>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportSponsorSessionsQueryOptions(sponsorId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all active and archived versions for a sponsor
+ */
+export const getListSponsorAssetsUrl = (sponsorId: number, params?: ListSponsorAssetsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/sponsors/${sponsorId}/assets?${stringifiedParams}`
+    : `/api/admin/sponsors/${sponsorId}/assets`;
+};
+
+export const listSponsorAssets = async (
+  sponsorId: number,
+  params?: ListSponsorAssetsParams,
+  options?: RequestInit,
+): Promise<ListSponsorAssets200> => {
+  return customFetch<ListSponsorAssets200>(getListSponsorAssetsUrl(sponsorId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSponsorAssetsQueryKey = (
+  sponsorId: number,
+  params?: ListSponsorAssetsParams,
+) => {
+  return [`/api/admin/sponsors/${sponsorId}/assets`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSponsorAssetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSponsorAssets>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  params?: ListSponsorAssetsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorAssets>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSponsorAssetsQueryKey(sponsorId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSponsorAssets>>> = ({ signal }) =>
+    listSponsorAssets(sponsorId, params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!sponsorId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSponsorAssets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSponsorAssetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSponsorAssets>>
+>;
+export type ListSponsorAssetsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all active and archived versions for a sponsor
+ */
+
+export function useListSponsorAssets<
+  TData = Awaited<ReturnType<typeof listSponsorAssets>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  params?: ListSponsorAssetsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorAssets>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSponsorAssetsQueryOptions(sponsorId, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Upload a validated sponsor file to App Storage
+ */
+export const getAdminUploadSponsorAssetUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/assets`;
+};
+
+export const adminUploadSponsorAsset = async (
+  sponsorId: number,
+  sponsorAssetUpload: SponsorAssetUpload,
+  options?: RequestInit,
+): Promise<SponsorAsset> => {
+  const formData = new FormData();
+  formData.append(`file`, sponsorAssetUpload.file);
+  formData.append(`category`, sponsorAssetUpload.category);
+  if (sponsorAssetUpload.sessionId !== undefined && sponsorAssetUpload.sessionId !== null) {
+    formData.append(`sessionId`, sponsorAssetUpload.sessionId.toString());
+  }
+  if (sponsorAssetUpload.presenterId !== undefined && sponsorAssetUpload.presenterId !== null) {
+    formData.append(`presenterId`, sponsorAssetUpload.presenterId.toString());
+  }
+
+  return customFetch<SponsorAsset>(getAdminUploadSponsorAssetUrl(sponsorId), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getAdminUploadSponsorAssetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUploadSponsorAsset>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorAssetUpload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminUploadSponsorAsset>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorAssetUpload> },
+  TContext
+> => {
+  const mutationKey = ["adminUploadSponsorAsset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminUploadSponsorAsset>>,
+    { sponsorId: number; data: BodyType<SponsorAssetUpload> }
+  > = (props) => {
+    const { sponsorId, data } = props ?? {};
+
+    return adminUploadSponsorAsset(sponsorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminUploadSponsorAssetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminUploadSponsorAsset>>
+>;
+export type AdminUploadSponsorAssetMutationBody = BodyType<SponsorAssetUpload>;
+export type AdminUploadSponsorAssetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Upload a validated sponsor file to App Storage
+ */
+export const useAdminUploadSponsorAsset = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUploadSponsorAsset>>,
+    TError,
+    { sponsorId: number; data: BodyType<SponsorAssetUpload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminUploadSponsorAsset>>,
+  TError,
+  { sponsorId: number; data: BodyType<SponsorAssetUpload> },
+  TContext
+> => {
+  return useMutation(getAdminUploadSponsorAssetMutationOptions(options));
+};
+
+/**
+ * @summary Archive or restore an asset version
+ */
+export const getUpdateSponsorAssetStatusUrl = (sponsorId: number, assetId: string) => {
+  return `/api/admin/sponsors/${sponsorId}/assets/${assetId}`;
+};
+
+export const updateSponsorAssetStatus = async (
+  sponsorId: number,
+  assetId: string,
+  updateSponsorAssetStatusBody: UpdateSponsorAssetStatusBody,
+  options?: RequestInit,
+): Promise<SponsorAsset> => {
+  return customFetch<SponsorAsset>(getUpdateSponsorAssetStatusUrl(sponsorId, assetId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSponsorAssetStatusBody),
+  });
+};
+
+export const getUpdateSponsorAssetStatusMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorAssetStatus>>,
+    TError,
+    { sponsorId: number; assetId: string; data: BodyType<UpdateSponsorAssetStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSponsorAssetStatus>>,
+  TError,
+  { sponsorId: number; assetId: string; data: BodyType<UpdateSponsorAssetStatusBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSponsorAssetStatus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSponsorAssetStatus>>,
+    { sponsorId: number; assetId: string; data: BodyType<UpdateSponsorAssetStatusBody> }
+  > = (props) => {
+    const { sponsorId, assetId, data } = props ?? {};
+
+    return updateSponsorAssetStatus(sponsorId, assetId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSponsorAssetStatusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSponsorAssetStatus>>
+>;
+export type UpdateSponsorAssetStatusMutationBody = BodyType<UpdateSponsorAssetStatusBody>;
+export type UpdateSponsorAssetStatusMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Archive or restore an asset version
+ */
+export const useUpdateSponsorAssetStatus = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorAssetStatus>>,
+    TError,
+    { sponsorId: number; assetId: string; data: BodyType<UpdateSponsorAssetStatusBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSponsorAssetStatus>>,
+  TError,
+  { sponsorId: number; assetId: string; data: BodyType<UpdateSponsorAssetStatusBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSponsorAssetStatusMutationOptions(options));
+};
+
+/**
+ * @summary Upload a new version and archive the previous version
+ */
+export const getReplaceSponsorAssetUrl = (sponsorId: number, assetId: string) => {
+  return `/api/admin/sponsors/${sponsorId}/assets/${assetId}/replace`;
+};
+
+export const replaceSponsorAsset = async (
+  sponsorId: number,
+  assetId: string,
+  replaceSponsorAssetBody: ReplaceSponsorAssetBody,
+  options?: RequestInit,
+): Promise<SponsorAsset> => {
+  const formData = new FormData();
+  formData.append(`file`, replaceSponsorAssetBody.file);
+
+  return customFetch<SponsorAsset>(getReplaceSponsorAssetUrl(sponsorId, assetId), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getReplaceSponsorAssetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceSponsorAsset>>,
+    TError,
+    { sponsorId: number; assetId: string; data: BodyType<ReplaceSponsorAssetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof replaceSponsorAsset>>,
+  TError,
+  { sponsorId: number; assetId: string; data: BodyType<ReplaceSponsorAssetBody> },
+  TContext
+> => {
+  const mutationKey = ["replaceSponsorAsset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof replaceSponsorAsset>>,
+    { sponsorId: number; assetId: string; data: BodyType<ReplaceSponsorAssetBody> }
+  > = (props) => {
+    const { sponsorId, assetId, data } = props ?? {};
+
+    return replaceSponsorAsset(sponsorId, assetId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReplaceSponsorAssetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof replaceSponsorAsset>>
+>;
+export type ReplaceSponsorAssetMutationBody = BodyType<ReplaceSponsorAssetBody>;
+export type ReplaceSponsorAssetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Upload a new version and archive the previous version
+ */
+export const useReplaceSponsorAsset = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceSponsorAsset>>,
+    TError,
+    { sponsorId: number; assetId: string; data: BodyType<ReplaceSponsorAssetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof replaceSponsorAsset>>,
+  TError,
+  { sponsorId: number; assetId: string; data: BodyType<ReplaceSponsorAssetBody> },
+  TContext
+> => {
+  return useMutation(getReplaceSponsorAssetMutationOptions(options));
+};
+
+/**
+ * @summary Authenticated individual file download or safe raster preview
+ */
+export const getAdminDownloadSponsorAssetUrl = (
+  sponsorId: number,
+  assetId: string,
+  params?: AdminDownloadSponsorAssetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/sponsors/${sponsorId}/assets/${assetId}/download?${stringifiedParams}`
+    : `/api/admin/sponsors/${sponsorId}/assets/${assetId}/download`;
+};
+
+export const adminDownloadSponsorAsset = async (
+  sponsorId: number,
+  assetId: string,
+  params?: AdminDownloadSponsorAssetParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getAdminDownloadSponsorAssetUrl(sponsorId, assetId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAdminDownloadSponsorAssetQueryKey = (
+  sponsorId: number,
+  assetId: string,
+  params?: AdminDownloadSponsorAssetParams,
+) => {
+  return [
+    `/api/admin/sponsors/${sponsorId}/assets/${assetId}/download`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getAdminDownloadSponsorAssetQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminDownloadSponsorAsset>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  assetId: string,
+  params?: AdminDownloadSponsorAssetParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof adminDownloadSponsorAsset>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getAdminDownloadSponsorAssetQueryKey(sponsorId, assetId, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof adminDownloadSponsorAsset>>> = ({
+    signal,
+  }) => adminDownloadSponsorAsset(sponsorId, assetId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(sponsorId && assetId),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof adminDownloadSponsorAsset>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type AdminDownloadSponsorAssetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminDownloadSponsorAsset>>
+>;
+export type AdminDownloadSponsorAssetQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Authenticated individual file download or safe raster preview
+ */
+
+export function useAdminDownloadSponsorAsset<
+  TData = Awaited<ReturnType<typeof adminDownloadSponsorAsset>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  assetId: string,
+  params?: AdminDownloadSponsorAssetParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof adminDownloadSponsorAsset>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminDownloadSponsorAssetQueryOptions(
+    sponsorId,
+    assetId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Stream selected assets as a ZIP with manifest.csv
+ */
+export const getDownloadSponsorAssetSelectionUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/assets/download.zip`;
+};
+
+export const downloadSponsorAssetSelection = async (
+  sponsorId: number,
+  downloadSponsorAssetSelectionBody: DownloadSponsorAssetSelectionBody,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadSponsorAssetSelectionUrl(sponsorId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(downloadSponsorAssetSelectionBody),
+  });
+};
+
+export const getDownloadSponsorAssetSelectionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof downloadSponsorAssetSelection>>,
+    TError,
+    { sponsorId: number; data: BodyType<DownloadSponsorAssetSelectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof downloadSponsorAssetSelection>>,
+  TError,
+  { sponsorId: number; data: BodyType<DownloadSponsorAssetSelectionBody> },
+  TContext
+> => {
+  const mutationKey = ["downloadSponsorAssetSelection"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof downloadSponsorAssetSelection>>,
+    { sponsorId: number; data: BodyType<DownloadSponsorAssetSelectionBody> }
+  > = (props) => {
+    const { sponsorId, data } = props ?? {};
+
+    return downloadSponsorAssetSelection(sponsorId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DownloadSponsorAssetSelectionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof downloadSponsorAssetSelection>>
+>;
+export type DownloadSponsorAssetSelectionMutationBody = BodyType<DownloadSponsorAssetSelectionBody>;
+export type DownloadSponsorAssetSelectionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stream selected assets as a ZIP with manifest.csv
+ */
+export const useDownloadSponsorAssetSelection = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof downloadSponsorAssetSelection>>,
+    TError,
+    { sponsorId: number; data: BodyType<DownloadSponsorAssetSelectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof downloadSponsorAssetSelection>>,
+  TError,
+  { sponsorId: number; data: BodyType<DownloadSponsorAssetSelectionBody> },
+  TContext
+> => {
+  return useMutation(getDownloadSponsorAssetSelectionMutationOptions(options));
+};
+
+/**
+ * @summary Stream the complete active sponsor folder with manifest.csv
+ */
+export const getDownloadCompleteSponsorFolderUrl = (sponsorId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/assets/complete.zip`;
+};
+
+export const downloadCompleteSponsorFolder = async (
+  sponsorId: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadCompleteSponsorFolderUrl(sponsorId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadCompleteSponsorFolderQueryKey = (sponsorId: number) => {
+  return [`/api/admin/sponsors/${sponsorId}/assets/complete.zip`] as const;
+};
+
+export const getDownloadCompleteSponsorFolderQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDownloadCompleteSponsorFolderQueryKey(sponsorId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>> = ({
+    signal,
+  }) => downloadCompleteSponsorFolder(sponsorId, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!sponsorId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadCompleteSponsorFolderQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>
+>;
+export type DownloadCompleteSponsorFolderQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Stream the complete active sponsor folder with manifest.csv
+ */
+
+export function useDownloadCompleteSponsorFolder<
+  TData = Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>,
+  TError = ErrorType<unknown>,
+>(
+  sponsorId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadCompleteSponsorFolder>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadCompleteSponsorFolderQueryOptions(sponsorId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Search and filter the all-sponsor asset library
+ */
+export const getListAdminSponsorAssetLibraryUrl = (params?: ListAdminSponsorAssetLibraryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/sponsor-assets?${stringifiedParams}`
+    : `/api/admin/sponsor-assets`;
+};
+
+export const listAdminSponsorAssetLibrary = async (
+  params?: ListAdminSponsorAssetLibraryParams,
+  options?: RequestInit,
+): Promise<ListAdminSponsorAssetLibrary200> => {
+  return customFetch<ListAdminSponsorAssetLibrary200>(getListAdminSponsorAssetLibraryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminSponsorAssetLibraryQueryKey = (
+  params?: ListAdminSponsorAssetLibraryParams,
+) => {
+  return [`/api/admin/sponsor-assets`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminSponsorAssetLibraryQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminSponsorAssetLibraryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminSponsorAssetLibraryQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>> = ({
+    signal,
+  }) => listAdminSponsorAssetLibrary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminSponsorAssetLibraryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>
+>;
+export type ListAdminSponsorAssetLibraryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Search and filter the all-sponsor asset library
+ */
+
+export function useListAdminSponsorAssetLibrary<
+  TData = Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminSponsorAssetLibraryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAdminSponsorAssetLibrary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminSponsorAssetLibraryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Build safe-size ZIP batches for a complete offline backup
+ */
+export const getPlanAllSponsorBackupUrl = () => {
+  return `/api/admin/sponsor-assets/backup-plan`;
+};
+
+export const planAllSponsorBackup = async (
+  planAllSponsorBackupBody: PlanAllSponsorBackupBody,
+  options?: RequestInit,
+): Promise<PlanAllSponsorBackup200> => {
+  return customFetch<PlanAllSponsorBackup200>(getPlanAllSponsorBackupUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(planAllSponsorBackupBody),
+  });
+};
+
+export const getPlanAllSponsorBackupMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof planAllSponsorBackup>>,
+    TError,
+    { data: BodyType<PlanAllSponsorBackupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof planAllSponsorBackup>>,
+  TError,
+  { data: BodyType<PlanAllSponsorBackupBody> },
+  TContext
+> => {
+  const mutationKey = ["planAllSponsorBackup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof planAllSponsorBackup>>,
+    { data: BodyType<PlanAllSponsorBackupBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return planAllSponsorBackup(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PlanAllSponsorBackupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof planAllSponsorBackup>>
+>;
+export type PlanAllSponsorBackupMutationBody = BodyType<PlanAllSponsorBackupBody>;
+export type PlanAllSponsorBackupMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Build safe-size ZIP batches for a complete offline backup
+ */
+export const usePlanAllSponsorBackup = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof planAllSponsorBackup>>,
+    TError,
+    { data: BodyType<PlanAllSponsorBackupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof planAllSponsorBackup>>,
+  TError,
+  { data: BodyType<PlanAllSponsorBackupBody> },
+  TContext
+> => {
+  return useMutation(getPlanAllSponsorBackupMutationOptions(options));
+};
+
+/**
+ * @summary Stream one planned all-sponsor backup batch without temporary files
+ */
+export const getDownloadAllSponsorBackupBatchUrl = () => {
+  return `/api/admin/sponsor-assets/backup.zip`;
+};
+
+export const downloadAllSponsorBackupBatch = async (
+  downloadAllSponsorBackupBatchBody: DownloadAllSponsorBackupBatchBody,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadAllSponsorBackupBatchUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(downloadAllSponsorBackupBatchBody),
+  });
+};
+
+export const getDownloadAllSponsorBackupBatchMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>,
+    TError,
+    { data: BodyType<DownloadAllSponsorBackupBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>,
+  TError,
+  { data: BodyType<DownloadAllSponsorBackupBatchBody> },
+  TContext
+> => {
+  const mutationKey = ["downloadAllSponsorBackupBatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>,
+    { data: BodyType<DownloadAllSponsorBackupBatchBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return downloadAllSponsorBackupBatch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DownloadAllSponsorBackupBatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>
+>;
+export type DownloadAllSponsorBackupBatchMutationBody = BodyType<DownloadAllSponsorBackupBatchBody>;
+export type DownloadAllSponsorBackupBatchMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stream one planned all-sponsor backup batch without temporary files
+ */
+export const useDownloadAllSponsorBackupBatch = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>,
+    TError,
+    { data: BodyType<DownloadAllSponsorBackupBatchBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof downloadAllSponsorBackupBatch>>,
+  TError,
+  { data: BodyType<DownloadAllSponsorBackupBatchBody> },
+  TContext
+> => {
+  return useMutation(getDownloadAllSponsorBackupBatchMutationOptions(options));
+};
+
+/**
+ * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
+ */
+export const getExchangeSponsorAccessTokenUrl = (token: string) => {
+  return `/api/sponsor/access/${token}`;
+};
+
+export const exchangeSponsorAccessToken = async (
+  token: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getExchangeSponsorAccessTokenUrl(token), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getExchangeSponsorAccessTokenMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exchangeSponsorAccessToken>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof exchangeSponsorAccessToken>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  const mutationKey = ["exchangeSponsorAccessToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof exchangeSponsorAccessToken>>,
+    { token: string }
+  > = (props) => {
+    const { token } = props ?? {};
+
+    return exchangeSponsorAccessToken(token, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExchangeSponsorAccessTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof exchangeSponsorAccessToken>>
+>;
+
+export type ExchangeSponsorAccessTokenMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
+ */
+export const useExchangeSponsorAccessToken = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exchangeSponsorAccessToken>>,
+    TError,
+    { token: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof exchangeSponsorAccessToken>>,
+  TError,
+  { token: string },
+  TContext
+> => {
+  return useMutation(getExchangeSponsorAccessTokenMutationOptions(options));
+};
+
+/**
+ * @summary Clear the sponsor workspace session cookie
+ */
+export const getLogoutSponsorUrl = () => {
+  return `/api/sponsor/logout`;
+};
+
+export const logoutSponsor = async (options?: RequestInit): Promise<void> => {
+  return customFetch<void>(getLogoutSponsorUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLogoutSponsorMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logoutSponsor>>, TError, void, TContext>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<Awaited<ReturnType<typeof logoutSponsor>>, TError, void, TContext> => {
+  const mutationKey = ["logoutSponsor"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutSponsor>>, void> = () => {
+    return logoutSponsor(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LogoutSponsorMutationResult = NonNullable<Awaited<ReturnType<typeof logoutSponsor>>>;
+
+export type LogoutSponsorMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Clear the sponsor workspace session cookie
+ */
+export const useLogoutSponsor = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logoutSponsor>>, TError, void, TContext>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<Awaited<ReturnType<typeof logoutSponsor>>, TError, void, TContext> => {
+  return useMutation(getLogoutSponsorMutationOptions(options));
+};
+
+/**
+ * @summary Get the private privacy-redacted sponsor workspace
+ */
+export const getGetSponsorWorkspaceUrl = () => {
+  return `/api/sponsor/workspace`;
+};
+
+export const getSponsorWorkspace = async (
+  options?: RequestInit,
+): Promise<SponsorWorkspacePublic> => {
+  return customFetch<SponsorWorkspacePublic>(getGetSponsorWorkspaceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSponsorWorkspaceQueryKey = () => {
+  return [`/api/sponsor/workspace`] as const;
+};
+
+export const getGetSponsorWorkspaceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSponsorWorkspace>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSponsorWorkspace>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSponsorWorkspaceQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSponsorWorkspace>>> = ({ signal }) =>
+    getSponsorWorkspace({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSponsorWorkspace>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSponsorWorkspaceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSponsorWorkspace>>
+>;
+export type GetSponsorWorkspaceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the private privacy-redacted sponsor workspace
+ */
+
+export function useGetSponsorWorkspace<
+  TData = Awaited<ReturnType<typeof getSponsorWorkspace>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSponsorWorkspace>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSponsorWorkspaceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Explicitly confirm one zero-value Sponsor staff registration
+ */
+export const getRegisterSponsorStaffUrl = () => {
+  return `/api/sponsor/staff`;
+};
+
+export const registerSponsorStaff = async (
+  sponsorStaffInput: SponsorStaffInput,
+  options?: RequestInit,
+): Promise<SponsorStaff> => {
+  return customFetch<SponsorStaff>(getRegisterSponsorStaffUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorStaffInput),
+  });
+};
+
+export const getRegisterSponsorStaffMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof registerSponsorStaff>>,
+    TError,
+    { data: BodyType<SponsorStaffInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof registerSponsorStaff>>,
+  TError,
+  { data: BodyType<SponsorStaffInput> },
+  TContext
+> => {
+  const mutationKey = ["registerSponsorStaff"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof registerSponsorStaff>>,
+    { data: BodyType<SponsorStaffInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return registerSponsorStaff(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegisterSponsorStaffMutationResult = NonNullable<
+  Awaited<ReturnType<typeof registerSponsorStaff>>
+>;
+export type RegisterSponsorStaffMutationBody = BodyType<SponsorStaffInput>;
+export type RegisterSponsorStaffMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Explicitly confirm one zero-value Sponsor staff registration
+ */
+export const useRegisterSponsorStaff = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof registerSponsorStaff>>,
+    TError,
+    { data: BodyType<SponsorStaffInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof registerSponsorStaff>>,
+  TError,
+  { data: BodyType<SponsorStaffInput> },
+  TContext
+> => {
+  return useMutation(getRegisterSponsorStaffMutationOptions(options));
+};
+
+/**
+ * @summary Change or replace a sponsor staff attendee
+ */
+export const getUpdateSponsorStaffUrl = (bookingId: number) => {
+  return `/api/sponsor/staff/${bookingId}`;
+};
+
+export const updateSponsorStaff = async (
+  bookingId: number,
+  sponsorStaffInput: SponsorStaffInput,
+  options?: RequestInit,
+): Promise<SponsorStaff> => {
+  return customFetch<SponsorStaff>(getUpdateSponsorStaffUrl(bookingId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorStaffInput),
+  });
+};
+
+export const getUpdateSponsorStaffMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorStaff>>,
+    TError,
+    { bookingId: number; data: BodyType<SponsorStaffInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSponsorStaff>>,
+  TError,
+  { bookingId: number; data: BodyType<SponsorStaffInput> },
+  TContext
+> => {
+  const mutationKey = ["updateSponsorStaff"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSponsorStaff>>,
+    { bookingId: number; data: BodyType<SponsorStaffInput> }
+  > = (props) => {
+    const { bookingId, data } = props ?? {};
+
+    return updateSponsorStaff(bookingId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSponsorStaffMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSponsorStaff>>
+>;
+export type UpdateSponsorStaffMutationBody = BodyType<SponsorStaffInput>;
+export type UpdateSponsorStaffMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Change or replace a sponsor staff attendee
+ */
+export const useUpdateSponsorStaff = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorStaff>>,
+    TError,
+    { bookingId: number; data: BodyType<SponsorStaffInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSponsorStaff>>,
+  TError,
+  { bookingId: number; data: BodyType<SponsorStaffInput> },
+  TContext
+> => {
+  return useMutation(getUpdateSponsorStaffMutationOptions(options));
+};
+
+/**
+ * @summary Cancel sponsor staff attendance and restore the staff allocation
+ */
+export const getCancelSponsorStaffUrl = (bookingId: number) => {
+  return `/api/sponsor/staff/${bookingId}`;
+};
+
+export const cancelSponsorStaff = async (
+  bookingId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getCancelSponsorStaffUrl(bookingId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getCancelSponsorStaffMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelSponsorStaff>>,
+    TError,
+    { bookingId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof cancelSponsorStaff>>,
+  TError,
+  { bookingId: number },
+  TContext
+> => {
+  const mutationKey = ["cancelSponsorStaff"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof cancelSponsorStaff>>,
+    { bookingId: number }
+  > = (props) => {
+    const { bookingId } = props ?? {};
+
+    return cancelSponsorStaff(bookingId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CancelSponsorStaffMutationResult = NonNullable<
+  Awaited<ReturnType<typeof cancelSponsorStaff>>
+>;
+
+export type CancelSponsorStaffMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Cancel sponsor staff attendance and restore the staff allocation
+ */
+export const useCancelSponsorStaff = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof cancelSponsorStaff>>,
+    TError,
+    { bookingId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof cancelSponsorStaff>>,
+  TError,
+  { bookingId: number },
+  TContext
+> => {
+  return useMutation(getCancelSponsorStaffMutationOptions(options));
+};
+
+/**
+ * @summary Request more VIP or staff places and immediately notify the internal team
+ */
+export const getRequestMoreSponsorPassesUrl = () => {
+  return `/api/sponsor/pass-requests`;
+};
+
+export const requestMoreSponsorPasses = async (
+  requestMoreSponsorPassesBody: RequestMoreSponsorPassesBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRequestMoreSponsorPassesUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(requestMoreSponsorPassesBody),
+  });
+};
+
+export const getRequestMoreSponsorPassesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestMoreSponsorPasses>>,
+    TError,
+    { data: BodyType<RequestMoreSponsorPassesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestMoreSponsorPasses>>,
+  TError,
+  { data: BodyType<RequestMoreSponsorPassesBody> },
+  TContext
+> => {
+  const mutationKey = ["requestMoreSponsorPasses"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestMoreSponsorPasses>>,
+    { data: BodyType<RequestMoreSponsorPassesBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestMoreSponsorPasses(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestMoreSponsorPassesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestMoreSponsorPasses>>
+>;
+export type RequestMoreSponsorPassesMutationBody = BodyType<RequestMoreSponsorPassesBody>;
+export type RequestMoreSponsorPassesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Request more VIP or staff places and immediately notify the internal team
+ */
+export const useRequestMoreSponsorPasses = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestMoreSponsorPasses>>,
+    TError,
+    { data: BodyType<RequestMoreSponsorPassesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestMoreSponsorPasses>>,
+  TError,
+  { data: BodyType<RequestMoreSponsorPassesBody> },
+  TContext
+> => {
+  return useMutation(getRequestMoreSponsorPassesMutationOptions(options));
+};
+
+/**
+ * @summary Save a sponsor session draft; approved edits return it to submitted
+ */
+export const getUpdateSponsorSessionUrl = (sessionId: number) => {
+  return `/api/sponsor/sessions/${sessionId}`;
+};
+
+export const updateSponsorSession = async (
+  sessionId: number,
+  sponsorSessionInput: SponsorSessionInput,
+  options?: RequestInit,
+): Promise<SponsorSession> => {
+  return customFetch<SponsorSession>(getUpdateSponsorSessionUrl(sessionId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorSessionInput),
+  });
+};
+
+export const getUpdateSponsorSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorSession>>,
+    TError,
+    { sessionId: number; data: BodyType<SponsorSessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSponsorSession>>,
+  TError,
+  { sessionId: number; data: BodyType<SponsorSessionInput> },
+  TContext
+> => {
+  const mutationKey = ["updateSponsorSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSponsorSession>>,
+    { sessionId: number; data: BodyType<SponsorSessionInput> }
+  > = (props) => {
+    const { sessionId, data } = props ?? {};
+
+    return updateSponsorSession(sessionId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSponsorSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSponsorSession>>
+>;
+export type UpdateSponsorSessionMutationBody = BodyType<SponsorSessionInput>;
+export type UpdateSponsorSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Save a sponsor session draft; approved edits return it to submitted
+ */
+export const useUpdateSponsorSession = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSponsorSession>>,
+    TError,
+    { sessionId: number; data: BodyType<SponsorSessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSponsorSession>>,
+  TError,
+  { sessionId: number; data: BodyType<SponsorSessionInput> },
+  TContext
+> => {
+  return useMutation(getUpdateSponsorSessionMutationOptions(options));
+};
+
+/**
+ * @summary Validate and submit a sponsor session for review
+ */
+export const getSubmitSponsorSessionUrl = (sessionId: number) => {
+  return `/api/sponsor/sessions/${sessionId}/submit`;
+};
+
+export const submitSponsorSession = async (
+  sessionId: number,
+  options?: RequestInit,
+): Promise<SponsorSession> => {
+  return customFetch<SponsorSession>(getSubmitSponsorSessionUrl(sessionId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSubmitSponsorSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitSponsorSession>>,
+    TError,
+    { sessionId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitSponsorSession>>,
+  TError,
+  { sessionId: number },
+  TContext
+> => {
+  const mutationKey = ["submitSponsorSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitSponsorSession>>,
+    { sessionId: number }
+  > = (props) => {
+    const { sessionId } = props ?? {};
+
+    return submitSponsorSession(sessionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitSponsorSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitSponsorSession>>
+>;
+
+export type SubmitSponsorSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Validate and submit a sponsor session for review
+ */
+export const useSubmitSponsorSession = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitSponsorSession>>,
+    TError,
+    { sessionId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitSponsorSession>>,
+  TError,
+  { sessionId: number },
+  TContext
+> => {
+  return useMutation(getSubmitSponsorSessionMutationOptions(options));
+};
+
+/**
+ * @summary Upload a validated sponsor deliverable to App Storage
+ */
+export const getUploadSponsorAssetUrl = () => {
+  return `/api/sponsor/assets`;
+};
+
+export const uploadSponsorAsset = async (
+  sponsorAssetUpload: SponsorAssetUpload,
+  options?: RequestInit,
+): Promise<SponsorAsset> => {
+  const formData = new FormData();
+  formData.append(`file`, sponsorAssetUpload.file);
+  formData.append(`category`, sponsorAssetUpload.category);
+  if (sponsorAssetUpload.sessionId !== undefined && sponsorAssetUpload.sessionId !== null) {
+    formData.append(`sessionId`, sponsorAssetUpload.sessionId.toString());
+  }
+  if (sponsorAssetUpload.presenterId !== undefined && sponsorAssetUpload.presenterId !== null) {
+    formData.append(`presenterId`, sponsorAssetUpload.presenterId.toString());
+  }
+
+  return customFetch<SponsorAsset>(getUploadSponsorAssetUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getUploadSponsorAssetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadSponsorAsset>>,
+    TError,
+    { data: BodyType<SponsorAssetUpload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadSponsorAsset>>,
+  TError,
+  { data: BodyType<SponsorAssetUpload> },
+  TContext
+> => {
+  const mutationKey = ["uploadSponsorAsset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadSponsorAsset>>,
+    { data: BodyType<SponsorAssetUpload> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return uploadSponsorAsset(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadSponsorAssetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadSponsorAsset>>
+>;
+export type UploadSponsorAssetMutationBody = BodyType<SponsorAssetUpload>;
+export type UploadSponsorAssetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Upload a validated sponsor deliverable to App Storage
+ */
+export const useUploadSponsorAsset = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadSponsorAsset>>,
+    TError,
+    { data: BodyType<SponsorAssetUpload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadSponsorAsset>>,
+  TError,
+  { data: BodyType<SponsorAssetUpload> },
+  TContext
+> => {
+  return useMutation(getUploadSponsorAssetMutationOptions(options));
+};
+
+/**
+ * @summary Upload a new version and archive the previous sponsor file
+ */
+export const getReplaceSponsorWorkspaceAssetUrl = (assetId: string) => {
+  return `/api/sponsor/assets/${assetId}/replace`;
+};
+
+export const replaceSponsorWorkspaceAsset = async (
+  assetId: string,
+  replaceSponsorWorkspaceAssetBody: ReplaceSponsorWorkspaceAssetBody,
+  options?: RequestInit,
+): Promise<SponsorAsset> => {
+  const formData = new FormData();
+  formData.append(`file`, replaceSponsorWorkspaceAssetBody.file);
+
+  return customFetch<SponsorAsset>(getReplaceSponsorWorkspaceAssetUrl(assetId), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getReplaceSponsorWorkspaceAssetMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>,
+    TError,
+    { assetId: string; data: BodyType<ReplaceSponsorWorkspaceAssetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>,
+  TError,
+  { assetId: string; data: BodyType<ReplaceSponsorWorkspaceAssetBody> },
+  TContext
+> => {
+  const mutationKey = ["replaceSponsorWorkspaceAsset"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>,
+    { assetId: string; data: BodyType<ReplaceSponsorWorkspaceAssetBody> }
+  > = (props) => {
+    const { assetId, data } = props ?? {};
+
+    return replaceSponsorWorkspaceAsset(assetId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReplaceSponsorWorkspaceAssetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>
+>;
+export type ReplaceSponsorWorkspaceAssetMutationBody = BodyType<ReplaceSponsorWorkspaceAssetBody>;
+export type ReplaceSponsorWorkspaceAssetMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Upload a new version and archive the previous sponsor file
+ */
+export const useReplaceSponsorWorkspaceAsset = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>,
+    TError,
+    { assetId: string; data: BodyType<ReplaceSponsorWorkspaceAssetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof replaceSponsorWorkspaceAsset>>,
+  TError,
+  { assetId: string; data: BodyType<ReplaceSponsorWorkspaceAssetBody> },
+  TContext
+> => {
+  return useMutation(getReplaceSponsorWorkspaceAssetMutationOptions(options));
+};
+
+/**
+ * @summary Download an authenticated sponsor file
+ */
+export const getDownloadSponsorWorkspaceAssetUrl = (assetId: string) => {
+  return `/api/sponsor/assets/${assetId}/download`;
+};
+
+export const downloadSponsorWorkspaceAsset = async (
+  assetId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadSponsorWorkspaceAssetUrl(assetId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadSponsorWorkspaceAssetQueryKey = (assetId: string) => {
+  return [`/api/sponsor/assets/${assetId}/download`] as const;
+};
+
+export const getDownloadSponsorWorkspaceAssetQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>,
+  TError = ErrorType<unknown>,
+>(
+  assetId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDownloadSponsorWorkspaceAssetQueryKey(assetId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>> = ({
+    signal,
+  }) => downloadSponsorWorkspaceAsset(assetId, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, enabled: !!assetId, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadSponsorWorkspaceAssetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>
+>;
+export type DownloadSponsorWorkspaceAssetQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download an authenticated sponsor file
+ */
+
+export function useDownloadSponsorWorkspaceAsset<
+  TData = Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>,
+  TError = ErrorType<unknown>,
+>(
+  assetId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadSponsorWorkspaceAsset>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadSponsorWorkspaceAssetQueryOptions(assetId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Acknowledge the current version of a required logistics document
+ */
+export const getAcknowledgeSponsorDocumentUrl = (documentId: number) => {
+  return `/api/sponsor/documents/${documentId}/acknowledge`;
+};
+
+export const acknowledgeSponsorDocument = async (
+  documentId: number,
+  acknowledgeSponsorDocumentBody: AcknowledgeSponsorDocumentBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getAcknowledgeSponsorDocumentUrl(documentId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(acknowledgeSponsorDocumentBody),
+  });
+};
+
+export const getAcknowledgeSponsorDocumentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acknowledgeSponsorDocument>>,
+    TError,
+    { documentId: number; data: BodyType<AcknowledgeSponsorDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof acknowledgeSponsorDocument>>,
+  TError,
+  { documentId: number; data: BodyType<AcknowledgeSponsorDocumentBody> },
+  TContext
+> => {
+  const mutationKey = ["acknowledgeSponsorDocument"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof acknowledgeSponsorDocument>>,
+    { documentId: number; data: BodyType<AcknowledgeSponsorDocumentBody> }
+  > = (props) => {
+    const { documentId, data } = props ?? {};
+
+    return acknowledgeSponsorDocument(documentId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AcknowledgeSponsorDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof acknowledgeSponsorDocument>>
+>;
+export type AcknowledgeSponsorDocumentMutationBody = BodyType<AcknowledgeSponsorDocumentBody>;
+export type AcknowledgeSponsorDocumentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Acknowledge the current version of a required logistics document
+ */
+export const useAcknowledgeSponsorDocument = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acknowledgeSponsorDocument>>,
+    TError,
+    { documentId: number; data: BodyType<AcknowledgeSponsorDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof acknowledgeSponsorDocument>>,
+  TError,
+  { documentId: number; data: BodyType<AcknowledgeSponsorDocumentBody> },
+  TContext
+> => {
+  return useMutation(getAcknowledgeSponsorDocumentMutationOptions(options));
+};

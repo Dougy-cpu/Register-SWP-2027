@@ -23,6 +23,10 @@ interface NotificationEmail {
   notifyIncomplete: boolean;
   notifyCheckoutExpired: boolean;
   notifyBillingEdit: boolean;
+  notifySponsorAdmin: boolean;
+  notifySponsorPasses: boolean;
+  notifySponsorContent: boolean;
+  notifySponsorDeadlines: boolean;
   createdAt: string;
 }
 
@@ -137,6 +141,10 @@ export default function AdminNotifications() {
   const [newNotifyIncomplete, setNewNotifyIncomplete] = useState(false);
   const [newNotifyCheckoutExpired, setNewNotifyCheckoutExpired] = useState(false);
   const [newNotifyBillingEdit, setNewNotifyBillingEdit] = useState(true);
+  const [newNotifySponsorAdmin, setNewNotifySponsorAdmin] = useState(true);
+  const [newNotifySponsorPasses, setNewNotifySponsorPasses] = useState(true);
+  const [newNotifySponsorContent, setNewNotifySponsorContent] = useState(true);
+  const [newNotifySponsorDeadlines, setNewNotifySponsorDeadlines] = useState(true);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -181,7 +189,11 @@ export default function AdminNotifications() {
       !newNotifyComplete &&
       !newNotifyIncomplete &&
       !newNotifyCheckoutExpired &&
-      !newNotifyBillingEdit
+      !newNotifyBillingEdit &&
+      !newNotifySponsorAdmin &&
+      !newNotifySponsorPasses &&
+      !newNotifySponsorContent &&
+      !newNotifySponsorDeadlines
     ) {
       setError("Please enable at least one notification type");
       return;
@@ -197,6 +209,10 @@ export default function AdminNotifications() {
           notifyIncomplete: newNotifyIncomplete,
           notifyCheckoutExpired: newNotifyCheckoutExpired,
           notifyBillingEdit: newNotifyBillingEdit,
+          notifySponsorAdmin: newNotifySponsorAdmin,
+          notifySponsorPasses: newNotifySponsorPasses,
+          notifySponsorContent: newNotifySponsorContent,
+          notifySponsorDeadlines: newNotifySponsorDeadlines,
         }),
       });
       if (res.ok) {
@@ -208,6 +224,10 @@ export default function AdminNotifications() {
         setNewNotifyIncomplete(false);
         setNewNotifyCheckoutExpired(false);
         setNewNotifyBillingEdit(true);
+        setNewNotifySponsorAdmin(true);
+        setNewNotifySponsorPasses(true);
+        setNewNotifySponsorContent(true);
+        setNewNotifySponsorDeadlines(true);
       } else {
         const body = await res.json().catch(() => ({}));
         setError(body.error || "Failed to add email");
@@ -219,7 +239,15 @@ export default function AdminNotifications() {
 
   const handleToggle = async (
     id: number,
-    field: "notifyComplete" | "notifyIncomplete" | "notifyCheckoutExpired" | "notifyBillingEdit",
+    field:
+      | "notifyComplete"
+      | "notifyIncomplete"
+      | "notifyCheckoutExpired"
+      | "notifyBillingEdit"
+      | "notifySponsorAdmin"
+      | "notifySponsorPasses"
+      | "notifySponsorContent"
+      | "notifySponsorDeadlines",
     val: boolean,
   ) => {
     setTogglingId(id);
@@ -280,9 +308,13 @@ export default function AdminNotifications() {
   const incompleteCount = (emails || []).filter((e) => e.notifyIncomplete).length;
   const checkoutExpiredCount = (emails || []).filter((e) => e.notifyCheckoutExpired).length;
   const billingEditCount = (emails || []).filter((e) => e.notifyBillingEdit).length;
+  const sponsorAdminCount = (emails || []).filter((e) => e.notifySponsorAdmin).length;
+  const sponsorPassesCount = (emails || []).filter((e) => e.notifySponsorPasses).length;
+  const sponsorContentCount = (emails || []).filter((e) => e.notifySponsorContent).length;
+  const sponsorDeadlinesCount = (emails || []).filter((e) => e.notifySponsorDeadlines).length;
 
   return (
-    <AdminLayout title="Order Notifications">
+    <AdminLayout title="Notifications">
       <div className="max-w-3xl">
         {/* Tabs */}
         <div className="flex border-b border-border mb-8">
@@ -346,6 +378,11 @@ export default function AdminNotifications() {
                   <strong>Billing / PO edits</strong> - Sent when an invoice customer self-serves a
                   PO number or billing detail change via the management link. Shows old vs new
                   values so finance can update internal records.
+                </p>
+                <p>
+                  <strong>Sponsor notifications</strong> - Route sponsor administration, pass and
+                  staff activity, content and asset submissions, and deadline alerts to the right
+                  team members. Passive portal views and downloads do not send an email.
                 </p>
               </div>
             </div>
@@ -425,6 +462,46 @@ export default function AdminNotifications() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t">
+                  {[
+                    [
+                      "Sponsor administration",
+                      "Records, access and welcome email activity",
+                      newNotifySponsorAdmin,
+                      setNewNotifySponsorAdmin,
+                    ],
+                    [
+                      "Sponsor passes & staff",
+                      "Redemptions, staff changes and pass requests",
+                      newNotifySponsorPasses,
+                      setNewNotifySponsorPasses,
+                    ],
+                    [
+                      "Sponsor content & assets",
+                      "Sessions, speakers, files and logistics",
+                      newNotifySponsorContent,
+                      setNewNotifySponsorContent,
+                    ],
+                    [
+                      "Sponsor deadlines",
+                      "Daily overdue deliverable alerts",
+                      newNotifySponsorDeadlines,
+                      setNewNotifySponsorDeadlines,
+                    ],
+                  ].map(([label, description, enabled, setter]) => (
+                    <div key={String(label)} className="flex items-center gap-3">
+                      <Toggle
+                        enabled={enabled as boolean}
+                        onChange={setter as (value: boolean) => void}
+                      />
+                      <div>
+                        <p className="text-sm font-medium">{String(label)}</p>
+                        <p className="text-xs text-muted-foreground">{String(description)}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
@@ -570,6 +647,37 @@ export default function AdminNotifications() {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
+
+                        <div className="sm:col-span-6 rounded-md bg-slate-50 border p-3 grid sm:grid-cols-4 gap-3">
+                          {[
+                            ["Sponsor admin", "notifySponsorAdmin", e.notifySponsorAdmin],
+                            ["Passes & staff", "notifySponsorPasses", e.notifySponsorPasses],
+                            ["Content & assets", "notifySponsorContent", e.notifySponsorContent],
+                            ["Deadlines", "notifySponsorDeadlines", e.notifySponsorDeadlines],
+                          ].map(([label, field, enabled]) => (
+                            <div
+                              key={String(field)}
+                              className="flex items-center justify-between sm:justify-start gap-2"
+                            >
+                              <Toggle
+                                enabled={enabled as boolean}
+                                onChange={(val) =>
+                                  handleToggle(
+                                    e.id,
+                                    field as
+                                      | "notifySponsorAdmin"
+                                      | "notifySponsorPasses"
+                                      | "notifySponsorContent"
+                                      | "notifySponsorDeadlines",
+                                    val,
+                                  )
+                                }
+                                disabled={togglingId === e.id}
+                              />
+                              <span className="text-xs font-medium">{String(label)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -591,6 +699,22 @@ export default function AdminNotifications() {
                       <span>
                         <strong className="text-foreground">{billingEditCount}</strong> receive
                         billing / PO edit notifications
+                      </span>
+                      <span>
+                        <strong className="text-foreground">{sponsorAdminCount}</strong> sponsor
+                        admin
+                      </span>
+                      <span>
+                        <strong className="text-foreground">{sponsorPassesCount}</strong> sponsor
+                        passes
+                      </span>
+                      <span>
+                        <strong className="text-foreground">{sponsorContentCount}</strong> sponsor
+                        content
+                      </span>
+                      <span>
+                        <strong className="text-foreground">{sponsorDeadlinesCount}</strong> sponsor
+                        deadlines
                       </span>
                     </div>
                   )}

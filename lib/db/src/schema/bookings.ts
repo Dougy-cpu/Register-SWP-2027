@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sponsorsTable } from "./sponsors";
 
 export const bookingStatusEnum = pgEnum("booking_status", [
   "partial",
@@ -30,6 +31,12 @@ export const attendeeTypeEnum = pgEnum("attendee_type", ["hr_professional", "con
 
 export const paymentMethodEnum = pgEnum("payment_method", ["card", "invoice"]);
 
+export const registrationSourceEnum = pgEnum("registration_source", [
+  "checkout",
+  "manual",
+  "sponsor_staff",
+]);
+
 export const bookingsTable = pgTable(
   "bookings",
   {
@@ -47,6 +54,10 @@ export const bookingsTable = pgTable(
     totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull().default("0"),
     paymentMethod: paymentMethodEnum("payment_method"),
     manualEntry: boolean("manual_entry").notNull().default(false),
+    registrationSource: registrationSourceEnum("registration_source").notNull().default("checkout"),
+    sponsorId: integer("sponsor_id").references(() => sponsorsTable.id, {
+      onDelete: "set null",
+    }),
     stripeSessionId: text("stripe_session_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     stripeInvoiceId: text("stripe_invoice_id"),
@@ -115,6 +126,11 @@ export const bookingsTable = pgTable(
     orderReferenceUniq: uniqueIndex("bookings_order_reference_uniq").on(table.orderReference),
     // Admin filter on promo codes ("show me everyone who used FREEPASS").
     promoCodeIdx: index("bookings_promo_code_idx").on(table.promoCode),
+    sponsorSourceIdx: index("bookings_sponsor_source_idx").on(
+      table.sponsorId,
+      table.registrationSource,
+      table.status,
+    ),
   }),
 );
 
