@@ -144,3 +144,6 @@ channel = "stable-25_05"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[objectStorage]
+defaultBucketID = "replit-objstore-c485700e-5827-4be8-94d0-5465b94db677"
