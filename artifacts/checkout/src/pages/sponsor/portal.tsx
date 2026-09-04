@@ -341,7 +341,7 @@ export default function SponsorPortal() {
             <span>
               <strong className="block text-lg">Scan badge</strong>
               <span className="text-sm text-muted-foreground">
-                Activate this phone, complete its ready check and capture leads.
+                Open the scanner and capture leads. It keeps saving if the signal drops.
               </span>
             </span>
           </button>

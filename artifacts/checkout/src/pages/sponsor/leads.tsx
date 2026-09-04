@@ -353,7 +353,7 @@ export default function SponsorLeads() {
           <Card className="p-10 text-center">
             <h3 className="font-semibold">No matching leads</h3>
             <p className="text-sm text-muted-foreground mt-2">
-              Scan an attendee badge, then wait for the phone to show All leads synced.
+              Scan an attendee badge. New leads save immediately and sync automatically.
             </p>
           </Card>
         )}

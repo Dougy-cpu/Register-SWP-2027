@@ -7,6 +7,7 @@ import {
   CameraOff,
   Check,
   CheckCircle2,
+  CircleHelp,
   CloudOff,
   CloudUpload,
   Download,
@@ -15,9 +16,7 @@ import {
   Lightbulb,
   RefreshCw,
   ShieldCheck,
-  Smartphone,
   TriangleAlert,
-  Wifi,
   WifiOff,
   X,
 } from "lucide-react";
@@ -74,8 +73,15 @@ function scannerErrorMessage(caught: unknown): string {
   if (caught instanceof ScannerApiError && caught.status === 401) {
     return "This phone is no longer authorised. Open the sponsor link again to activate it.";
   }
+  if (caught instanceof TypeError && /fetch|network/i.test(caught.message)) {
+    return "We couldn't connect just now. Check your signal and try again.";
+  }
   if (caught instanceof Error) return caught.message;
-  return "The scanner could not complete that action";
+  return "Something went wrong. Please try again.";
+}
+
+function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
+  return Boolean(pack && (!pack.expiresAt || Date.now() <= new Date(pack.expiresAt).getTime()));
 }
 
 export default function SponsorScanner() {
@@ -109,6 +115,7 @@ export default function SponsorScanner() {
   const [note, setNote] = useState("");
   const [manualCode, setManualCode] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [updateWaiting, setUpdateWaiting] = useState(false);
@@ -122,6 +129,9 @@ export default function SponsorScanner() {
 
   const refreshBootstrap = useCallback(async () => {
     const state = await getScannerBootstrap();
+    if (!state?.device || !state.scannerWindow) {
+      throw new TypeError("Network request failed");
+    }
     setBootstrap(state);
     return state;
   }, []);
@@ -139,13 +149,11 @@ export default function SponsorScanner() {
         await refreshCounts();
         if (result.rejected > 0) {
           setError(
-            `${result.rejected} saved item${result.rejected === 1 ? " was" : "s were"} rejected by the server. Ask the organiser to review this phone.`,
+            `${result.rejected} lead${result.rejected === 1 ? " needs" : "s need"} organiser help. Nothing has been deleted.`,
           );
         } else if (!quiet) {
           setNotice(
-            result.remaining
-              ? `${result.remaining} items still waiting to sync`
-              : "All leads synced",
+            result.remaining ? "Your saved leads will finish syncing automatically." : "All saved.",
           );
         }
         await refreshBootstrap().catch(() => undefined);
@@ -173,9 +181,15 @@ export default function SponsorScanner() {
         storageTested: storageOk,
       });
       await refreshBootstrap();
-      setNotice(`${stored.records.length} badge records prepared for offline scanning`);
+      setNotice("Scanner ready.");
     } catch (caught) {
-      setError(scannerErrorMessage(caught));
+      const savedPack = await getOfflinePack().catch(() => null);
+      if (offlinePackIsUsable(savedPack)) {
+        setPack(savedPack);
+        setNotice("Ready to scan. Updates will retry automatically.");
+      } else {
+        setError(scannerErrorMessage(caught));
+      }
     } finally {
       downloadingPackRef.current = false;
       setPreparing(false);
@@ -194,19 +208,21 @@ export default function SponsorScanner() {
   }, []);
 
   useEffect(() => {
-    if (credential && bootstrap?.device.outOfDate && navigator.onLine) {
+    if (credential && bootstrap?.device?.outOfDate && navigator.onLine) {
       void downloadAndStorePack();
     }
-  }, [bootstrap?.device.outOfDate, credential, downloadAndStorePack]);
+  }, [bootstrap?.device?.outOfDate, credential, downloadAndStorePack]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      let localPack: StoredOfflinePack | null = null;
       try {
         const saved = await getScannerCredential();
         if (cancelled) return;
         setCredential(saved);
-        setPack(await getOfflinePack());
+        localPack = await getOfflinePack();
+        setPack(localPack);
         await refreshCounts();
         const offlineStage = await observeOfflineReloadTest(!navigator.onLine);
         setOfflineTestStage(offlineStage);
@@ -223,7 +239,13 @@ export default function SponsorScanner() {
           await syncNow(true);
         }
       } catch (caught) {
-        if (!cancelled) setError(scannerErrorMessage(caught));
+        if (!cancelled) {
+          if (offlinePackIsUsable(localPack)) {
+            setNotice("Ready to scan. We'll reconnect automatically.");
+          } else {
+            setError(scannerErrorMessage(caught));
+          }
+        }
       } finally {
         if (!cancelled) setInitialising(false);
       }
@@ -317,9 +339,7 @@ export default function SponsorScanner() {
         }
         const attendee = await decryptPackAttendee(code);
         if (!attendee) {
-          throw new Error(
-            "This badge is not in the current approved attendee pack. Connect and update the pack, then try again.",
-          );
+          throw new Error("This badge isn't ready to scan yet. Please ask the organiser for help.");
         }
         const queued = await queueScan({ code, source, attendee });
         leadSheetOpenRef.current = true;
@@ -368,13 +388,15 @@ export default function SponsorScanner() {
       await qrScannerRef.current.start();
       setCameraActive(true);
       setFlashAvailable(await qrScannerRef.current.hasFlash());
-      await updateReadiness({ cameraTested: true });
-      await refreshBootstrap();
+      void (async () => {
+        await updateReadiness({ cameraTested: true });
+        await refreshBootstrap();
+      })().catch(() => undefined);
     } catch (caught) {
       setCameraActive(false);
       setError(
         caught instanceof Error && /permission|notallowed/i.test(caught.message)
-          ? "Camera permission was denied. Allow camera access in your browser settings, or use Photograph instead."
+          ? "Camera access is needed to scan a badge. Allow it when your phone asks, or use a photo instead."
           : scannerErrorMessage(caught),
       );
     }
@@ -559,7 +581,7 @@ export default function SponsorScanner() {
       <main className="min-h-screen bg-slate-50 grid place-items-center p-6">
         <div className="text-center">
           <RefreshCw className="h-9 w-9 mx-auto text-primary animate-spin" />
-          <p className="mt-4 text-muted-foreground">Preparing scanner…</p>
+          <p className="mt-4 text-muted-foreground">Getting your scanner ready…</p>
         </div>
       </main>
     );
@@ -574,13 +596,13 @@ export default function SponsorScanner() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
               Sponsor lead scanner
             </p>
-            <h1 className="text-2xl font-bold mt-2">Who is using this phone?</h1>
+            <h1 className="text-2xl font-bold mt-2">Start scanning</h1>
             <p className="text-sm text-muted-foreground mt-3">
-              Enter your name so every scan and note is correctly attributed.
+              Enter your name once. We’ll take care of setup and saving.
             </p>
           </div>
           {error && <ErrorBanner message={error} onClose={() => setError("")} />}
-          <Label htmlFor="operator-name">Scanner operator</Label>
+          <Label htmlFor="operator-name">Your name</Label>
           <Input
             id="operator-name"
             value={operatorName}
@@ -594,8 +616,8 @@ export default function SponsorScanner() {
             onClick={() => void activate()}
             disabled={activating || operatorName.trim().length < 2}
           >
-            <Smartphone className="h-4 w-4 mr-2" />
-            {activating ? "Activating…" : "Activate this phone"}
+            <Camera className="h-4 w-4 mr-2" />
+            {activating ? "Getting ready…" : "Continue"}
           </Button>
           <Button variant="ghost" className="w-full mt-2" onClick={() => navigate("/sponsor")}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to sponsor workspace
@@ -605,11 +627,12 @@ export default function SponsorScanner() {
     );
   }
 
-  const ready = bootstrap?.device.ready ?? false;
+  const ready = bootstrap?.device?.ready ?? false;
   const rejectedCount = recoveryItems.length;
-  const offlineUsable = Boolean(
-    pack && (!pack.expiresAt || Date.now() <= new Date(pack.expiresAt).getTime()),
-  );
+  const offlineUsable = offlinePackIsUsable(pack);
+  const diagnosticsEnabled =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("diagnostics") === "1";
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -627,38 +650,32 @@ export default function SponsorScanner() {
               </p>
             </div>
           </button>
-          <button
-            onClick={() => void syncNow()}
-            className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
-              rejectedCount
-                ? "bg-rose-500/20 text-rose-200 border border-rose-400/40"
-                : pendingCount
-                  ? "bg-amber-400 text-slate-950"
-                  : "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
-            }`}
-          >
-            {rejectedCount ? (
-              <TriangleAlert className="h-3.5 w-3.5" />
-            ) : navigator.onLine ? (
-              syncing ? (
+          {(rejectedCount > 0 || pendingCount > 0 || !navigator.onLine) && (
+            <div
+              className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
+                rejectedCount
+                  ? "bg-rose-500/20 text-rose-200 border border-rose-400/40"
+                  : "bg-white/10 text-slate-200 border border-white/15"
+              }`}
+              aria-live="polite"
+            >
+              {rejectedCount ? (
+                <TriangleAlert className="h-3.5 w-3.5" />
+              ) : syncing ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : !navigator.onLine ? (
+                <WifiOff className="h-3.5 w-3.5" />
               ) : (
-                <CloudUpload className="h-3.5 w-3.5" />
-              )
-            ) : (
-              <CloudOff className="h-3.5 w-3.5" />
-            )}
-            {rejectedCount
-              ? `${rejectedCount} need review`
-              : pendingCount
-                ? `${pendingCount} waiting to sync`
-                : "All leads synced"}
-          </button>
+                <Check className="h-3.5 w-3.5" />
+              )}
+              {rejectedCount ? "Help needed" : pendingCount ? "Saved" : "Working offline"}
+            </div>
+          )}
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
-        {updateWaiting && (
+        {diagnosticsEnabled && updateWaiting && (
           <div className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-3 text-sm text-blue-100">
             An update is ready, but this running event-day scanner will not replace itself. Reload
             only when the organiser tells you to.
@@ -689,7 +706,7 @@ export default function SponsorScanner() {
           </div>
         )}
 
-        {(!ready || bootstrap?.device.outOfDate) && (
+        {diagnosticsEnabled && (!ready || bootstrap?.device?.outOfDate) && (
           <ReadinessPanel
             bootstrap={bootstrap}
             pack={pack}
@@ -700,13 +717,13 @@ export default function SponsorScanner() {
           />
         )}
 
-        {offlineTestStage === "armed" && (
+        {diagnosticsEnabled && offlineTestStage === "armed" && (
           <div className="rounded-xl border border-amber-400/40 bg-amber-500/15 p-3 text-sm text-amber-100">
             Offline test waiting: turn off Wi-Fi and mobile data, close and reopen this scanner,
             then reconnect.
           </div>
         )}
-        {offlineTestStage === "observed" && !navigator.onLine && (
+        {diagnosticsEnabled && offlineTestStage === "observed" && !navigator.onLine && (
           <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 p-3 text-sm text-emerald-100">
             Offline reopen confirmed. Reconnect now to record the successful check.
           </div>
@@ -725,35 +742,43 @@ export default function SponsorScanner() {
                 <div className="h-20 w-20 mx-auto rounded-full bg-blue-500/15 border border-blue-400/30 grid place-items-center">
                   <Camera className="h-9 w-9 text-blue-300" />
                 </div>
-                <h2 className="text-white text-xl font-bold mt-5">Ready to scan</h2>
+                <p
+                  role="heading"
+                  aria-level={1}
+                  className="text-white text-2xl font-bold mt-5 tracking-tight"
+                >
+                  Scan an attendee
+                </p>
                 <p className="text-slate-400 text-sm mt-2 max-w-xs">
-                  Hold the badge QR inside the frame. The attendee reference contains no personal
-                  information.
+                  Point this phone at the QR code on their badge. Everything saves automatically,
+                  even if the signal drops.
                 </p>
                 <Button
-                  className="mt-6 h-12 px-7"
-                  onClick={() => void startCamera()}
-                  disabled={!offlineUsable}
+                  className="mt-6 h-14 px-8 text-base"
+                  onClick={() => void (offlineUsable ? startCamera() : downloadAndStorePack())}
+                  disabled={preparing}
                 >
-                  <Camera className="h-4 w-4 mr-2" /> Start camera
+                  {preparing ? (
+                    <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <Camera className="h-5 w-5 mr-2" />
+                  )}
+                  {preparing ? "Getting ready…" : offlineUsable ? "Start scanning" : "Try again"}
                 </Button>
-                {!offlineUsable && (
-                  <p className="text-amber-300 text-xs mt-3">Download the attendee pack first.</p>
-                )}
               </div>
             </div>
           )}
           {cameraActive && (
             <>
               <div className="absolute inset-x-0 top-0 p-4 flex justify-between bg-gradient-to-b from-black/75 to-transparent">
-                <Badge className="bg-black/60 text-white border border-white/20">
-                  {navigator.onLine ? (
-                    <Wifi className="h-3 w-3 mr-1" />
-                  ) : (
-                    <WifiOff className="h-3 w-3 mr-1" />
+                <div>
+                  {!navigator.onLine && (
+                    <Badge className="bg-black/60 text-white border border-white/20">
+                      <WifiOff className="h-3 w-3 mr-1" />
+                      Still working offline
+                    </Badge>
                   )}
-                  {navigator.onLine ? "Online" : "Offline ready"}
-                </Badge>
+                </div>
                 <div className="flex gap-2">
                   {flashAvailable && (
                     <Button
@@ -787,7 +812,7 @@ export default function SponsorScanner() {
           )}
         </section>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div>
           <input
             ref={imageInputRef}
             type="file"
@@ -798,57 +823,91 @@ export default function SponsorScanner() {
           />
           <Button
             variant="secondary"
-            className="h-12"
+            className="h-12 w-full"
             onClick={() => imageInputRef.current?.click()}
             disabled={!offlineUsable}
           >
-            <ImageIcon className="h-4 w-4 mr-2" /> Photograph
-          </Button>
-          <Button
-            variant="secondary"
-            className="h-12"
-            onClick={() => setShowManual((value) => !value)}
-            disabled={!offlineUsable}
-          >
-            <Keyboard className="h-4 w-4 mr-2" /> Enter QR value
+            <ImageIcon className="h-4 w-4 mr-2" /> Use a photo instead
           </Button>
         </div>
 
-        {showManual && (
-          <Card className="p-4 bg-white text-slate-950">
-            <Label htmlFor="manual-code">12-character QR value</Label>
-            <div className="flex gap-2 mt-2">
-              <Input
-                id="manual-code"
-                value={manualCode}
-                onChange={(event) => setManualCode(event.target.value.toUpperCase().slice(0, 12))}
-                className="font-mono uppercase tracking-widest"
-                autoCapitalize="characters"
-                autoCorrect="off"
-              />
-              <Button
-                onClick={() => {
-                  void handleDecoded(manualCode, "manual");
-                  setManualCode("");
-                }}
-                disabled={!normaliseScannedValue(manualCode)}
-              >
-                Add
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              This value is not printed on attendee badges. Use only with an authorised scanner or
-              organiser source.
-            </p>
-          </Card>
-        )}
-
-        <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-          <span>Pack: {pack ? `${pack.records.length} attendees` : "not downloaded"}</span>
-          <button className="underline underline-offset-4" onClick={() => void forgetPhone()}>
-            Remove this phone
+        <div className="text-center">
+          <button
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white"
+            onClick={() => setShowHelp((value) => !value)}
+            aria-expanded={showHelp}
+          >
+            <CircleHelp className="h-4 w-4" /> Having trouble?
           </button>
         </div>
+
+        {showHelp && (
+          <Card className="p-4 sm:p-5 bg-white text-slate-950 space-y-4">
+            <div>
+              <h2 className="font-bold">Scanner help</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Try refreshing the scanner, or enter a QR value manually if the organiser gives you
+                one.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void downloadAndStorePack()}
+                disabled={preparing || !navigator.onLine}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${preparing ? "animate-spin" : ""}`} />
+                Refresh scanner
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowManual((value) => !value)}
+                disabled={!offlineUsable}
+              >
+                <Keyboard className="h-4 w-4 mr-2" /> Enter QR value
+              </Button>
+            </div>
+
+            {showManual && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <Label htmlFor="manual-code">QR value</Label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    id="manual-code"
+                    value={manualCode}
+                    onChange={(event) =>
+                      setManualCode(event.target.value.toUpperCase().slice(0, 12))
+                    }
+                    className="font-mono uppercase tracking-widest"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                  />
+                  <Button
+                    onClick={() => {
+                      void handleDecoded(manualCode, "manual");
+                      setManualCode("");
+                    }}
+                    disabled={!normaliseScannedValue(manualCode)}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-1 border-t border-slate-200 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                If this still does not work, show this screen to the organiser.
+              </p>
+              <button
+                className="shrink-0 text-xs text-slate-500 underline underline-offset-4"
+                onClick={() => void forgetPhone()}
+              >
+                Remove phone
+              </button>
+            </div>
+          </Card>
+        )}
       </main>
 
       {latestScan && (
@@ -967,14 +1026,14 @@ function LeadCapturedSheet({
           <Check className="h-7 w-7 text-emerald-700" strokeWidth={3} />
         </div>
         <p className="text-xs uppercase tracking-[0.14em] font-bold text-emerald-700 mt-5">
-          Lead saved on this phone
+          Lead saved
         </p>
         <h2 className="text-3xl font-bold mt-1">{scan.attendee.name}</h2>
         <p className="text-lg text-slate-600 mt-1">{scan.attendee.jobTitle}</p>
         <p className="text-slate-500">{scan.attendee.company}</p>
 
         <div className="mt-6">
-          <Label>Rating (optional)</Label>
+          <Label>Interest level (optional)</Label>
           <div className="grid grid-cols-5 gap-2 mt-2">
             {[1, 2, 3, 4, 5].map((value) => (
               <button
@@ -1003,7 +1062,7 @@ function LeadCapturedSheet({
           />
         </div>
         <Button className="w-full h-12 mt-6 text-base" onClick={onFinish}>
-          {rating || note.trim() ? "Save and scan next" : "Scan next"}
+          {rating || note.trim() ? "Save and scan next" : "Done, scan next"}
         </Button>
       </Card>
     </div>
