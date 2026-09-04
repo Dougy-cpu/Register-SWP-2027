@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Building2, ChevronRight, CircleAlert, Plus, Search, Users, X } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -17,6 +17,15 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { adminJson } from "@/lib/admin-api";
 import type { SponsorStatus, SponsorSummary, SponsorWorkspace } from "@/types/sponsor";
+import {
+  createSponsorSessionEntitlement,
+  removeSponsorSessionEntitlement,
+  sponsorSessionEntitlementError,
+  sponsorSessionPayload,
+  sponsorSessionTaskRequirements,
+  updateSponsorSessionEntitlement,
+  type SponsorSessionEntitlementDraft,
+} from "./sponsor-session-entitlements";
 
 const STATUS_LABELS: Record<SponsorStatus, string> = {
   draft: "Draft",
@@ -56,14 +65,10 @@ type CreateForm = {
   onsiteFirstName: string;
   onsiteLastName: string;
   onsiteEmail: string;
-  sessionType: "none" | "quickfire" | "keynote" | "other";
-  entitlementLabel: string;
+  sessions: SponsorSessionEntitlementDraft[];
   sessionDeadline: string;
   assetDeadline: string;
   logisticsDeadline: string;
-  headshotRequired: boolean;
-  takeawaysRequired: boolean;
-  slidesRequired: boolean;
   assetsRequired: boolean;
   logisticsRequired: boolean;
   onsiteContactsRequired: boolean;
@@ -88,14 +93,10 @@ const EMPTY_FORM: CreateForm = {
   onsiteFirstName: "",
   onsiteLastName: "",
   onsiteEmail: "",
-  sessionType: "none",
-  entitlementLabel: "",
+  sessions: [],
   sessionDeadline: "",
   assetDeadline: "",
   logisticsDeadline: "",
-  headshotRequired: true,
-  takeawaysRequired: true,
-  slidesRequired: false,
   assetsRequired: true,
   logisticsRequired: true,
   onsiteContactsRequired: true,
@@ -105,6 +106,7 @@ const EMPTY_FORM: CreateForm = {
 function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
   const [, navigate] = useLocation();
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
+  const nextSessionId = useRef(1);
   const [codesEdited, setCodesEdited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -121,10 +123,41 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
     }));
   };
 
+  const addSessionEntitlement = () => {
+    const clientId = `session-${nextSessionId.current}`;
+    nextSessionId.current += 1;
+    setForm((current) => ({
+      ...current,
+      sessions: [...current.sessions, createSponsorSessionEntitlement(clientId)],
+    }));
+  };
+
+  const updateSessionEntitlement = (
+    clientId: string,
+    patch: Partial<Omit<SponsorSessionEntitlementDraft, "clientId">>,
+  ) => {
+    setForm((current) => ({
+      ...current,
+      sessions: updateSponsorSessionEntitlement(current.sessions, clientId, patch),
+    }));
+  };
+
+  const removeSessionEntitlement = (clientId: string) => {
+    setForm((current) => ({
+      ...current,
+      sessions: removeSponsorSessionEntitlement(current.sessions, clientId),
+    }));
+  };
+
   const save = async () => {
     setError("");
     if (!form.company.trim() || !form.packageLabel.trim() || !form.primaryEmail.trim()) {
       setError("Company, package and primary contact details are required.");
+      return;
+    }
+    const entitlementError = sponsorSessionEntitlementError(form.sessions);
+    if (entitlementError) {
+      setError(entitlementError);
       return;
     }
     setSaving(true);
@@ -158,10 +191,22 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
         dueAt: dueAt ? new Date(`${dueAt}T17:00:00`).toISOString() : null,
         status: required ? "todo" : "not_required",
       });
+      const sessions = sponsorSessionPayload(form.sessions);
+      const sessionRequirements = sponsorSessionTaskRequirements(form.sessions);
       const tasks = [
         task("staff", "Sponsor staff", "", Number(form.staffAllocation) > 0),
-        task("sessions", "Session details", form.sessionDeadline, form.sessionType !== "none"),
-        task("speakers", "Speaker details", form.sessionDeadline, form.sessionType !== "none"),
+        task(
+          "sessions",
+          "Session details",
+          form.sessionDeadline,
+          sessionRequirements.sessionsRequired,
+        ),
+        task(
+          "speakers",
+          "Speaker details",
+          form.sessionDeadline,
+          sessionRequirements.sessionsRequired,
+        ),
         task("assets", "Brand and content assets", form.assetDeadline, form.assetsRequired),
         task("logistics", "Logistics", form.logisticsDeadline, form.logisticsRequired),
         task(
@@ -170,7 +215,7 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
           form.logisticsDeadline,
           form.onsiteContactsRequired,
         ),
-        task("slides", "Session slides", form.sessionDeadline, form.slidesRequired),
+        task("slides", "Session slides", form.sessionDeadline, sessionRequirements.slidesRequired),
         task(
           "community_social",
           "Community Social details",
@@ -178,18 +223,6 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
           form.communitySocialRequired,
         ),
       ];
-      const sessions =
-        form.sessionType === "none"
-          ? []
-          : [
-              {
-                type: form.sessionType,
-                entitlementLabel: form.entitlementLabel || `${form.sessionType} session`,
-                headshotRequired: form.headshotRequired,
-                takeawaysRequired: form.takeawaysRequired,
-                slidesRequired: form.slidesRequired,
-              },
-            ];
       const created = await adminJson<SponsorWorkspace>("/api/admin/sponsors", {
         method: "POST",
         body: JSON.stringify({
@@ -392,68 +425,134 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
               </div>
             </section>
 
-            <section className="grid md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <h3 className="font-semibold">Session entitlement</h3>
-                <p className="text-sm text-muted-foreground">
-                  Enter this explicitly. It is never inferred from the package name.
-                </p>
+            <section className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-semibold">Session entitlements</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Add every contracted Quickfire, speaking slot or other session separately. They
+                    are never inferred from the package name.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" onClick={addSessionEntitlement}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {form.sessions.length === 0 ? "Add session" : "Add another session"}
+                </Button>
               </div>
-              <div>
-                <Label>Session type</Label>
-                <Select
-                  value={form.sessionType}
-                  onValueChange={(value) =>
-                    update("sessionType", value as CreateForm["sessionType"])
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No session</SelectItem>
-                    <SelectItem value="quickfire">Quickfire</SelectItem>
-                    <SelectItem value="keynote">Keynote</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.sessionType !== "none" && (
-                <>
-                  <div>
-                    <Label>Entitlement label</Label>
-                    <Input
-                      value={form.entitlementLabel}
-                      onChange={(e) => update("entitlementLabel", e.target.value)}
-                      placeholder="e.g. 10-minute Quickfire"
-                    />
-                  </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.headshotRequired}
-                      onChange={(e) => update("headshotRequired", e.target.checked)}
-                    />{" "}
-                    Headshot required
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.takeawaysRequired}
-                      onChange={(e) => update("takeawaysRequired", e.target.checked)}
-                    />{" "}
-                    Takeaways required
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.slidesRequired}
-                      onChange={(e) => update("slidesRequired", e.target.checked)}
-                    />{" "}
-                    Slides required
-                  </label>
-                </>
+
+              {form.sessions.length === 0 && (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  No session slots are included in this agreement.
+                </div>
               )}
+
+              <div className="space-y-4">
+                {form.sessions.map((session, index) => {
+                  const typeId = `${session.clientId}-type`;
+                  const labelId = `${session.clientId}-label`;
+                  const placeholder =
+                    session.type === "quickfire"
+                      ? "e.g. 10-minute Quickfire"
+                      : session.type === "keynote"
+                        ? "e.g. 30-minute main-stage speaking slot"
+                        : "e.g. Panel, workshop or breakout slot";
+                  return (
+                    <Card key={session.clientId} className="p-4 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">Session {index + 1}</p>
+                          <p className="text-xs text-muted-foreground">
+                            This will appear as a separate submission in the sponsor workspace.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeSessionEntitlement(session.clientId)}
+                          aria-label={`Remove session ${index + 1}`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor={typeId}>Session type</Label>
+                          <Select
+                            value={session.type}
+                            onValueChange={(value) =>
+                              updateSessionEntitlement(session.clientId, {
+                                type: value as SponsorSessionEntitlementDraft["type"],
+                              })
+                            }
+                          >
+                            <SelectTrigger id={typeId}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="quickfire">Quickfire</SelectItem>
+                              <SelectItem value="keynote">Keynote / main-stage slot</SelectItem>
+                              <SelectItem value="other">Speaking slot / other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor={labelId}>Entitlement label</Label>
+                          <Input
+                            id={labelId}
+                            value={session.entitlementLabel}
+                            onChange={(e) =>
+                              updateSessionEntitlement(session.clientId, {
+                                entitlementLabel: e.target.value,
+                              })
+                            }
+                            placeholder={placeholder}
+                            maxLength={250}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={session.headshotRequired}
+                            onChange={(e) =>
+                              updateSessionEntitlement(session.clientId, {
+                                headshotRequired: e.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Headshot required
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={session.takeawaysRequired}
+                            onChange={(e) =>
+                              updateSessionEntitlement(session.clientId, {
+                                takeawaysRequired: e.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Takeaways required
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={session.slidesRequired}
+                            onChange={(e) =>
+                              updateSessionEntitlement(session.clientId, {
+                                slidesRequired: e.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Slides required
+                        </label>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
             </section>
 
             <section className="grid sm:grid-cols-3 gap-4">

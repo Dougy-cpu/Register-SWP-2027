@@ -229,9 +229,9 @@ export interface SponsorSessionEntitlementInput {
    * @maxLength 250
    */
   entitlementLabel: string;
-  headshotRequired: boolean;
-  takeawaysRequired: boolean;
-  slidesRequired: boolean;
+  headshotRequired?: boolean;
+  takeawaysRequired?: boolean;
+  slidesRequired?: boolean;
 }
 
 export interface SponsorSessionInput {
@@ -306,23 +306,6 @@ export interface SponsorSummary {
   updatedAt: string;
 }
 
-export type SponsorUpsertSessionsItemType =
-  (typeof SponsorUpsertSessionsItemType)[keyof typeof SponsorUpsertSessionsItemType];
-
-export const SponsorUpsertSessionsItemType = {
-  quickfire: "quickfire",
-  keynote: "keynote",
-  other: "other",
-} as const;
-
-export type SponsorUpsertSessionsItem = {
-  type: SponsorUpsertSessionsItemType;
-  entitlementLabel: string;
-  headshotRequired?: boolean;
-  takeawaysRequired?: boolean;
-  slidesRequired?: boolean;
-};
-
 export interface SponsorUpsert {
   /**
    * @minLength 1
@@ -350,7 +333,8 @@ export interface SponsorUpsert {
   publicCode?: string;
   contacts?: SponsorContact[];
   tasks?: SponsorTask[];
-  sessions?: SponsorUpsertSessionsItem[];
+  /** Every contracted sponsor session slot, including repeated or mixed types. */
+  sessions?: SponsorSessionEntitlementInput[];
 }
 
 export type SponsorWorkspaceAdminActivityItem = { [key: string]: unknown };

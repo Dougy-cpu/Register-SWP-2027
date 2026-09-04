@@ -76,6 +76,55 @@ export interface SponsorSessionEntitlementInput {
   slidesRequired?: boolean;
 }
 
+const SPONSOR_SESSION_TYPES = ["quickfire", "keynote", "other"] as const;
+
+export function validateSponsorSessionEntitlements(
+  value: unknown,
+): SponsorSessionEntitlementInput[] {
+  if (!Array.isArray(value)) {
+    throw new SponsorConflictError("Session entitlements must be provided as a list");
+  }
+
+  return value.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new SponsorConflictError(`Session ${index + 1} is not a valid entitlement`);
+    }
+    const session = candidate as Record<string, unknown>;
+    const type = typeof session.type === "string" ? session.type : "";
+    if (!SPONSOR_SESSION_TYPES.includes(type as (typeof SPONSOR_SESSION_TYPES)[number])) {
+      throw new SponsorConflictError(`Choose a valid type for session ${index + 1}`);
+    }
+
+    const entitlementLabel =
+      typeof session.entitlementLabel === "string" ? session.entitlementLabel.trim() : "";
+    if (!entitlementLabel) {
+      throw new SponsorConflictError(`Enter an entitlement label for session ${index + 1}`);
+    }
+    if (entitlementLabel.length > 250) {
+      throw new SponsorConflictError(
+        `Keep the entitlement label for session ${index + 1} to 250 characters or fewer`,
+      );
+    }
+
+    const booleanSetting = (key: string, fallback: boolean): boolean => {
+      const setting = session[key];
+      if (setting === undefined) return fallback;
+      if (typeof setting !== "boolean") {
+        throw new SponsorConflictError(`Session ${index + 1} has an invalid ${key} setting`);
+      }
+      return setting;
+    };
+
+    return {
+      type: type as SponsorSessionEntitlementInput["type"],
+      entitlementLabel,
+      headshotRequired: booleanSetting("headshotRequired", true),
+      takeawaysRequired: booleanSetting("takeawaysRequired", true),
+      slidesRequired: booleanSetting("slidesRequired", false),
+    };
+  });
+}
+
 export interface SponsorUpsertInput {
   company: string;
   packageLabel: string;
@@ -127,7 +176,9 @@ function cleanInput(
       "VIP and public codes must be different and contain letters or numbers",
     );
   }
-  return { ...input, company, packageLabel, vipCode, publicCode };
+  const sessions =
+    input.sessions === undefined ? undefined : validateSponsorSessionEntitlements(input.sessions);
+  return { ...input, company, packageLabel, vipCode, publicCode, sessions };
 }
 
 function primaryContactIsValid(contacts: SponsorContactInput[]): boolean {
@@ -225,14 +276,8 @@ async function insertSessionEntitlements(
   sponsorId: number,
   sessions: SponsorSessionEntitlementInput[],
 ): Promise<void> {
-  if (!sessions.length) return;
-  const cleaned = sessions.map((session) => ({
-    ...session,
-    entitlementLabel: session.entitlementLabel.trim(),
-  }));
-  if (cleaned.some((session) => !session.entitlementLabel)) {
-    throw new SponsorConflictError("Every session entitlement needs a label");
-  }
+  const cleaned = validateSponsorSessionEntitlements(sessions);
+  if (!cleaned.length) return;
   await tx.insert(sponsorSessionsTable).values(
     cleaned.map((session) => ({
       sponsorId,

@@ -1848,6 +1848,11 @@ export const createSponsorBodyStaffAllocationMin = 0;
 
 export const createSponsorBodyVipCodeRegExp = new RegExp("^[A-Z0-9]+$");
 export const createSponsorBodyPublicCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const createSponsorBodySessionsItemEntitlementLabelMax = 250;
+
+export const createSponsorBodySessionsItemHeadshotRequiredDefault = true;
+export const createSponsorBodySessionsItemTakeawaysRequiredDefault = true;
+export const createSponsorBodySessionsItemSlidesRequiredDefault = false;
 
 export const CreateSponsorBody = zod.object({
   company: zod.string().min(1).max(createSponsorBodyCompanyMax),
@@ -1891,13 +1896,18 @@ export const CreateSponsorBody = zod.object({
     .array(
       zod.object({
         type: zod.enum(["quickfire", "keynote", "other"]),
-        entitlementLabel: zod.string(),
-        headshotRequired: zod.boolean().optional(),
-        takeawaysRequired: zod.boolean().optional(),
-        slidesRequired: zod.boolean().optional(),
+        entitlementLabel: zod.string().min(1).max(createSponsorBodySessionsItemEntitlementLabelMax),
+        headshotRequired: zod
+          .boolean()
+          .default(createSponsorBodySessionsItemHeadshotRequiredDefault),
+        takeawaysRequired: zod
+          .boolean()
+          .default(createSponsorBodySessionsItemTakeawaysRequiredDefault),
+        slidesRequired: zod.boolean().default(createSponsorBodySessionsItemSlidesRequiredDefault),
       }),
     )
-    .optional(),
+    .optional()
+    .describe("Every contracted sponsor session slot, including repeated or mixed types."),
 });
 
 /**
@@ -2097,6 +2107,11 @@ export const updateAdminSponsorBodyStaffAllocationMin = 0;
 
 export const updateAdminSponsorBodyVipCodeRegExp = new RegExp("^[A-Z0-9]+$");
 export const updateAdminSponsorBodyPublicCodeRegExp = new RegExp("^[A-Z0-9]+$");
+export const updateAdminSponsorBodySessionsItemEntitlementLabelMax = 250;
+
+export const updateAdminSponsorBodySessionsItemHeadshotRequiredDefault = true;
+export const updateAdminSponsorBodySessionsItemTakeawaysRequiredDefault = true;
+export const updateAdminSponsorBodySessionsItemSlidesRequiredDefault = false;
 
 export const UpdateAdminSponsorBody = zod.object({
   company: zod.string().min(1).max(updateAdminSponsorBodyCompanyMax),
@@ -2140,13 +2155,23 @@ export const UpdateAdminSponsorBody = zod.object({
     .array(
       zod.object({
         type: zod.enum(["quickfire", "keynote", "other"]),
-        entitlementLabel: zod.string(),
-        headshotRequired: zod.boolean().optional(),
-        takeawaysRequired: zod.boolean().optional(),
-        slidesRequired: zod.boolean().optional(),
+        entitlementLabel: zod
+          .string()
+          .min(1)
+          .max(updateAdminSponsorBodySessionsItemEntitlementLabelMax),
+        headshotRequired: zod
+          .boolean()
+          .default(updateAdminSponsorBodySessionsItemHeadshotRequiredDefault),
+        takeawaysRequired: zod
+          .boolean()
+          .default(updateAdminSponsorBodySessionsItemTakeawaysRequiredDefault),
+        slidesRequired: zod
+          .boolean()
+          .default(updateAdminSponsorBodySessionsItemSlidesRequiredDefault),
       }),
     )
-    .optional(),
+    .optional()
+    .describe("Every contracted sponsor session slot, including repeated or mixed types."),
 });
 
 export const updateAdminSponsorResponseTwoSessionsItemTakeawaysMax = 3;

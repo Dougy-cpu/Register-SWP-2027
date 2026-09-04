@@ -44,6 +44,7 @@ import {
   normalizeSponsorCode,
   SponsorConflictError,
   suggestedSponsorCodes,
+  validateSponsorSessionEntitlements,
 } from "./sponsor-service";
 
 function transactionWithCollisions(rows: Array<{ code: string; sponsorId: number | null }>) {
@@ -81,5 +82,84 @@ describe("sponsor promo codes", () => {
       { code: "ACMEVIP", sponsorId: 12 },
     ]);
     await expect(assertCodeAvailability(tx, ["ACME", "ACMEVIP"], 12)).resolves.toBeUndefined();
+  });
+});
+
+describe("sponsor session entitlements", () => {
+  it("preserves repeated and mixed session types in their entered order", () => {
+    expect(
+      validateSponsorSessionEntitlements([
+        { type: "quickfire", entitlementLabel: " Morning Quickfire " },
+        {
+          type: "quickfire",
+          entitlementLabel: "Afternoon Quickfire",
+          slidesRequired: true,
+        },
+        {
+          type: "keynote",
+          entitlementLabel: "Main-stage speaking slot",
+          headshotRequired: false,
+        },
+        { type: "other", entitlementLabel: "Panel discussion" },
+      ]),
+    ).toEqual([
+      {
+        type: "quickfire",
+        entitlementLabel: "Morning Quickfire",
+        headshotRequired: true,
+        takeawaysRequired: true,
+        slidesRequired: false,
+      },
+      {
+        type: "quickfire",
+        entitlementLabel: "Afternoon Quickfire",
+        headshotRequired: true,
+        takeawaysRequired: true,
+        slidesRequired: true,
+      },
+      {
+        type: "keynote",
+        entitlementLabel: "Main-stage speaking slot",
+        headshotRequired: false,
+        takeawaysRequired: true,
+        slidesRequired: false,
+      },
+      {
+        type: "other",
+        entitlementLabel: "Panel discussion",
+        headshotRequired: true,
+        takeawaysRequired: true,
+        slidesRequired: false,
+      },
+    ]);
+  });
+
+  it("rejects an invalid row before sponsor creation can enter its transaction", () => {
+    expect(() =>
+      validateSponsorSessionEntitlements([
+        { type: "quickfire", entitlementLabel: "Valid Quickfire" },
+        { type: "other", entitlementLabel: "  " },
+      ]),
+    ).toThrow("Enter an entitlement label for session 2");
+    expect(() =>
+      validateSponsorSessionEntitlements([
+        { type: "speaking-slot", entitlementLabel: "Unsupported type" },
+      ]),
+    ).toThrow("Choose a valid type for session 1");
+    expect(() =>
+      validateSponsorSessionEntitlements([{ type: "keynote", entitlementLabel: "x".repeat(251) }]),
+    ).toThrow("Keep the entitlement label for session 1 to 250 characters or fewer");
+  });
+
+  it("rejects malformed boolean settings instead of silently coercing them", () => {
+    expect(() =>
+      validateSponsorSessionEntitlements([
+        {
+          type: "quickfire",
+          entitlementLabel: "Quickfire",
+          slidesRequired: "yes",
+        },
+      ]),
+    ).toThrow("Session 1 has an invalid slidesRequired setting");
   });
 });

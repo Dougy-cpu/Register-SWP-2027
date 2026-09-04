@@ -167,8 +167,6 @@ export * from "./sponsorSummary";
 export * from "./sponsorTask";
 export * from "./sponsorTaskStatus";
 export * from "./sponsorUpsert";
-export * from "./sponsorUpsertSessionsItem";
-export * from "./sponsorUpsertSessionsItemType";
 export * from "./sponsorUsagePerson";
 export * from "./sponsorWorkspaceAdmin";
 export * from "./sponsorWorkspaceAdminActivityItem";

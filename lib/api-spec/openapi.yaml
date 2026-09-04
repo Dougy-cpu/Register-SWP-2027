@@ -2664,7 +2664,7 @@ components:
         headshotRequired: { type: boolean, default: true }
         takeawaysRequired: { type: boolean, default: true }
         slidesRequired: { type: boolean, default: false }
-      required: [type, entitlementLabel, headshotRequired, takeawaysRequired, slidesRequired]
+      required: [type, entitlementLabel]
 
     SponsorSessionInput:
       type: object
@@ -2781,15 +2781,8 @@ components:
         tasks: { type: array, items: { $ref: "#/components/schemas/SponsorTask" } }
         sessions:
           type: array
-          items:
-            type: object
-            properties:
-              type: { type: string, enum: [quickfire, keynote, other] }
-              entitlementLabel: { type: string }
-              headshotRequired: { type: boolean }
-              takeawaysRequired: { type: boolean }
-              slidesRequired: { type: boolean }
-            required: [type, entitlementLabel]
+          description: Every contracted sponsor session slot, including repeated or mixed types.
+          items: { $ref: "#/components/schemas/SponsorSessionEntitlementInput" }
       required: [company, packageLabel, vipAllocation, vipMaxPerBooking, staffAllocation]
 
     SponsorWorkspaceAdmin:

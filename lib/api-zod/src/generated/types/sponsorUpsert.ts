@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SponsorContact } from "./sponsorContact";
+import type { SponsorSessionEntitlementInput } from "./sponsorSessionEntitlementInput";
 import type { SponsorStatus } from "./sponsorStatus";
 import type { SponsorTask } from "./sponsorTask";
-import type { SponsorUpsertSessionsItem } from "./sponsorUpsertSessionsItem";
 
 export interface SponsorUpsert {
   /**
@@ -37,5 +37,6 @@ export interface SponsorUpsert {
   publicCode?: string;
   contacts?: SponsorContact[];
   tasks?: SponsorTask[];
-  sessions?: SponsorUpsertSessionsItem[];
+  /** Every contracted sponsor session slot, including repeated or mixed types. */
+  sessions?: SponsorSessionEntitlementInput[];
 }

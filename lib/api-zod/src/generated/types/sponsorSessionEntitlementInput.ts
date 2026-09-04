@@ -14,7 +14,7 @@ export interface SponsorSessionEntitlementInput {
    * @maxLength 250
    */
   entitlementLabel: string;
-  headshotRequired: boolean;
-  takeawaysRequired: boolean;
-  slidesRequired: boolean;
+  headshotRequired?: boolean;
+  takeawaysRequired?: boolean;
+  slidesRequired?: boolean;
 }
