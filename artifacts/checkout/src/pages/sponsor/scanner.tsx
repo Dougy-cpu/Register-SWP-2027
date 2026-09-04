@@ -68,13 +68,20 @@ function recoveryCsvCell(value: unknown): string {
 
 function scannerErrorMessage(caught: unknown): string {
   if (caught instanceof ScannerApiError && caught.status === 401) {
-    return "This phone is no longer authorised. Open the sponsor link again to activate it.";
+    return "Scanner access needs refreshing. Return to the sponsor workspace and tap Scan badge.";
   }
   if (caught instanceof TypeError && /fetch|network/i.test(caught.message)) {
     return "We couldn't connect just now. Check your signal and try again.";
   }
   if (caught instanceof Error) return caught.message;
   return "Something went wrong. Please try again.";
+}
+
+function scannerActivationErrorMessage(caught: unknown): string {
+  if (caught instanceof ScannerApiError && caught.status === 401) {
+    return "Open this scanner from the Scan badge button in your sponsor workspace.";
+  }
+  return scannerErrorMessage(caught);
 }
 
 function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
@@ -316,7 +323,7 @@ export default function SponsorScanner() {
       await refreshBootstrap();
       await downloadAndStorePack();
     } catch (caught) {
-      setError(scannerErrorMessage(caught));
+      setError(scannerActivationErrorMessage(caught));
     } finally {
       setActivating(false);
     }
