@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BADGE_CODE_PATTERN,
+  badgeExportCsv,
   generateBadgeCode,
   normaliseBadgeCode,
   offlineRecordLookup,
@@ -21,6 +22,7 @@ describe("lead scanner badge references", () => {
   it("generates converter-ready references without allocating the readiness-test value", () => {
     const references = Array.from({ length: 2_000 }, () => generateBadgeCode());
     expect(references.every((value) => BADGE_CODE_PATTERN.test(value))).toBe(true);
+    expect(references.every((value) => /^[A-F]/.test(value))).toBe(true);
     expect(references).not.toContain(SCANNER_TEST_CODE);
     expect(new Set(references).size).toBe(references.length);
   });
@@ -38,5 +40,23 @@ describe("lead scanner badge references", () => {
     expect(first).not.toContain("CC4FFD33219D");
     expect(first).not.toBe(offlineRecordLookup("pack-a", "CC4FFD33219E"));
     expect(first).not.toBe(offlineRecordLookup("pack-b", "CC4FFD33219D"));
+  });
+
+  it("exports exactly the five requested badge CSV columns", () => {
+    const csv = badgeExportCsv([
+      {
+        attendeeId: 1,
+        firstName: "Cinzia",
+        lastName: "Dalé",
+        jobTitle: "Payroll Manager",
+        company: "IDEXX",
+        qrCode: "CC4FFD33219D",
+        badgeVersion: 1,
+      },
+    ]);
+    expect(csv).toBe(
+      '"First Name","Last Name","Job Title","Company","QR Code"\r\n' +
+        '"Cinzia","Dalé","Payroll Manager","IDEXX","CC4FFD33219D"',
+    );
   });
 });

@@ -1,9 +1,8 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { rateLimit } from "express-rate-limit";
 import ExcelJS from "exceljs";
-import archiver from "archiver";
 import { v4 as uuidv4 } from "uuid";
 import {
   attendeeBadgesTable,
@@ -19,6 +18,7 @@ import { scannerAuth, scannerTokenHash, type ScannerRequest } from "../middlewar
 import { sponsorAuth, type SponsorRequest } from "../middleware/sponsor-auth";
 import {
   addLeadAnnotation,
+  badgeExportCsv,
   badgeExportRows,
   buildOfflineLeadPack,
   currentLeadPackVersion,
@@ -29,7 +29,6 @@ import {
   MAX_SYNC_BATCH,
   SCANNER_TEST_CODE,
   scannerDeviceRateLimitKey,
-  signBadgeManifest,
   syncScannerBatch,
   type ScannerSyncAnnotation,
   type ScannerSyncScan,
@@ -415,6 +414,7 @@ router.get("/admin/lead-scanner/overview", adminAuth, async (_req, res): Promise
       deviceCount: Number(deviceCount?.value ?? 0),
       badgeCount: Number(badgeCount?.value ?? 0),
       currentPackVersion,
+      testQrValue: SCANNER_TEST_CODE,
       scannerWindow: await getScannerWindow(),
       devices: devices.map((device) => {
         const tested =
@@ -707,117 +707,10 @@ router.get("/admin/lead-scanner/badges/export", adminAuth, async (_req, res): Pr
       });
       return;
     }
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "SWP Summit 2027";
-    const badges = workbook.addWorksheet("Badges", { views: [{ state: "frozen", ySplit: 1 }] });
-    badges.columns = [
-      { header: "Name", key: "name", width: 32 },
-      { header: "Company", key: "company", width: 34 },
-      { header: "QR Value", key: "qrValue", width: 18 },
-    ];
-    rows.forEach((row) =>
-      badges.addRow({ name: row.name, company: row.company, qrValue: row.qrValue }),
-    );
-    badges.autoFilter = "A1:C1";
-    badges.getColumn(3).numFmt = "@";
-    badges.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF004EB9" } };
-    });
-    const test = workbook.addWorksheet("Scanner test");
-    test.columns = [{ header: "QR Value", key: "qrValue", width: 18 }];
-    test.addRow({ qrValue: SCANNER_TEST_CODE });
-    test.getColumn(1).numFmt = "@";
-    const emergency = workbook.addWorksheet("Emergency lead capture", {
-      pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-      views: [{ state: "frozen", ySplit: 2 }],
-    });
-    emergency.addRow(["SWP Summit 2027 emergency sponsor lead capture"]);
-    emergency.mergeCells("A1:G1");
-    emergency.getCell("A1").font = { bold: true, size: 16 };
-    emergency.addRow([
-      "Sponsor",
-      "Scanner operator",
-      "Attendee name",
-      "Company",
-      "Time",
-      "Rating 1-5",
-      "Notes",
-    ]);
-    emergency.columns = [
-      { width: 22 },
-      { width: 22 },
-      { width: 28 },
-      { width: 28 },
-      { width: 16 },
-      { width: 13 },
-      { width: 45 },
-    ];
-    emergency.getRow(2).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF004EB9" } };
-    });
-    for (let row = 0; row < 24; row += 1) {
-      const added = emergency.addRow(["", "", "", "", "", "", ""]);
-      added.height = 30;
-      added.eachCell({ includeEmpty: true }, (cell) => {
-        cell.border = {
-          bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
-        };
-      });
-    }
-    emergency.pageSetup.printTitlesRow = "1:2";
-    emergency.pageSetup.margins = {
-      left: 0.25,
-      right: 0.25,
-      top: 0.5,
-      bottom: 0.5,
-      header: 0.2,
-      footer: 0.2,
-    };
-    const workbookBuffer = Buffer.from(await workbook.xlsx.writeBuffer());
-    const workbookHash = createHash("sha256").update(workbookBuffer).digest("hex");
-    const generatedAt = new Date().toISOString();
-    const manifest = {
-      event: "SWP Summit 2027",
-      generatedAt,
-      attendeeCount: rows.length,
-      testQrValue: SCANNER_TEST_CODE,
-      qrPayload: "The QR contains only the 12-character QR Value from the workbook.",
-      printedBadgeFields: ["Name", "Company", "QR"],
-      printedCode: false,
-      emergencyCaptureSheet: "Emergency lead capture worksheet",
-      minimumQrSizeMm: 25,
-      quietZoneModules: 4,
-      errorCorrection: "High",
-      workbookSha256: workbookHash,
-      manifestSignature: signBadgeManifest(`${generatedAt}|${rows.length}|${workbookHash}`),
-    };
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="swp-2027-badge-production-data.zip"',
-    );
-    const archive = archiver("zip", { zlib: { level: 9 } });
-    archive.on("error", (error) => res.destroy(error));
-    archive.pipe(res);
-    archive.append(workbookBuffer, { name: "swp-2027-badge-data.xlsx" });
-    archive.append(`${JSON.stringify(manifest, null, 2)}\n`, { name: "manifest.json" });
-    archive.append(
-      [
-        "SWP Summit 2027 badge production",
-        "",
-        "Create one badge per row in the Badges sheet.",
-        "Print the attendee name, company and QR only.",
-        "Encode the QR Value exactly as supplied. Do not print the value as text.",
-        "Use black on white, high error correction, a four-module quiet zone and at least 25 mm.",
-        "Use the Scanner test sheet to create the readiness-check QR. Do not issue it as a badge.",
-        "Print copies of the Emergency lead capture sheet for the organiser fallback kit.",
-        "",
-      ].join("\r\n"),
-      { name: "README.txt" },
-    );
-    await archive.finalize();
+    const csv = badgeExportCsv(rows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="swp-2027-badge-data.csv"');
+    res.send(`\uFEFF${csv}\r\n`);
   } catch (error) {
     sendError(res, error);
   }

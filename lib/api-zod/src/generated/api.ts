@@ -3771,11 +3771,14 @@ export const SyncScannerBatchResponse = zod.object({
 /**
  * @summary View scanner devices, readiness and aggregate counts
  */
+export const getLeadScannerAdminOverviewResponseTestQrValueRegExp = new RegExp("^[0-9A-F]{12}$");
+
 export const GetLeadScannerAdminOverviewResponse = zod.object({
   leadCount: zod.number(),
   deviceCount: zod.number(),
   badgeCount: zod.number(),
   currentPackVersion: zod.string(),
+  testQrValue: zod.string().regex(getLeadScannerAdminOverviewResponseTestQrValueRegExp),
   scannerWindow: zod.object({
     eventStartAt: zod.coerce.date().nullable(),
     eventEndAt: zod.coerce.date().nullable(),

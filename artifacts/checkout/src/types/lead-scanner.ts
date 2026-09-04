@@ -146,6 +146,7 @@ export interface LeadScannerAdminOverview {
   deviceCount: number;
   badgeCount: number;
   currentPackVersion: string;
+  testQrValue: string;
   scannerWindow: ScannerWindow;
   devices: LeadScannerAdminDevice[];
 }

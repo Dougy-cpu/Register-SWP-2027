@@ -939,7 +939,7 @@ function ReadinessPanel({
       </div>
       <p className="text-xs text-muted-foreground mt-3">
         To complete the QR check, start the camera and scan the separate Scanner test QR supplied in
-        the badge-production export.
+        the organiser's Lead Scanner admin page.
       </p>
     </Card>
   );

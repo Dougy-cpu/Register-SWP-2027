@@ -8,7 +8,7 @@ The badge artwork contains exactly:
 2. Company
 3. QR code
 
-The QR payload is the exact 12-character uppercase hexadecimal value from the `QR Value` column in the badge-production workbook. Do not print that value as text on the badge. The value is only an attendee reference and contains no personal information.
+The QR payload is the exact 12-character uppercase hexadecimal value from the `QR Code` column in the badge CSV. Do not print that value as text on the badge. The value is only an attendee reference and contains no personal information.
 
 In the QR converter, use:
 
@@ -18,13 +18,15 @@ In the QR converter, use:
 - a printed QR size of at least 25 mm square
 - no logo, colour, gradient or decorative overlay inside the QR
 
-Download the ZIP from **Admin > Lead Scanner > Export badge data**. It contains:
+Download `swp-2027-badge-data.csv` from **Admin > Lead Scanner > Export badge CSV**. It contains exactly:
 
-- `swp-2027-badge-data.xlsx`, with Name, Company and QR Value
-- an `Emergency lead capture` worksheet to print for the fallback kit
-- `manifest.json`, including the workbook hash and production requirements
-- `README.txt`
-- a separate scanner-test value that must never be issued as an attendee badge
+- First Name
+- Last Name
+- Job Title
+- Company
+- QR Code
+
+New QR codes begin with a hexadecimal letter so spreadsheet software retains the full 12-character value. The separate readiness-test value appears only on the organiser's **Admin > Lead Scanner** page. Convert it separately and never issue it as an attendee badge.
 
 ## What is saved
 
@@ -38,7 +40,6 @@ Do not publish the feature or run the production migration until all of the foll
 
 - A verified production PostgreSQL restore point exists.
 - Its reference has been recorded for `PRODUCTION_BACKUP_REFERENCE` during the approved migration run.
-- `BADGE_QR_SECRET` is configured as a new random value of at least 32 characters. It must not reuse `SPONSOR_TOKEN_SECRET` or `ADMIN_TOKEN_SECRET`.
 - The exact source revision intended for publication is present in Replit.
 - The generated OpenAPI clients, dependency lockfile, production build and full tests match that revision.
 - The organiser has configured the correct event end time. Scanning fails closed if it is missing.
@@ -86,7 +87,7 @@ Required evidence:
 Use this only after the approved source revision has been imported into Replit. It is deliberately read-only:
 
 ```text
-Use Free Mode and inspect only. Do not edit files, change secrets, access or display secret values, mutate the database, restart workflows, migrate or publish. First report the exact Git HEAD and whether the worktree is clean. Verify that this exact revision contains the SWP 2027 lead-scanner migration, startup schema checks, BADGE_QR_SECRET validation, pinned self-hosted scanner dependencies, sponsor-scoped service worker, authenticated per-device rate limiting and badge export contract of Name, Company and QR only with no printed reference. Run the generated-client check, typecheck, lint, all tests and the production build. Report pass/fail evidence and any warnings. Confirm whether the production database still needs migration and whether BADGE_QR_SECRET exists and meets the minimum length using booleans only. Do not reveal values and do not make any change.
+Use Free Mode and inspect only. Do not edit files, change secrets, access or display secret values, mutate the database, restart workflows, migrate or publish. First report the exact Git HEAD and whether the worktree is clean. Verify that this exact revision contains the SWP 2027 lead-scanner migration, startup schema checks, pinned self-hosted scanner dependencies, sponsor-scoped service worker, authenticated per-device rate limiting and a badge CSV containing exactly First Name, Last Name, Job Title, Company and QR Code. Run the generated-client check, typecheck, lint, all tests and the production build. Report pass/fail evidence and any warnings. Confirm whether the production database still needs migration. Do not reveal secret values and do not make any change.
 ```
 
 ## Event-day fallback kit

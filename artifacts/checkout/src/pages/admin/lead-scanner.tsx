@@ -143,8 +143,8 @@ export default function AdminLeadScanner() {
               Badge readiness, sponsor phones, synchronised leads and exports in one place.
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Badge artwork contains name, company and QR only. The hidden QR value is supplied only
-              in the production export.
+              The badge CSV contains first name, last name, job title, company and the hidden QR
+              code for your converter.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -155,14 +155,26 @@ export default function AdminLeadScanner() {
               onClick={() =>
                 void downloadAdminFile(
                   "/api/admin/lead-scanner/badges/export",
-                  "swp-2027-badge-production-data.zip",
+                  "swp-2027-badge-data.csv",
                 )
               }
             >
-              <QrCode className="h-4 w-4 mr-2" /> Export badge data
+              <QrCode className="h-4 w-4 mr-2" /> Export badge CSV
             </Button>
           </div>
         </div>
+
+        {overview && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-slate-700">
+            <strong>Scanner readiness-test QR:</strong>{" "}
+            <code className="rounded bg-white px-2 py-1 font-mono font-bold select-all">
+              {overview.testQrValue}
+            </code>
+            <span className="ml-2">
+              Convert this separately. It is not an attendee and is never included in the badge CSV.
+            </span>
+          </div>
+        )}
 
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <Metric label="Unique leads" value={overview?.leadCount ?? 0} icon={Users} />

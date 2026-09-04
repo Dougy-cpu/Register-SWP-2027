@@ -4,7 +4,6 @@ import { logger } from "./lib/logger";
 import { getPort } from "./lib/env";
 import { seed, runMigrations } from "./lib/seed";
 import { checkSchemaConsistency } from "./lib/schema-check";
-import { validateLeadScannerConfig } from "./lib/lead-scanner";
 
 const port = getPort();
 
@@ -59,7 +58,6 @@ process.on("uncaughtException", (err) => {
 });
 
 async function start() {
-  validateLeadScannerConfig();
   await runMigrations();
 
   const schemaOk = await checkSchemaConsistency();

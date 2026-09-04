@@ -2433,12 +2433,12 @@ paths:
       operationId: exportLeadScannerBadgeData
       tags: [lead-scanner-admin]
       security: [{ AdminToken: [] }]
-      summary: Export name, company and hidden QR value for the external badge converter
+      summary: Export first name, last name, job title, company and QR code as CSV
       responses:
         "200":
-          description: ZIP containing Excel badge data, manifest and production instructions
+          description: UTF-8 CSV for the external badge and QR converter
           content:
-            application/zip: { schema: { type: string, format: binary } }
+            text/csv: { schema: { type: string, format: binary } }
 
 components:
   securitySchemes:
@@ -3062,9 +3062,19 @@ components:
         deviceCount: { type: integer }
         badgeCount: { type: integer }
         currentPackVersion: { type: string }
+        testQrValue: { type: string, pattern: "^[0-9A-F]{12}$" }
         scannerWindow: { $ref: "#/components/schemas/ScannerWindow" }
         devices: { type: array, items: { $ref: "#/components/schemas/LeadScannerDevice" } }
-      required: [leadCount, deviceCount, badgeCount, currentPackVersion, scannerWindow, devices]
+      required:
+        [
+          leadCount,
+          deviceCount,
+          badgeCount,
+          currentPackVersion,
+          testQrValue,
+          scannerWindow,
+          devices,
+        ]
 
     LeadScannerAttendee:
       type: object

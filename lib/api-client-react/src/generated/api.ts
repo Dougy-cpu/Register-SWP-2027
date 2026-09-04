@@ -8047,7 +8047,7 @@ export const useRotateAttendeeBadge = <TError = ErrorType<unknown>, TContext = u
 };
 
 /**
- * @summary Export name, company and hidden QR value for the external badge converter
+ * @summary Export first name, last name, job title, company and QR code as CSV
  */
 export const getExportLeadScannerBadgeDataUrl = () => {
   return `/api/admin/lead-scanner/badges/export`;
@@ -8092,7 +8092,7 @@ export type ExportLeadScannerBadgeDataQueryResult = NonNullable<
 export type ExportLeadScannerBadgeDataQueryError = ErrorType<unknown>;
 
 /**
- * @summary Export name, company and hidden QR value for the external badge converter
+ * @summary Export first name, last name, job title, company and QR code as CSV
  */
 
 export function useExportLeadScannerBadgeData<

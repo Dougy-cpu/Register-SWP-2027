@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import {
@@ -13,8 +13,6 @@ import {
   sponsorScannerDevicesTable,
   sponsorsTable,
 } from "@workspace/db";
-import { getOptionalEnv, isProductionEnv } from "./env";
-import { logger } from "./logger";
 
 export const SCANNER_TEST_CODE = "FFFFFFFFFFFF";
 export const BADGE_CODE_PATTERN = /^[0-9A-F]{12}$/;
@@ -25,34 +23,6 @@ const PACK_REFRESH_MS = 12 * 60 * 60 * 1000;
 const SCANNER_GRACE_MS = 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
-let developmentSecret: Buffer | undefined;
-let warnedAboutDevelopmentSecret = false;
-
-export function getBadgeQrSecret(): Buffer {
-  const configured = getOptionalEnv("BADGE_QR_SECRET");
-  if (configured && configured.length >= 32) return Buffer.from(configured, "utf8");
-  if (isProductionEnv()) {
-    throw new Error("BADGE_QR_SECRET must be configured with at least 32 characters");
-  }
-  if (!developmentSecret) {
-    developmentSecret =
-      process.env.NODE_ENV === "test"
-        ? Buffer.from("swp-lead-scanner-test-secret-32-characters")
-        : randomBytes(32);
-  }
-  if (!warnedAboutDevelopmentSecret && process.env.NODE_ENV !== "test") {
-    warnedAboutDevelopmentSecret = true;
-    logger.warn(
-      "BADGE_QR_SECRET is not configured; using a restart-scoped development secret only",
-    );
-  }
-  return developmentSecret;
-}
-
-export function validateLeadScannerConfig(): void {
-  void getBadgeQrSecret();
-}
-
 export function normaliseBadgeCode(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const code = value.trim().toUpperCase();
@@ -61,7 +31,9 @@ export function normaliseBadgeCode(value: unknown): string | null {
 
 export function generateBadgeCode(): string {
   let code = SCANNER_TEST_CODE;
-  while (code === SCANNER_TEST_CODE) code = randomBytes(6).toString("hex").toUpperCase();
+  while (code === SCANNER_TEST_CODE || !/^[A-F]/.test(code)) {
+    code = randomBytes(6).toString("hex").toUpperCase();
+  }
   return code;
 }
 
@@ -672,25 +644,42 @@ export async function addLeadAnnotation(input: {
   });
 }
 
-export async function badgeExportRows(): Promise<
-  Array<{
-    attendeeId: number;
-    name: string;
-    company: string;
-    qrValue: string;
-    badgeVersion: number;
-  }>
-> {
+export interface BadgeExportRow {
+  attendeeId: number;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  company: string;
+  qrCode: string;
+  badgeVersion: number;
+}
+
+function badgeCsvCell(value: string): string {
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+export function badgeExportCsv(rows: BadgeExportRow[]): string {
+  const headings = ["First Name", "Last Name", "Job Title", "Company", "QR Code"];
+  const values = rows.map((row) => [
+    row.firstName,
+    row.lastName,
+    row.jobTitle,
+    row.company,
+    row.qrCode,
+  ]);
+  return [headings, ...values].map((row) => row.map(badgeCsvCell).join(",")).join("\r\n");
+}
+
+export async function badgeExportRows(): Promise<BadgeExportRow[]> {
   const rows = await eligibleBadgeRows();
   return rows.map((row) => ({
     attendeeId: row.attendeeId,
-    name: row.name,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    jobTitle: row.jobTitle,
     company: row.company,
-    qrValue: row.code,
+    qrCode: row.code,
     badgeVersion: row.badgeVersion,
   }));
-}
-
-export function signBadgeManifest(value: string): string {
-  return createHmac("sha256", getBadgeQrSecret()).update(value).digest("hex");
 }

@@ -625,6 +625,8 @@ export interface LeadScannerAdminOverview {
   deviceCount: number;
   badgeCount: number;
   currentPackVersion: string;
+  /** @pattern ^[0-9A-F]{12}$ */
+  testQrValue: string;
   scannerWindow: ScannerWindow;
   devices: LeadScannerDevice[];
 }
