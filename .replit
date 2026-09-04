@@ -136,7 +136,6 @@ FROM_EMAIL = "douglas@peoplestrategyhub.com"
 FROM_NAME = "SWP Summit"
 APP_BASE_URL = "https://register.swpsummit.com"
 ORGANISER_EMAIL = "(none)"
-ADMIN_TOKEN_SECRET = "ef837970d36b02d5666c48304504698ba5e2c75658fca111bfecfe4b86757a0b"
 
 [nix]
 channel = "stable-25_05"
