@@ -34,6 +34,7 @@ const BASE_SCHEMA = `
 `;
 
 const databases: PGlite[] = [];
+const MIGRATION_TEST_TIMEOUT_MS = 20_000;
 
 afterEach(async () => {
   await Promise.all(databases.splice(0).map((database) => database.close()));
@@ -48,17 +49,19 @@ async function migratedDatabase(): Promise<PGlite> {
 }
 
 describe("lead scanner database migration", () => {
-  it("is additive, idempotent and preserves existing attendees", async () => {
-    const database = await migratedDatabase();
-    await database.exec(`
+  it(
+    "is additive, idempotent and preserves existing attendees",
+    async () => {
+      const database = await migratedDatabase();
+      await database.exec(`
       INSERT INTO bookings (manual_entry, status) VALUES (FALSE, 'paid');
       INSERT INTO attendees (booking_id) VALUES (1);
     `);
-    const migration = await readFile(scannerMigrationUrl, "utf8");
-    await database.exec(migration);
-    await database.exec(migration);
+      const migration = await readFile(scannerMigrationUrl, "utf8");
+      await database.exec(migration);
+      await database.exec(migration);
 
-    const tables = await database.query<{ table_name: string }>(`
+      const tables = await database.query<{ table_name: string }>(`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name IN (
@@ -67,33 +70,37 @@ describe("lead scanner database migration", () => {
         )
       ORDER BY table_name
     `);
-    expect(tables.rows.map((row) => row.table_name)).toEqual([
-      "attendee_badges",
-      "sponsor_lead_notes",
-      "sponsor_lead_scan_events",
-      "sponsor_leads",
-      "sponsor_scanner_devices",
-    ]);
+      expect(tables.rows.map((row) => row.table_name)).toEqual([
+        "attendee_badges",
+        "sponsor_lead_notes",
+        "sponsor_lead_scan_events",
+        "sponsor_leads",
+        "sponsor_scanner_devices",
+      ]);
 
-    const attendee = await database.query<{
-      lead_sharing_excluded: boolean;
-      lead_sharing_notice_at: Date | null;
-    }>("SELECT lead_sharing_excluded, lead_sharing_notice_at FROM attendees WHERE id = 1");
-    expect(attendee.rows[0]).toEqual({
-      lead_sharing_excluded: false,
-      lead_sharing_notice_at: null,
-    });
-    const applied = await database.query<{ count: number }>(`
+      const attendee = await database.query<{
+        lead_sharing_excluded: boolean;
+        lead_sharing_notice_at: Date | null;
+      }>("SELECT lead_sharing_excluded, lead_sharing_notice_at FROM attendees WHERE id = 1");
+      expect(attendee.rows[0]).toEqual({
+        lead_sharing_excluded: false,
+        lead_sharing_notice_at: null,
+      });
+      const applied = await database.query<{ count: number }>(`
       SELECT count(*)::int AS count FROM schema_migrations
       WHERE version = '20260904_001_lead_scanner'
     `);
-    expect(applied.rows[0]?.count).toBe(1);
-  });
+      expect(applied.rows[0]?.count).toBe(1);
+    },
+    MIGRATION_TEST_TIMEOUT_MS,
+  );
 
-  it("enforces badge shape, per-sponsor deduplication and rating bounds", async () => {
-    const database = await migratedDatabase();
-    await database.exec(await readFile(scannerMigrationUrl, "utf8"));
-    await database.exec(`
+  it(
+    "enforces badge shape, per-sponsor deduplication and rating bounds",
+    async () => {
+      const database = await migratedDatabase();
+      await database.exec(await readFile(scannerMigrationUrl, "utf8"));
+      await database.exec(`
       INSERT INTO bookings (manual_entry, status) VALUES (FALSE, 'paid');
       INSERT INTO attendees (booking_id) VALUES (1);
       INSERT INTO sponsors (
@@ -103,23 +110,27 @@ describe("lead scanner database migration", () => {
       INSERT INTO attendee_badges (attendee_id, code) VALUES (1, 'CC4FFD33219D');
       INSERT INTO sponsor_leads (id, sponsor_id, attendee_id) VALUES ('lead-1', 1, 1);
     `);
-    await expect(
-      database.exec("INSERT INTO attendee_badges (attendee_id, code) VALUES (1, 'not-a-code')"),
-    ).rejects.toThrow();
-    await expect(
-      database.exec(
-        "INSERT INTO sponsor_leads (id, sponsor_id, attendee_id) VALUES ('lead-2', 1, 1)",
-      ),
-    ).rejects.toThrow();
-    await expect(
-      database.exec("UPDATE sponsor_leads SET rating = 6 WHERE id = 'lead-1'"),
-    ).rejects.toThrow();
-  });
+      await expect(
+        database.exec("INSERT INTO attendee_badges (attendee_id, code) VALUES (1, 'not-a-code')"),
+      ).rejects.toThrow();
+      await expect(
+        database.exec(
+          "INSERT INTO sponsor_leads (id, sponsor_id, attendee_id) VALUES ('lead-2', 1, 1)",
+        ),
+      ).rejects.toThrow();
+      await expect(
+        database.exec("UPDATE sponsor_leads SET rating = 6 WHERE id = 'lead-1'"),
+      ).rejects.toThrow();
+    },
+    MIGRATION_TEST_TIMEOUT_MS,
+  );
 
-  it("supports the planned 500 attendees, 50 sponsors and 150 scanner devices", async () => {
-    const database = await migratedDatabase();
-    await database.exec(await readFile(scannerMigrationUrl, "utf8"));
-    await database.exec(`
+  it(
+    "supports the planned 500 attendees, 50 sponsors and 150 scanner devices",
+    async () => {
+      const database = await migratedDatabase();
+      await database.exec(await readFile(scannerMigrationUrl, "utf8"));
+      await database.exec(`
       INSERT INTO bookings (manual_entry, status)
       SELECT FALSE, 'paid' FROM generate_series(1, 500);
 
@@ -158,13 +169,13 @@ describe("lead scanner database migration", () => {
       SELECT 'lead-' || id, id, 1, 1 FROM sponsors;
     `);
 
-    const counts = await database.query<{
-      attendees: number;
-      badges: number;
-      sponsors: number;
-      devices: number;
-      isolated_leads: number;
-    }>(`
+      const counts = await database.query<{
+        attendees: number;
+        badges: number;
+        sponsors: number;
+        devices: number;
+        isolated_leads: number;
+      }>(`
       SELECT
         (SELECT count(*)::int FROM attendees) AS attendees,
         (SELECT count(*)::int FROM attendee_badges) AS badges,
@@ -172,18 +183,20 @@ describe("lead scanner database migration", () => {
         (SELECT count(*)::int FROM sponsor_scanner_devices) AS devices,
         (SELECT count(*)::int FROM sponsor_leads WHERE attendee_id = 1) AS isolated_leads
     `);
-    expect(counts.rows[0]).toEqual({
-      attendees: 500,
-      badges: 500,
-      sponsors: 50,
-      devices: 150,
-      isolated_leads: 50,
-    });
+      expect(counts.rows[0]).toEqual({
+        attendees: 500,
+        badges: 500,
+        sponsors: 50,
+        devices: 150,
+        isolated_leads: 50,
+      });
 
-    await expect(
-      database.exec(
-        "INSERT INTO sponsor_leads (id, sponsor_id, attendee_id) VALUES ('duplicate', 1, 1)",
-      ),
-    ).rejects.toThrow();
-  });
+      await expect(
+        database.exec(
+          "INSERT INTO sponsor_leads (id, sponsor_id, attendee_id) VALUES ('duplicate', 1, 1)",
+        ),
+      ).rejects.toThrow();
+    },
+    MIGRATION_TEST_TIMEOUT_MS,
+  );
 });

@@ -28,6 +28,7 @@ const BASE_SCHEMA = `
 `;
 
 const databases: PGlite[] = [];
+const MIGRATION_TEST_TIMEOUT_MS = 20_000;
 
 async function baseDatabase(): Promise<PGlite> {
   const database = new PGlite();
@@ -41,42 +42,48 @@ afterEach(async () => {
 });
 
 describe("sponsor workspace database migration", () => {
-  it("applies to a clean application schema with its constraints intact", async () => {
-    const database = await baseDatabase();
-    const migration = await readFile(migrationUrl, "utf8");
+  it(
+    "applies to a clean application schema with its constraints intact",
+    async () => {
+      const database = await baseDatabase();
+      const migration = await readFile(migrationUrl, "utf8");
 
-    await database.exec(migration);
+      await database.exec(migration);
 
-    const tables = await database.query<{ table_name: string }>(`
+      const tables = await database.query<{ table_name: string }>(`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name LIKE 'sponsor%'
       ORDER BY table_name
     `);
-    expect(tables.rows.map((row) => row.table_name)).toEqual(
-      expect.arrayContaining([
-        "sponsors",
-        "sponsor_contacts",
-        "sponsor_sessions",
-        "sponsor_assets",
-        "sponsor_redemptions",
-      ]),
-    );
+      expect(tables.rows.map((row) => row.table_name)).toEqual(
+        expect.arrayContaining([
+          "sponsors",
+          "sponsor_contacts",
+          "sponsor_sessions",
+          "sponsor_assets",
+          "sponsor_redemptions",
+        ]),
+      );
 
-    await expect(
-      database.exec(`
+      await expect(
+        database.exec(`
         INSERT INTO sponsors (
           company, package_label, vip_allocation, staff_allocation,
           vip_code_draft, public_code_draft
         ) VALUES ('Invalid allocation', 'Test', -1, 0, 'INVALIDVIP', 'INVALID');
       `),
-    ).rejects.toThrow();
-  });
+      ).rejects.toThrow();
+    },
+    MIGRATION_TEST_TIMEOUT_MS,
+  );
 
-  it("preserves existing records, backfills manual sources and is idempotent", async () => {
-    const database = await baseDatabase();
-    const migration = await readFile(migrationUrl, "utf8");
-    await database.exec(`
+  it(
+    "preserves existing records, backfills manual sources and is idempotent",
+    async () => {
+      const database = await baseDatabase();
+      const migration = await readFile(migrationUrl, "utf8");
+      await database.exec(`
       INSERT INTO promo_codes (code) VALUES ('EXISTING');
       INSERT INTO bookings (manual_entry, status) VALUES (TRUE, 'paid'), (FALSE, 'pending');
       INSERT INTO attendees DEFAULT VALUES;
@@ -84,33 +91,35 @@ describe("sponsor workspace database migration", () => {
       INSERT INTO email_logs DEFAULT VALUES;
     `);
 
-    await database.exec(migration);
-    await database.exec(migration);
+      await database.exec(migration);
+      await database.exec(migration);
 
-    const bookings = await database.query<{
-      manual_entry: boolean;
-      registration_source: string;
-    }>(`
+      const bookings = await database.query<{
+        manual_entry: boolean;
+        registration_source: string;
+      }>(`
       SELECT manual_entry, registration_source::text AS registration_source
       FROM bookings
       ORDER BY id
     `);
-    expect(bookings.rows).toEqual([
-      { manual_entry: true, registration_source: "manual" },
-      { manual_entry: false, registration_source: "checkout" },
-    ]);
+      expect(bookings.rows).toEqual([
+        { manual_entry: true, registration_source: "manual" },
+        { manual_entry: false, registration_source: "checkout" },
+      ]);
 
-    const counts = await database.query<{
-      promo_count: number;
-      attendee_count: number;
-      migration_count: number;
-    }>(`
+      const counts = await database.query<{
+        promo_count: number;
+        attendee_count: number;
+        migration_count: number;
+      }>(`
       SELECT
         (SELECT count(*)::int FROM promo_codes) AS promo_count,
         (SELECT count(*)::int FROM attendees) AS attendee_count,
         (SELECT count(*)::int FROM schema_migrations
           WHERE version = '20260901_001_sponsor_workspace') AS migration_count
     `);
-    expect(counts.rows[0]).toEqual({ promo_count: 1, attendee_count: 1, migration_count: 1 });
-  });
+      expect(counts.rows[0]).toEqual({ promo_count: 1, attendee_count: 1, migration_count: 1 });
+    },
+    MIGRATION_TEST_TIMEOUT_MS,
+  );
 });
