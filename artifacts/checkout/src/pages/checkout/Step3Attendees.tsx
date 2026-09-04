@@ -857,7 +857,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                           onCheckedChange={(val) => updateFormData(index, "gdprConsent", !!val)}
                           className="mt-1"
                         />
-                        <div className="space-y-1 leading-none">
+                        <div className="space-y-2 leading-normal">
                           <label className="font-normal text-base cursor-pointer">
                             I understand how my data will be processed in accordance with{" "}
                             <a
@@ -878,6 +878,12 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                               Conference T&Cs
                             </a>
                           </label>
+                          <p className="text-sm text-muted-foreground">
+                            At the event, sponsors may scan this attendee's badge to save their
+                            name, job title, company and work email as a lead. Scanning is optional.
+                            Contact the SWP Summit team if they want their badge excluded from
+                            sponsor scanning.
+                          </p>
                           {fieldErrors?.gdprConsent && (
                             <p className="text-xs text-destructive">{fieldErrors.gdprConsent}</p>
                           )}

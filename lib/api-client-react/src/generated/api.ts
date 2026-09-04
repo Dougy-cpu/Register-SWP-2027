@@ -18,6 +18,7 @@ import type {
 
 import type {
   AcknowledgeSponsorDocumentBody,
+  ActivateSponsorScannerDeviceBody,
   AdminBookingWithAttendees,
   AdminDownloadSponsorAssetParams,
   AdminLoginBody,
@@ -47,16 +48,24 @@ import type {
   ErrorResponse,
   EventSettings,
   EventSettingsUpdate,
+  ExportAdminSponsorLeadsParams,
   ExportRegistrationsParams,
+  ExportSponsorLeadsParams,
   GetBookingPricingParams,
   HealthStatus,
   InvoiceResponse,
+  LeadAnnotationInput,
+  LeadScannerAdminOverview,
   ListAdminSponsorAssetLibrary200,
   ListAdminSponsorAssetLibraryParams,
+  ListAdminSponsorLeads200,
+  ListAdminSponsorLeadsParams,
   ListEmailLogsParams,
+  ListLeadScannerAttendees200,
   ListRegistrationsParams,
   ListSponsorAssets200,
   ListSponsorAssetsParams,
+  ListSponsorLeads200,
   ListSponsors200,
   ListSponsorsParams,
   ListUnpaidInvoicesParams,
@@ -75,11 +84,19 @@ import type {
   ReplaceSponsorWorkspaceAssetBody,
   RequestMoreSponsorPassesBody,
   ReviewSponsorSessionBody,
+  RevokeSponsorScannerDeviceBody,
   RotateSponsorAccess200,
+  ScannerActivation,
+  ScannerBootstrap,
+  ScannerOfflinePack,
+  ScannerReadinessInput,
+  ScannerSyncRequest,
+  ScannerSyncResponse,
   SendSponsorWelcome200,
   SendSponsorWelcomeBody,
   SponsorAsset,
   SponsorAssetUpload,
+  SponsorLead,
   SponsorSession,
   SponsorSessionEntitlementInput,
   SponsorSessionInput,
@@ -96,10 +113,12 @@ import type {
   UnpaidInvoicesSummary,
   UpdateAdminSponsorTaskBody,
   UpdateAttendeeBody,
+  UpdateAttendeeLeadSharingBody,
   UpdateBookingBody,
   UpdateDiscountTiersBody,
   UpdateEmailTemplateBody,
   UpdatePromoCodeBody,
+  UpdateScannerReadiness200,
   UpdateSponsorAssetStatusBody,
   ValidatePromoCodeBody,
 } from "./api.schemas";
@@ -6879,3 +6898,1213 @@ export const useAcknowledgeSponsorDocument = <
 > => {
   return useMutation(getAcknowledgeSponsorDocumentMutationOptions(options));
 };
+
+/**
+ * @summary Activate one sponsor phone and attribute it to an operator
+ */
+export const getActivateSponsorScannerDeviceUrl = () => {
+  return `/api/sponsor/scanner/devices`;
+};
+
+export const activateSponsorScannerDevice = async (
+  activateSponsorScannerDeviceBody: ActivateSponsorScannerDeviceBody,
+  options?: RequestInit,
+): Promise<ScannerActivation> => {
+  return customFetch<ScannerActivation>(getActivateSponsorScannerDeviceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(activateSponsorScannerDeviceBody),
+  });
+};
+
+export const getActivateSponsorScannerDeviceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateSponsorScannerDevice>>,
+    TError,
+    { data: BodyType<ActivateSponsorScannerDeviceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof activateSponsorScannerDevice>>,
+  TError,
+  { data: BodyType<ActivateSponsorScannerDeviceBody> },
+  TContext
+> => {
+  const mutationKey = ["activateSponsorScannerDevice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof activateSponsorScannerDevice>>,
+    { data: BodyType<ActivateSponsorScannerDeviceBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return activateSponsorScannerDevice(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ActivateSponsorScannerDeviceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof activateSponsorScannerDevice>>
+>;
+export type ActivateSponsorScannerDeviceMutationBody = BodyType<ActivateSponsorScannerDeviceBody>;
+export type ActivateSponsorScannerDeviceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Activate one sponsor phone and attribute it to an operator
+ */
+export const useActivateSponsorScannerDevice = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateSponsorScannerDevice>>,
+    TError,
+    { data: BodyType<ActivateSponsorScannerDeviceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof activateSponsorScannerDevice>>,
+  TError,
+  { data: BodyType<ActivateSponsorScannerDeviceBody> },
+  TContext
+> => {
+  return useMutation(getActivateSponsorScannerDeviceMutationOptions(options));
+};
+
+/**
+ * @summary List only the authenticated sponsor's server-synchronised leads
+ */
+export const getListSponsorLeadsUrl = () => {
+  return `/api/sponsor/leads`;
+};
+
+export const listSponsorLeads = async (options?: RequestInit): Promise<ListSponsorLeads200> => {
+  return customFetch<ListSponsorLeads200>(getListSponsorLeadsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSponsorLeadsQueryKey = () => {
+  return [`/api/sponsor/leads`] as const;
+};
+
+export const getListSponsorLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorLeads>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSponsorLeadsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSponsorLeads>>> = ({ signal }) =>
+    listSponsorLeads({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSponsorLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSponsorLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listSponsorLeads>>>;
+export type ListSponsorLeadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List only the authenticated sponsor's server-synchronised leads
+ */
+
+export function useListSponsorLeads<
+  TData = Awaited<ReturnType<typeof listSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorLeads>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSponsorLeadsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Append a note and/or change the current rating
+ */
+export const getAnnotateSponsorLeadUrl = (leadId: string) => {
+  return `/api/sponsor/leads/${leadId}`;
+};
+
+export const annotateSponsorLead = async (
+  leadId: string,
+  leadAnnotationInput: LeadAnnotationInput,
+  options?: RequestInit,
+): Promise<SponsorLead> => {
+  return customFetch<SponsorLead>(getAnnotateSponsorLeadUrl(leadId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(leadAnnotationInput),
+  });
+};
+
+export const getAnnotateSponsorLeadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof annotateSponsorLead>>,
+    TError,
+    { leadId: string; data: BodyType<LeadAnnotationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof annotateSponsorLead>>,
+  TError,
+  { leadId: string; data: BodyType<LeadAnnotationInput> },
+  TContext
+> => {
+  const mutationKey = ["annotateSponsorLead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof annotateSponsorLead>>,
+    { leadId: string; data: BodyType<LeadAnnotationInput> }
+  > = (props) => {
+    const { leadId, data } = props ?? {};
+
+    return annotateSponsorLead(leadId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AnnotateSponsorLeadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof annotateSponsorLead>>
+>;
+export type AnnotateSponsorLeadMutationBody = BodyType<LeadAnnotationInput>;
+export type AnnotateSponsorLeadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Append a note and/or change the current rating
+ */
+export const useAnnotateSponsorLead = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof annotateSponsorLead>>,
+    TError,
+    { leadId: string; data: BodyType<LeadAnnotationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof annotateSponsorLead>>,
+  TError,
+  { leadId: string; data: BodyType<LeadAnnotationInput> },
+  TContext
+> => {
+  return useMutation(getAnnotateSponsorLeadMutationOptions(options));
+};
+
+/**
+ * @summary Export only the authenticated sponsor's synchronised leads
+ */
+export const getExportSponsorLeadsUrl = (params?: ExportSponsorLeadsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/sponsor/leads/export?${stringifiedParams}`
+    : `/api/sponsor/leads/export`;
+};
+
+export const exportSponsorLeads = async (
+  params?: ExportSponsorLeadsParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportSponsorLeadsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportSponsorLeadsQueryKey = (params?: ExportSponsorLeadsParams) => {
+  return [`/api/sponsor/leads/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getExportSponsorLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ExportSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportSponsorLeadsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportSponsorLeads>>> = ({ signal }) =>
+    exportSponsorLeads(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportSponsorLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportSponsorLeadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportSponsorLeads>>
+>;
+export type ExportSponsorLeadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export only the authenticated sponsor's synchronised leads
+ */
+
+export function useExportSponsorLeads<
+  TData = Awaited<ReturnType<typeof exportSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ExportSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportSponsorLeadsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Read device readiness, pack status and the scanner time window
+ */
+export const getGetScannerBootstrapUrl = () => {
+  return `/api/scanner/bootstrap`;
+};
+
+export const getScannerBootstrap = async (options?: RequestInit): Promise<ScannerBootstrap> => {
+  return customFetch<ScannerBootstrap>(getGetScannerBootstrapUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScannerBootstrapQueryKey = () => {
+  return [`/api/scanner/bootstrap`] as const;
+};
+
+export const getGetScannerBootstrapQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScannerBootstrap>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getScannerBootstrap>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScannerBootstrapQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getScannerBootstrap>>> = ({ signal }) =>
+    getScannerBootstrap({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScannerBootstrap>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScannerBootstrapQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScannerBootstrap>>
+>;
+export type GetScannerBootstrapQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read device readiness, pack status and the scanner time window
+ */
+
+export function useGetScannerBootstrap<
+  TData = Awaited<ReturnType<typeof getScannerBootstrap>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getScannerBootstrap>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScannerBootstrapQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Download the approved attendee fields encrypted for this device
+ */
+export const getDownloadScannerOfflinePackUrl = () => {
+  return `/api/scanner/offline-pack`;
+};
+
+export const downloadScannerOfflinePack = async (
+  options?: RequestInit,
+): Promise<ScannerOfflinePack> => {
+  return customFetch<ScannerOfflinePack>(getDownloadScannerOfflinePackUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadScannerOfflinePackQueryKey = () => {
+  return [`/api/scanner/offline-pack`] as const;
+};
+
+export const getDownloadScannerOfflinePackQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadScannerOfflinePack>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadScannerOfflinePack>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDownloadScannerOfflinePackQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadScannerOfflinePack>>> = ({
+    signal,
+  }) => downloadScannerOfflinePack({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadScannerOfflinePack>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadScannerOfflinePackQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadScannerOfflinePack>>
+>;
+export type DownloadScannerOfflinePackQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download the approved attendee fields encrypted for this device
+ */
+
+export function useDownloadScannerOfflinePack<
+  TData = Awaited<ReturnType<typeof downloadScannerOfflinePack>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadScannerOfflinePack>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadScannerOfflinePackQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record independently completed device readiness checks
+ */
+export const getUpdateScannerReadinessUrl = () => {
+  return `/api/scanner/readiness`;
+};
+
+export const updateScannerReadiness = async (
+  scannerReadinessInput: ScannerReadinessInput,
+  options?: RequestInit,
+): Promise<UpdateScannerReadiness200> => {
+  return customFetch<UpdateScannerReadiness200>(getUpdateScannerReadinessUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(scannerReadinessInput),
+  });
+};
+
+export const getUpdateScannerReadinessMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateScannerReadiness>>,
+    TError,
+    { data: BodyType<ScannerReadinessInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateScannerReadiness>>,
+  TError,
+  { data: BodyType<ScannerReadinessInput> },
+  TContext
+> => {
+  const mutationKey = ["updateScannerReadiness"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateScannerReadiness>>,
+    { data: BodyType<ScannerReadinessInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateScannerReadiness(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateScannerReadinessMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateScannerReadiness>>
+>;
+export type UpdateScannerReadinessMutationBody = BodyType<ScannerReadinessInput>;
+export type UpdateScannerReadinessMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record independently completed device readiness checks
+ */
+export const useUpdateScannerReadiness = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateScannerReadiness>>,
+    TError,
+    { data: BodyType<ScannerReadinessInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateScannerReadiness>>,
+  TError,
+  { data: BodyType<ScannerReadinessInput> },
+  TContext
+> => {
+  return useMutation(getUpdateScannerReadinessMutationOptions(options));
+};
+
+/**
+ * @summary Idempotently synchronise locally committed scans, ratings and notes
+ */
+export const getSyncScannerBatchUrl = () => {
+  return `/api/scanner/sync`;
+};
+
+export const syncScannerBatch = async (
+  scannerSyncRequest: ScannerSyncRequest,
+  options?: RequestInit,
+): Promise<ScannerSyncResponse> => {
+  return customFetch<ScannerSyncResponse>(getSyncScannerBatchUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(scannerSyncRequest),
+  });
+};
+
+export const getSyncScannerBatchMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncScannerBatch>>,
+    TError,
+    { data: BodyType<ScannerSyncRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof syncScannerBatch>>,
+  TError,
+  { data: BodyType<ScannerSyncRequest> },
+  TContext
+> => {
+  const mutationKey = ["syncScannerBatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof syncScannerBatch>>,
+    { data: BodyType<ScannerSyncRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return syncScannerBatch(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SyncScannerBatchMutationResult = NonNullable<
+  Awaited<ReturnType<typeof syncScannerBatch>>
+>;
+export type SyncScannerBatchMutationBody = BodyType<ScannerSyncRequest>;
+export type SyncScannerBatchMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Idempotently synchronise locally committed scans, ratings and notes
+ */
+export const useSyncScannerBatch = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof syncScannerBatch>>,
+    TError,
+    { data: BodyType<ScannerSyncRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof syncScannerBatch>>,
+  TError,
+  { data: BodyType<ScannerSyncRequest> },
+  TContext
+> => {
+  return useMutation(getSyncScannerBatchMutationOptions(options));
+};
+
+/**
+ * @summary View scanner devices, readiness and aggregate counts
+ */
+export const getGetLeadScannerAdminOverviewUrl = () => {
+  return `/api/admin/lead-scanner/overview`;
+};
+
+export const getLeadScannerAdminOverview = async (
+  options?: RequestInit,
+): Promise<LeadScannerAdminOverview> => {
+  return customFetch<LeadScannerAdminOverview>(getGetLeadScannerAdminOverviewUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLeadScannerAdminOverviewQueryKey = () => {
+  return [`/api/admin/lead-scanner/overview`] as const;
+};
+
+export const getGetLeadScannerAdminOverviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLeadScannerAdminOverview>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getLeadScannerAdminOverview>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLeadScannerAdminOverviewQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeadScannerAdminOverview>>> = ({
+    signal,
+  }) => getLeadScannerAdminOverview({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLeadScannerAdminOverview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLeadScannerAdminOverviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLeadScannerAdminOverview>>
+>;
+export type GetLeadScannerAdminOverviewQueryError = ErrorType<unknown>;
+
+/**
+ * @summary View scanner devices, readiness and aggregate counts
+ */
+
+export function useGetLeadScannerAdminOverview<
+  TData = Awaited<ReturnType<typeof getLeadScannerAdminOverview>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getLeadScannerAdminOverview>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLeadScannerAdminOverviewQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all leads or one sponsor's leads
+ */
+export const getListAdminSponsorLeadsUrl = (params?: ListAdminSponsorLeadsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/lead-scanner/leads?${stringifiedParams}`
+    : `/api/admin/lead-scanner/leads`;
+};
+
+export const listAdminSponsorLeads = async (
+  params?: ListAdminSponsorLeadsParams,
+  options?: RequestInit,
+): Promise<ListAdminSponsorLeads200> => {
+  return customFetch<ListAdminSponsorLeads200>(getListAdminSponsorLeadsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminSponsorLeadsQueryKey = (params?: ListAdminSponsorLeadsParams) => {
+  return [`/api/admin/lead-scanner/leads`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAdminSponsorLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listAdminSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminSponsorLeadsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminSponsorLeads>>> = ({ signal }) =>
+    listAdminSponsorLeads(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminSponsorLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminSponsorLeadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminSponsorLeads>>
+>;
+export type ListAdminSponsorLeadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all leads or one sponsor's leads
+ */
+
+export function useListAdminSponsorLeads<
+  TData = Awaited<ReturnType<typeof listAdminSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAdminSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listAdminSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminSponsorLeadsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export all leads or one sponsor's leads
+ */
+export const getExportAdminSponsorLeadsUrl = (params?: ExportAdminSponsorLeadsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/lead-scanner/leads/export?${stringifiedParams}`
+    : `/api/admin/lead-scanner/leads/export`;
+};
+
+export const exportAdminSponsorLeads = async (
+  params?: ExportAdminSponsorLeadsParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportAdminSponsorLeadsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportAdminSponsorLeadsQueryKey = (params?: ExportAdminSponsorLeadsParams) => {
+  return [`/api/admin/lead-scanner/leads/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getExportAdminSponsorLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportAdminSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ExportAdminSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportAdminSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportAdminSponsorLeadsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAdminSponsorLeads>>> = ({
+    signal,
+  }) => exportAdminSponsorLeads(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportAdminSponsorLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportAdminSponsorLeadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportAdminSponsorLeads>>
+>;
+export type ExportAdminSponsorLeadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export all leads or one sponsor's leads
+ */
+
+export function useExportAdminSponsorLeads<
+  TData = Awaited<ReturnType<typeof exportAdminSponsorLeads>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ExportAdminSponsorLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportAdminSponsorLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportAdminSponsorLeadsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Revoke one sponsor scanner without rotating the whole sponsor link
+ */
+export const getRevokeSponsorScannerDeviceUrl = (deviceId: string) => {
+  return `/api/admin/lead-scanner/devices/${deviceId}/revoke`;
+};
+
+export const revokeSponsorScannerDevice = async (
+  deviceId: string,
+  revokeSponsorScannerDeviceBody?: RevokeSponsorScannerDeviceBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getRevokeSponsorScannerDeviceUrl(deviceId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(revokeSponsorScannerDeviceBody),
+  });
+};
+
+export const getRevokeSponsorScannerDeviceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeSponsorScannerDevice>>,
+    TError,
+    { deviceId: string; data: BodyType<RevokeSponsorScannerDeviceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeSponsorScannerDevice>>,
+  TError,
+  { deviceId: string; data: BodyType<RevokeSponsorScannerDeviceBody> },
+  TContext
+> => {
+  const mutationKey = ["revokeSponsorScannerDevice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeSponsorScannerDevice>>,
+    { deviceId: string; data: BodyType<RevokeSponsorScannerDeviceBody> }
+  > = (props) => {
+    const { deviceId, data } = props ?? {};
+
+    return revokeSponsorScannerDevice(deviceId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevokeSponsorScannerDeviceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeSponsorScannerDevice>>
+>;
+export type RevokeSponsorScannerDeviceMutationBody = BodyType<RevokeSponsorScannerDeviceBody>;
+export type RevokeSponsorScannerDeviceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Revoke one sponsor scanner without rotating the whole sponsor link
+ */
+export const useRevokeSponsorScannerDevice = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeSponsorScannerDevice>>,
+    TError,
+    { deviceId: string; data: BodyType<RevokeSponsorScannerDeviceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revokeSponsorScannerDevice>>,
+  TError,
+  { deviceId: string; data: BodyType<RevokeSponsorScannerDeviceBody> },
+  TContext
+> => {
+  return useMutation(getRevokeSponsorScannerDeviceMutationOptions(options));
+};
+
+/**
+ * @summary List active registrations and badge readiness without exposing badge codes
+ */
+export const getListLeadScannerAttendeesUrl = () => {
+  return `/api/admin/lead-scanner/attendees`;
+};
+
+export const listLeadScannerAttendees = async (
+  options?: RequestInit,
+): Promise<ListLeadScannerAttendees200> => {
+  return customFetch<ListLeadScannerAttendees200>(getListLeadScannerAttendeesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListLeadScannerAttendeesQueryKey = () => {
+  return [`/api/admin/lead-scanner/attendees`] as const;
+};
+
+export const getListLeadScannerAttendeesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listLeadScannerAttendees>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listLeadScannerAttendees>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListLeadScannerAttendeesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeadScannerAttendees>>> = ({
+    signal,
+  }) => listLeadScannerAttendees({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listLeadScannerAttendees>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListLeadScannerAttendeesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listLeadScannerAttendees>>
+>;
+export type ListLeadScannerAttendeesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List active registrations and badge readiness without exposing badge codes
+ */
+
+export function useListLeadScannerAttendees<
+  TData = Awaited<ReturnType<typeof listLeadScannerAttendees>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listLeadScannerAttendees>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListLeadScannerAttendeesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record disclosure confirmation or exclude an attendee from lead sharing
+ */
+export const getUpdateAttendeeLeadSharingUrl = (attendeeId: number) => {
+  return `/api/admin/lead-scanner/attendees/${attendeeId}/sharing`;
+};
+
+export const updateAttendeeLeadSharing = async (
+  attendeeId: number,
+  updateAttendeeLeadSharingBody: UpdateAttendeeLeadSharingBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getUpdateAttendeeLeadSharingUrl(attendeeId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAttendeeLeadSharingBody),
+  });
+};
+
+export const getUpdateAttendeeLeadSharingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAttendeeLeadSharing>>,
+    TError,
+    { attendeeId: number; data: BodyType<UpdateAttendeeLeadSharingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAttendeeLeadSharing>>,
+  TError,
+  { attendeeId: number; data: BodyType<UpdateAttendeeLeadSharingBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAttendeeLeadSharing"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAttendeeLeadSharing>>,
+    { attendeeId: number; data: BodyType<UpdateAttendeeLeadSharingBody> }
+  > = (props) => {
+    const { attendeeId, data } = props ?? {};
+
+    return updateAttendeeLeadSharing(attendeeId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAttendeeLeadSharingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAttendeeLeadSharing>>
+>;
+export type UpdateAttendeeLeadSharingMutationBody = BodyType<UpdateAttendeeLeadSharingBody>;
+export type UpdateAttendeeLeadSharingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record disclosure confirmation or exclude an attendee from lead sharing
+ */
+export const useUpdateAttendeeLeadSharing = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAttendeeLeadSharing>>,
+    TError,
+    { attendeeId: number; data: BodyType<UpdateAttendeeLeadSharingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAttendeeLeadSharing>>,
+  TError,
+  { attendeeId: number; data: BodyType<UpdateAttendeeLeadSharingBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAttendeeLeadSharingMutationOptions(options));
+};
+
+/**
+ * @summary Replace the hidden QR value so the previous printed QR stops resolving
+ */
+export const getRotateAttendeeBadgeUrl = (attendeeId: number) => {
+  return `/api/admin/lead-scanner/attendees/${attendeeId}/badge/rotate`;
+};
+
+export const rotateAttendeeBadge = async (
+  attendeeId: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getRotateAttendeeBadgeUrl(attendeeId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRotateAttendeeBadgeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateAttendeeBadge>>,
+    TError,
+    { attendeeId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rotateAttendeeBadge>>,
+  TError,
+  { attendeeId: number },
+  TContext
+> => {
+  const mutationKey = ["rotateAttendeeBadge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rotateAttendeeBadge>>,
+    { attendeeId: number }
+  > = (props) => {
+    const { attendeeId } = props ?? {};
+
+    return rotateAttendeeBadge(attendeeId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RotateAttendeeBadgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rotateAttendeeBadge>>
+>;
+
+export type RotateAttendeeBadgeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace the hidden QR value so the previous printed QR stops resolving
+ */
+export const useRotateAttendeeBadge = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rotateAttendeeBadge>>,
+    TError,
+    { attendeeId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rotateAttendeeBadge>>,
+  TError,
+  { attendeeId: number },
+  TContext
+> => {
+  return useMutation(getRotateAttendeeBadgeMutationOptions(options));
+};
+
+/**
+ * @summary Export name, company and hidden QR value for the external badge converter
+ */
+export const getExportLeadScannerBadgeDataUrl = () => {
+  return `/api/admin/lead-scanner/badges/export`;
+};
+
+export const exportLeadScannerBadgeData = async (options?: RequestInit): Promise<Blob> => {
+  return customFetch<Blob>(getExportLeadScannerBadgeDataUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportLeadScannerBadgeDataQueryKey = () => {
+  return [`/api/admin/lead-scanner/badges/export`] as const;
+};
+
+export const getExportLeadScannerBadgeDataQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportLeadScannerBadgeData>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof exportLeadScannerBadgeData>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportLeadScannerBadgeDataQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportLeadScannerBadgeData>>> = ({
+    signal,
+  }) => exportLeadScannerBadgeData({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportLeadScannerBadgeData>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportLeadScannerBadgeDataQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportLeadScannerBadgeData>>
+>;
+export type ExportLeadScannerBadgeDataQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export name, company and hidden QR value for the external badge converter
+ */
+
+export function useExportLeadScannerBadgeData<
+  TData = Awaited<ReturnType<typeof exportLeadScannerBadgeData>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof exportLeadScannerBadgeData>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportLeadScannerBadgeDataQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

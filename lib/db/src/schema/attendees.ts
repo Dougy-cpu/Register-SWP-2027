@@ -25,6 +25,8 @@ export const attendeesTable = pgTable(
     isTbc: boolean("is_tbc").notNull().default(false),
     gdprConsent: boolean("gdpr_consent").notNull().default(false),
     gdprConsentAt: timestamp("gdpr_consent_at", { withTimezone: true }),
+    leadSharingExcluded: boolean("lead_sharing_excluded").notNull().default(false),
+    leadSharingNoticeAt: timestamp("lead_sharing_notice_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

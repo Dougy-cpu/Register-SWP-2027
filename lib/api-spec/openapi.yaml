@@ -32,6 +32,10 @@ tags:
     description: Sponsor administration, review, communications and reporting
   - name: sponsor-workspace
     description: Cookie-authenticated private sponsor workspace
+  - name: lead-scanner
+    description: Device-authenticated offline-capable sponsor lead scanning
+  - name: lead-scanner-admin
+    description: Organiser badge, device and lead-scanner administration
 paths:
   /calendar/main.ics:
     get:
@@ -2157,12 +2161,295 @@ paths:
               required: [acknowledgedBy]
       responses: { "201": { description: Current version acknowledged } }
 
+  # ==================== SPONSOR LEAD SCANNER ====================
+  /sponsor/scanner/devices:
+    post:
+      operationId: activateSponsorScannerDevice
+      tags: [lead-scanner]
+      summary: Activate one sponsor phone and attribute it to an operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operatorName: { type: string, minLength: 2, maxLength: 200 }
+              required: [operatorName]
+      responses:
+        "201":
+          description: Device token issued once
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScannerActivation" }
+
+  /sponsor/leads:
+    get:
+      operationId: listSponsorLeads
+      tags: [lead-scanner]
+      summary: List only the authenticated sponsor's server-synchronised leads
+      responses:
+        "200":
+          description: Sponsor leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
+                required: [leads]
+
+  /sponsor/leads/{leadId}:
+    patch:
+      operationId: annotateSponsorLead
+      tags: [lead-scanner]
+      summary: Append a note and/or change the current rating
+      parameters:
+        - { name: leadId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadAnnotationInput" }
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SponsorLead" }
+
+  /sponsor/leads/export:
+    get:
+      operationId: exportSponsorLeads
+      tags: [lead-scanner]
+      summary: Export only the authenticated sponsor's synchronised leads
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [csv, xlsx], default: xlsx } }
+      responses:
+        "200":
+          description: CSV or Excel lead export
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+
+  /scanner/bootstrap:
+    get:
+      operationId: getScannerBootstrap
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Read device readiness, pack status and the scanner time window
+      responses:
+        "200":
+          description: Scanner state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScannerBootstrap" }
+
+  /scanner/offline-pack:
+    get:
+      operationId: downloadScannerOfflinePack
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Download the approved attendee fields encrypted for this device
+      responses:
+        "200":
+          description: Encrypted offline attendee pack
+          headers:
+            Cache-Control: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScannerOfflinePack" }
+
+  /scanner/readiness:
+    patch:
+      operationId: updateScannerReadiness
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Record independently completed device readiness checks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScannerReadinessInput" }
+      responses:
+        "200":
+          description: Readiness saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  currentPackVersion: { type: string }
+                required: [success, currentPackVersion]
+
+  /scanner/sync:
+    post:
+      operationId: syncScannerBatch
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Idempotently synchronise locally committed scans, ratings and notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScannerSyncRequest" }
+      responses:
+        "200":
+          description: Per-item acknowledgements
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScannerSyncResponse" }
+
+  # ==================== LEAD SCANNER ADMIN ====================
+  /admin/lead-scanner/overview:
+    get:
+      operationId: getLeadScannerAdminOverview
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: View scanner devices, readiness and aggregate counts
+      responses:
+        "200":
+          description: Lead scanner overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadScannerAdminOverview" }
+
+  /admin/lead-scanner/leads:
+    get:
+      operationId: listAdminSponsorLeads
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: List all leads or one sponsor's leads
+      parameters:
+        - { name: sponsorId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Lead list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
+                required: [leads]
+
+  /admin/lead-scanner/leads/export:
+    get:
+      operationId: exportAdminSponsorLeads
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: Export all leads or one sponsor's leads
+      parameters:
+        - { name: sponsorId, in: query, schema: { type: integer } }
+        - { name: format, in: query, schema: { type: string, enum: [csv, xlsx], default: xlsx } }
+      responses:
+        "200":
+          description: CSV or Excel export
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+
+  /admin/lead-scanner/devices/{deviceId}/revoke:
+    post:
+      operationId: revokeSponsorScannerDevice
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: Revoke one sponsor scanner without rotating the whole sponsor link
+      parameters:
+        - { name: deviceId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Device revoked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessResponse" }
+
+  /admin/lead-scanner/attendees:
+    get:
+      operationId: listLeadScannerAttendees
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: List active registrations and badge readiness without exposing badge codes
+      responses:
+        "200":
+          description: Attendee badge readiness
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attendees:
+                    { type: array, items: { $ref: "#/components/schemas/LeadScannerAttendee" } }
+                required: [attendees]
+
+  /admin/lead-scanner/attendees/{attendeeId}/sharing:
+    patch:
+      operationId: updateAttendeeLeadSharing
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: Record disclosure confirmation or exclude an attendee from lead sharing
+      parameters:
+        - { name: attendeeId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                excluded: { type: boolean }
+                noticeConfirmed: { type: boolean }
+      responses:
+        "200":
+          description: Sharing state saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessResponse" }
+
+  /admin/lead-scanner/attendees/{attendeeId}/badge/rotate:
+    post:
+      operationId: rotateAttendeeBadge
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: Replace the hidden QR value so the previous printed QR stops resolving
+      parameters:
+        - { name: attendeeId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Badge reference rotated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuccessResponse" }
+
+  /admin/lead-scanner/badges/export:
+    get:
+      operationId: exportLeadScannerBadgeData
+      tags: [lead-scanner-admin]
+      security: [{ AdminToken: [] }]
+      summary: Export name, company and hidden QR value for the external badge converter
+      responses:
+        "200":
+          description: ZIP containing Excel badge data, manifest and production instructions
+          content:
+            application/zip: { schema: { type: string, format: binary } }
+
 components:
   securitySchemes:
     AdminToken:
       type: apiKey
       in: header
       name: x-admin-token
+    ScannerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-device-token
 
   parameters:
     SponsorId:
@@ -2544,6 +2831,272 @@ components:
       required:
         [sponsor, contacts, codes, staff, tasks, sessions, assets, documents, invitationCopy]
 
+    ScannerActivation:
+      type: object
+      properties:
+        id: { type: string }
+        token:
+          { type: string, description: Returned only on activation; store in device IndexedDB. }
+        operatorName: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string }
+        testQrValue: { type: string, pattern: "^[0-9A-F]{12}$" }
+      required: [id, token, operatorName, sponsorId, sponsorCompany, testQrValue]
+
+    ScannerWindow:
+      type: object
+      properties:
+        eventStartAt: { type: string, format: date-time, nullable: true }
+        eventEndAt: { type: string, format: date-time, nullable: true }
+        scanClosesAt: { type: string, format: date-time, nullable: true }
+        scanningOpen: { type: boolean }
+      required: [eventStartAt, eventEndAt, scanClosesAt, scanningOpen]
+
+    ScannerDeviceState:
+      type: object
+      properties:
+        id: { type: string }
+        operatorName: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string }
+        packVersion: { type: string, nullable: true }
+        currentPackVersion: { type: string }
+        cameraTested: { type: boolean }
+        qrTested: { type: boolean }
+        storageTested: { type: boolean }
+        offlineTested: { type: boolean }
+        syncTested: { type: boolean }
+        ready: { type: boolean }
+        outOfDate: { type: boolean }
+        lastSyncedAt: { type: string, format: date-time, nullable: true }
+      required:
+        [
+          id,
+          operatorName,
+          sponsorId,
+          sponsorCompany,
+          currentPackVersion,
+          cameraTested,
+          qrTested,
+          storageTested,
+          offlineTested,
+          syncTested,
+          ready,
+          outOfDate,
+        ]
+
+    ScannerBootstrap:
+      type: object
+      properties:
+        device: { $ref: "#/components/schemas/ScannerDeviceState" }
+        scannerWindow: { $ref: "#/components/schemas/ScannerWindow" }
+        testQrValue: { type: string, pattern: "^[0-9A-F]{12}$" }
+      required: [device, scannerWindow, testQrValue]
+
+    ScannerEncryptedRecord:
+      type: object
+      properties:
+        lookup:
+          { type: string, description: One-way lookup derived from the QR value and this pack. }
+        badgeVersion: { type: integer, minimum: 1 }
+        iv: { type: string }
+        ciphertext: { type: string }
+      required: [lookup, badgeVersion, iv, ciphertext]
+
+    ScannerOfflinePack:
+      type: object
+      properties:
+        format: { type: integer, const: 1 }
+        version: { type: string }
+        generatedAt: { type: string, format: date-time }
+        refreshAfter: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        keyContext:
+          {
+            type: string,
+            description: Non-secret per-pack context used with a scanned QR value to locate and decrypt one record.,
+          }
+        records: { type: array, items: { $ref: "#/components/schemas/ScannerEncryptedRecord" } }
+      required: [format, version, generatedAt, refreshAfter, expiresAt, keyContext, records]
+
+    ScannerReadinessInput:
+      type: object
+      properties:
+        packVersion: { type: string }
+        cameraTested: { type: boolean }
+        qrTested: { type: boolean }
+        storageTested: { type: boolean }
+        offlineTested: { type: boolean }
+        syncTested: { type: boolean }
+
+    ScannerSyncScan:
+      type: object
+      properties:
+        id: { type: string, minLength: 16, maxLength: 100 }
+        code: { type: string, pattern: "^[0-9A-F]{12}$" }
+        source: { type: string, enum: [camera, image, manual] }
+        capturedAt: { type: string, format: date-time }
+      required: [id, code, source, capturedAt]
+
+    ScannerSyncAnnotation:
+      type: object
+      properties:
+        id: { type: string, minLength: 16, maxLength: 100 }
+        scanId: { type: string, minLength: 16, maxLength: 100 }
+        note: { type: string, nullable: true, maxLength: 4000 }
+        rating: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+        createdAt: { type: string, format: date-time }
+      required: [id, scanId, createdAt]
+
+    ScannerSyncRequest:
+      type: object
+      properties:
+        scans:
+          { type: array, maxItems: 100, items: { $ref: "#/components/schemas/ScannerSyncScan" } }
+        annotations:
+          {
+            type: array,
+            maxItems: 100,
+            items: { $ref: "#/components/schemas/ScannerSyncAnnotation" },
+          }
+      required: [scans, annotations]
+
+    ScannerSyncItemResult:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [accepted, duplicate, rejected] }
+        reason: { type: string }
+      required: [id, status]
+
+    ScannerSyncResponse:
+      type: object
+      properties:
+        scans: { type: array, items: { $ref: "#/components/schemas/ScannerSyncItemResult" } }
+        annotations: { type: array, items: { $ref: "#/components/schemas/ScannerSyncItemResult" } }
+        syncedAt: { type: string, format: date-time }
+      required: [scans, annotations, syncedAt]
+
+    LeadAnnotationInput:
+      type: object
+      properties:
+        operatorName: { type: string, minLength: 2, maxLength: 200 }
+        note: { type: string, nullable: true, maxLength: 4000 }
+        rating: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+      required: [operatorName]
+
+    SponsorLeadScan:
+      type: object
+      properties:
+        id: { type: string }
+        operatorName: { type: string }
+        source: { type: string, enum: [camera, image, manual] }
+        capturedAt: { type: string, format: date-time }
+      required: [id, operatorName, source, capturedAt]
+
+    SponsorLeadNote:
+      type: object
+      properties:
+        id: { type: string }
+        operatorName: { type: string }
+        note: { type: string, nullable: true }
+        rating: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+        createdAt: { type: string, format: date-time }
+      required: [id, operatorName, note, rating, createdAt]
+
+    SponsorLead:
+      type: object
+      properties:
+        id: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string }
+        attendeeId: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        name: { type: string }
+        jobTitle: { type: string }
+        company: { type: string }
+        workEmail: { type: string, format: email }
+        rating: { type: integer, nullable: true, minimum: 1, maximum: 5 }
+        scanCount: { type: integer, minimum: 1 }
+        firstScannedAt: { type: string, format: date-time, nullable: true }
+        lastScannedAt: { type: string, format: date-time, nullable: true }
+        scans: { type: array, items: { $ref: "#/components/schemas/SponsorLeadScan" } }
+        notes: { type: array, items: { $ref: "#/components/schemas/SponsorLeadNote" } }
+      required:
+        [
+          id,
+          sponsorId,
+          sponsorCompany,
+          attendeeId,
+          firstName,
+          lastName,
+          name,
+          jobTitle,
+          company,
+          workEmail,
+          scanCount,
+          scans,
+          notes,
+        ]
+
+    LeadScannerDevice:
+      type: object
+      properties:
+        id: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string }
+        operatorName: { type: string }
+        status: { type: string, enum: [ready, out_of_date, not_tested, revoked] }
+        packVersion: { type: string, nullable: true }
+        activatedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        lastSyncedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+      required: [id, sponsorId, sponsorCompany, operatorName, status, activatedAt, lastSeenAt]
+
+    LeadScannerAdminOverview:
+      type: object
+      properties:
+        leadCount: { type: integer }
+        deviceCount: { type: integer }
+        badgeCount: { type: integer }
+        currentPackVersion: { type: string }
+        scannerWindow: { $ref: "#/components/schemas/ScannerWindow" }
+        devices: { type: array, items: { $ref: "#/components/schemas/LeadScannerDevice" } }
+      required: [leadCount, deviceCount, badgeCount, currentPackVersion, scannerWindow, devices]
+
+    LeadScannerAttendee:
+      type: object
+      properties:
+        attendeeId: { type: integer }
+        firstName: { type: string }
+        lastName: { type: string }
+        name: { type: string }
+        jobTitle: { type: string }
+        company: { type: string }
+        workEmail: { type: string, format: email }
+        isTbc: { type: boolean }
+        bookingStatus: { type: string }
+        leadSharingExcluded: { type: boolean }
+        leadSharingNoticeAt: { type: string, format: date-time, nullable: true }
+        badgeVersion: { type: integer, nullable: true }
+        badgeActive: { type: boolean }
+      required:
+        [
+          attendeeId,
+          firstName,
+          lastName,
+          name,
+          jobTitle,
+          company,
+          workEmail,
+          isTbc,
+          bookingStatus,
+          leadSharingExcluded,
+          badgeActive,
+        ]
+
     EmailPreview:
       type: object
       properties:
@@ -2897,6 +3450,11 @@ components:
         gdprConsentAt:
           type: ["string", "null"]
           format: date-time
+        leadSharingExcluded:
+          type: boolean
+        leadSharingNoticeAt:
+          type: ["string", "null"]
+          format: date-time
         dietaryAccessibility:
           type: ["string", "null"]
         seatIndex:
@@ -2918,6 +3476,7 @@ components:
         - company
         - workEmail
         - gdprConsent
+        - leadSharingExcluded
         - createdAt
         - updatedAt
 

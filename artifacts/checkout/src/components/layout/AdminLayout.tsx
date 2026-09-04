@@ -14,6 +14,7 @@ import {
   Activity,
   Handshake,
   FolderArchive,
+  ScanLine,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -46,6 +47,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/registrations", label: "Registrations", icon: Users },
     { href: "/admin/sponsors", label: "Sponsors", icon: Handshake },
+    { href: "/admin/lead-scanner", label: "Lead Scanner", icon: ScanLine },
     { href: "/admin/sponsor-assets", label: "Sponsor Assets", icon: FolderArchive },
     { href: "/admin/promo-codes", label: "Promo Codes", icon: Tag },
     { href: "/admin/discount-tiers", label: "Discounts", icon: Percent },

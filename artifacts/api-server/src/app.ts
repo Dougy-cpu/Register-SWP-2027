@@ -39,6 +39,7 @@ app.use(
         imgSrc: ["'self'", "data:", "https://q.stripe.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        workerSrc: ["'self'", "blob:"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
@@ -128,7 +129,8 @@ const generalApiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
-  skip: (_req) => !isProduction,
+  skip: (req) =>
+    !isProduction || req.path.startsWith("/scanner/") || req.path.startsWith("/sponsor/scanner/"),
 });
 
 const bookingCreationLimiter = rateLimit({

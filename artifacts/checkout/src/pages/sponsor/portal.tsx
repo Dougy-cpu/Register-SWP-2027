@@ -9,8 +9,10 @@ import {
   FileText,
   LogOut,
   Plus,
+  QrCode,
   Send,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import logoUrl from "@assets/swp-summit-logo.png";
@@ -328,6 +330,36 @@ export default function SponsorPortal() {
             </button>
           </div>
         )}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <button
+            onClick={() => navigate("/sponsor/scanner")}
+            className="swp-card rounded-2xl p-5 text-left flex items-center gap-4 transition-transform hover:-translate-y-0.5"
+          >
+            <span className="h-12 w-12 rounded-xl bg-blue-50 text-primary grid place-items-center shrink-0">
+              <QrCode className="h-6 w-6" />
+            </span>
+            <span>
+              <strong className="block text-lg">Scan badge</strong>
+              <span className="text-sm text-muted-foreground">
+                Activate this phone, complete its ready check and capture leads.
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => navigate("/sponsor/leads")}
+            className="swp-card rounded-2xl p-5 text-left flex items-center gap-4 transition-transform hover:-translate-y-0.5"
+          >
+            <span className="h-12 w-12 rounded-xl bg-blue-50 text-primary grid place-items-center shrink-0">
+              <Users className="h-6 w-6" />
+            </span>
+            <span>
+              <strong className="block text-lg">Leads</strong>
+              <span className="text-sm text-muted-foreground">
+                Review, rate, add notes and export your synchronised leads.
+              </span>
+            </span>
+          </button>
+        </div>
         <div className="grid sm:grid-cols-3 gap-4">
           <Card className="p-5">
             <p className="text-xs font-bold uppercase text-muted-foreground">
@@ -697,6 +729,12 @@ export default function SponsorPortal() {
                   Leave unticked unless they supplied this consent themselves.
                 </span>
               </label>
+              <div className="rounded-md bg-slate-50 border p-3 text-sm text-slate-700">
+                <strong>Badge scanning notice:</strong> at the event, sponsors may scan this
+                attendee's badge to save their name, job title, company and work email as a lead.
+                Scanning is optional. The attendee can contact the SWP Summit team to have their
+                badge excluded from sponsor scanning.
+              </div>
               <div className="rounded-md bg-blue-50 border border-blue-100 p-3 text-sm">
                 Please check the details before confirming. Confirmation creates the attendee place
                 immediately and sends the attendee welcome email. There is no invoice or receipt.

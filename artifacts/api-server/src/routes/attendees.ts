@@ -96,6 +96,7 @@ router.post("/bookings/:bookingId/attendees", async (req, res): Promise<void> =>
       : {}),
     gdprConsent: isTbc ? false : !!gdprConsent,
     gdprConsentAt: !isTbc && gdprConsent ? new Date() : null,
+    ...(!admin ? { leadSharingNoticeAt: !isTbc && gdprConsent ? new Date() : null } : {}),
     isLead: !!isLead,
     seatIndex: resolvedSeatIndex,
   };
@@ -214,6 +215,7 @@ router.patch("/bookings/:bookingId/attendees/:attendeeId", async (req, res): Pro
       updateData.dietaryAccessibility = null;
       updateData.gdprConsent = false;
       updateData.gdprConsentAt = null;
+      if (!admin) updateData.leadSharingNoticeAt = null;
     }
   }
 
@@ -229,6 +231,7 @@ router.patch("/bookings/:bookingId/attendees/:attendeeId", async (req, res): Pro
     if (gdprConsent !== undefined) {
       updateData.gdprConsent = !!gdprConsent;
       updateData.gdprConsentAt = gdprConsent ? new Date() : null;
+      if (!admin) updateData.leadSharingNoticeAt = gdprConsent ? new Date() : null;
     }
   }
 
@@ -365,6 +368,7 @@ router.patch("/attendees/:id/managed", async (req, res): Promise<void> => {
       isTbc: false,
       gdprConsent: !!gdprConsent,
       gdprConsentAt: gdprConsent ? new Date() : null,
+      leadSharingNoticeAt: gdprConsent ? new Date() : null,
     })
     .where(eq(attendeesTable.id, attendeeId))
     .returning();

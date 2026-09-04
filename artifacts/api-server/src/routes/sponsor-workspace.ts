@@ -406,7 +406,15 @@ router.patch("/sponsor/staff/:bookingId", async (req, res): Promise<void> => {
   }
   await db.transaction(async (tx) => {
     await lockAndAssertEmailAvailable(tx, staff.workEmail, bookingId);
-    await tx.update(attendeesTable).set(staff).where(eq(attendeesTable.id, existing.attendee.id));
+    await tx
+      .update(attendeesTable)
+      .set({
+        ...staff,
+        ...(existing.attendee.workEmail.toLowerCase() !== staff.workEmail
+          ? { leadSharingNoticeAt: null }
+          : {}),
+      })
+      .where(eq(attendeesTable.id, existing.attendee.id));
     await tx.insert(sponsorActivityTable).values({
       sponsorId,
       type:

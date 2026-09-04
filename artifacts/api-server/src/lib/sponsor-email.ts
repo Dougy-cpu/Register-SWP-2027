@@ -203,14 +203,22 @@ export async function sendSponsorStaffWelcome(
     <div class="info-box"><strong>Date:</strong> ${variables.eventDate}<br><strong>Venue:</strong> ${variables.eventVenue}</div>
     ${buildCalendarLinksSection(settings)}
     <p>There is nothing to pay and no invoice or receipt is needed. If any of your details change, your sponsor contact can update them in the sponsor workspace.</p>
+    <div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>
     <p>We look forward to seeing you there.</p>
     <p>Best,<br><strong>The SWP Summit team</strong></p>
   `;
-  const html = wrapInBrandedLayout(
-    template?.htmlBody ? replaceVariables(template.htmlBody, variables) : defaultBody,
-    settings,
-  );
+  const body = template?.htmlBody ? replaceVariables(template.htmlBody, variables) : defaultBody;
+  const leadSharingNotice = body.includes("Badge scanning and sponsor leads")
+    ? ""
+    : `<div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>`;
+  const html = wrapInBrandedLayout(`${body}${leadSharingNotice}`, settings);
   const sent = await sendMail({ to: attendee.workEmail, subject, html });
+  if (sent) {
+    await db
+      .update(attendeesTable)
+      .set({ leadSharingNoticeAt: new Date(), updatedAt: new Date() })
+      .where(eq(attendeesTable.id, attendeeId));
+  }
   await db.insert(emailLogsTable).values({
     sponsorId,
     bookingId,

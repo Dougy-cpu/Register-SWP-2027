@@ -13,3 +13,4 @@ export * from "./activity-log";
 export * from "./hear-about-us";
 export * from "./sponsors";
 export * from "./sponsor-redemptions";
+export * from "./lead-scanner";

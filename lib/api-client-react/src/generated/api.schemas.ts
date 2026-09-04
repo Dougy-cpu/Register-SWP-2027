@@ -389,6 +389,262 @@ export interface SponsorWorkspacePublic {
   invitationCopy: SponsorWorkspacePublicInvitationCopy;
 }
 
+export interface ScannerActivation {
+  id: string;
+  /** Returned only on activation; store in device IndexedDB. */
+  token: string;
+  operatorName: string;
+  sponsorId: number;
+  sponsorCompany: string;
+  /** @pattern ^[0-9A-F]{12}$ */
+  testQrValue: string;
+}
+
+export interface ScannerWindow {
+  eventStartAt: string | null;
+  eventEndAt: string | null;
+  scanClosesAt: string | null;
+  scanningOpen: boolean;
+}
+
+export interface ScannerDeviceState {
+  id: string;
+  operatorName: string;
+  sponsorId: number;
+  sponsorCompany: string;
+  packVersion?: string | null;
+  currentPackVersion: string;
+  cameraTested: boolean;
+  qrTested: boolean;
+  storageTested: boolean;
+  offlineTested: boolean;
+  syncTested: boolean;
+  ready: boolean;
+  outOfDate: boolean;
+  lastSyncedAt?: string | null;
+}
+
+export interface ScannerBootstrap {
+  device: ScannerDeviceState;
+  scannerWindow: ScannerWindow;
+  /** @pattern ^[0-9A-F]{12}$ */
+  testQrValue: string;
+}
+
+export interface ScannerEncryptedRecord {
+  /** One-way lookup derived from the QR value and this pack. */
+  lookup: string;
+  /** @minimum 1 */
+  badgeVersion: number;
+  iv: string;
+  ciphertext: string;
+}
+
+export interface ScannerOfflinePack {
+  format: 1;
+  version: string;
+  generatedAt: string;
+  refreshAfter: string;
+  expiresAt: string | null;
+  /** Non-secret per-pack context used with a scanned QR value to locate and decrypt one record. */
+  keyContext: string;
+  records: ScannerEncryptedRecord[];
+}
+
+export interface ScannerReadinessInput {
+  packVersion?: string;
+  cameraTested?: boolean;
+  qrTested?: boolean;
+  storageTested?: boolean;
+  offlineTested?: boolean;
+  syncTested?: boolean;
+}
+
+export type ScannerSyncScanSource =
+  (typeof ScannerSyncScanSource)[keyof typeof ScannerSyncScanSource];
+
+export const ScannerSyncScanSource = {
+  camera: "camera",
+  image: "image",
+  manual: "manual",
+} as const;
+
+export interface ScannerSyncScan {
+  /**
+   * @minLength 16
+   * @maxLength 100
+   */
+  id: string;
+  /** @pattern ^[0-9A-F]{12}$ */
+  code: string;
+  source: ScannerSyncScanSource;
+  capturedAt: string;
+}
+
+export interface ScannerSyncAnnotation {
+  /**
+   * @minLength 16
+   * @maxLength 100
+   */
+  id: string;
+  /**
+   * @minLength 16
+   * @maxLength 100
+   */
+  scanId: string;
+  /** @maxLength 4000 */
+  note?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating?: number | null;
+  createdAt: string;
+}
+
+export interface ScannerSyncRequest {
+  /** @maxItems 100 */
+  scans: ScannerSyncScan[];
+  /** @maxItems 100 */
+  annotations: ScannerSyncAnnotation[];
+}
+
+export type ScannerSyncItemResultStatus =
+  (typeof ScannerSyncItemResultStatus)[keyof typeof ScannerSyncItemResultStatus];
+
+export const ScannerSyncItemResultStatus = {
+  accepted: "accepted",
+  duplicate: "duplicate",
+  rejected: "rejected",
+} as const;
+
+export interface ScannerSyncItemResult {
+  id: string;
+  status: ScannerSyncItemResultStatus;
+  reason?: string;
+}
+
+export interface ScannerSyncResponse {
+  scans: ScannerSyncItemResult[];
+  annotations: ScannerSyncItemResult[];
+  syncedAt: string;
+}
+
+export interface LeadAnnotationInput {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  operatorName: string;
+  /** @maxLength 4000 */
+  note?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating?: number | null;
+}
+
+export type SponsorLeadScanSource =
+  (typeof SponsorLeadScanSource)[keyof typeof SponsorLeadScanSource];
+
+export const SponsorLeadScanSource = {
+  camera: "camera",
+  image: "image",
+  manual: "manual",
+} as const;
+
+export interface SponsorLeadScan {
+  id: string;
+  operatorName: string;
+  source: SponsorLeadScanSource;
+  capturedAt: string;
+}
+
+export interface SponsorLeadNote {
+  id: string;
+  operatorName: string;
+  note: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating: number | null;
+  createdAt: string;
+}
+
+export interface SponsorLead {
+  id: string;
+  sponsorId: number;
+  sponsorCompany: string;
+  attendeeId: number;
+  firstName: string;
+  lastName: string;
+  name: string;
+  jobTitle: string;
+  company: string;
+  workEmail: string;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating?: number | null;
+  /** @minimum 1 */
+  scanCount: number;
+  firstScannedAt?: string | null;
+  lastScannedAt?: string | null;
+  scans: SponsorLeadScan[];
+  notes: SponsorLeadNote[];
+}
+
+export type LeadScannerDeviceStatus =
+  (typeof LeadScannerDeviceStatus)[keyof typeof LeadScannerDeviceStatus];
+
+export const LeadScannerDeviceStatus = {
+  ready: "ready",
+  out_of_date: "out_of_date",
+  not_tested: "not_tested",
+  revoked: "revoked",
+} as const;
+
+export interface LeadScannerDevice {
+  id: string;
+  sponsorId: number;
+  sponsorCompany: string;
+  operatorName: string;
+  status: LeadScannerDeviceStatus;
+  packVersion?: string | null;
+  activatedAt: string;
+  lastSeenAt: string;
+  lastSyncedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface LeadScannerAdminOverview {
+  leadCount: number;
+  deviceCount: number;
+  badgeCount: number;
+  currentPackVersion: string;
+  scannerWindow: ScannerWindow;
+  devices: LeadScannerDevice[];
+}
+
+export interface LeadScannerAttendee {
+  attendeeId: number;
+  firstName: string;
+  lastName: string;
+  name: string;
+  jobTitle: string;
+  company: string;
+  workEmail: string;
+  isTbc: boolean;
+  bookingStatus: string;
+  leadSharingExcluded: boolean;
+  leadSharingNoticeAt?: string | null;
+  badgeVersion?: number | null;
+  badgeActive: boolean;
+}
+
 export interface EmailPreview {
   to: string[];
   subject: string;
@@ -552,6 +808,9 @@ export interface Attendee {
   gdprConsent: boolean;
   /** @nullable */
   gdprConsentAt?: string | null;
+  leadSharingExcluded: boolean;
+  /** @nullable */
+  leadSharingNoticeAt?: string | null;
   /** @nullable */
   dietaryAccessibility?: string | null;
   seatIndex?: number;
@@ -1682,4 +1941,68 @@ export type AcknowledgeSponsorDocumentBody = {
    * @maxLength 200
    */
   acknowledgedBy: string;
+};
+
+export type ActivateSponsorScannerDeviceBody = {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  operatorName: string;
+};
+
+export type ListSponsorLeads200 = {
+  leads: SponsorLead[];
+};
+
+export type ExportSponsorLeadsParams = {
+  format?: ExportSponsorLeadsFormat;
+};
+
+export type ExportSponsorLeadsFormat =
+  (typeof ExportSponsorLeadsFormat)[keyof typeof ExportSponsorLeadsFormat];
+
+export const ExportSponsorLeadsFormat = {
+  csv: "csv",
+  xlsx: "xlsx",
+} as const;
+
+export type UpdateScannerReadiness200 = {
+  success: boolean;
+  currentPackVersion: string;
+};
+
+export type ListAdminSponsorLeadsParams = {
+  sponsorId?: number;
+};
+
+export type ListAdminSponsorLeads200 = {
+  leads: SponsorLead[];
+};
+
+export type ExportAdminSponsorLeadsParams = {
+  sponsorId?: number;
+  format?: ExportAdminSponsorLeadsFormat;
+};
+
+export type ExportAdminSponsorLeadsFormat =
+  (typeof ExportAdminSponsorLeadsFormat)[keyof typeof ExportAdminSponsorLeadsFormat];
+
+export const ExportAdminSponsorLeadsFormat = {
+  csv: "csv",
+  xlsx: "xlsx",
+} as const;
+
+export type RevokeSponsorScannerDeviceBody = {
+  /** @maxLength 500 */
+  reason?: string;
+};
+
+export type ListLeadScannerAttendees200 = {
+  attendees: LeadScannerAttendee[];
+};
+
+export type UpdateAttendeeLeadSharingBody = {
+  excluded?: boolean;
+  noticeConfirmed?: boolean;
 };

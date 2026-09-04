@@ -21,6 +21,9 @@ export interface Attendee {
   gdprConsent: boolean;
   /** @nullable */
   gdprConsentAt?: Date | null;
+  leadSharingExcluded: boolean;
+  /** @nullable */
+  leadSharingNoticeAt?: Date | null;
   /** @nullable */
   dietaryAccessibility?: string | null;
   seatIndex?: number;

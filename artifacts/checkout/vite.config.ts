@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { VitePWA } from "vite-plugin-pwa";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -17,6 +18,34 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    VitePWA({
+      scope: "/sponsor/",
+      registerType: "prompt",
+      injectRegister: false,
+      manifest: {
+        name: "SWP Summit Sponsor Scanner",
+        short_name: "SWP Scanner",
+        description: "Reliable sponsor badge scanning for SWP Summit 2027",
+        theme_color: "#004eb9",
+        background_color: "#f0f6ff",
+        display: "standalone",
+        start_url: "/sponsor/scanner",
+        scope: "/sponsor/",
+        icons: [
+          { src: "/favicon.png", sizes: "any", type: "image/png", purpose: "any" },
+          { src: "/favicon.png", sizes: "any", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: false,
+        skipWaiting: false,
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//],
+        globPatterns: ["**/*.{js,css,html,png,svg,webp,woff2}"],
+        runtimeCaching: [],
+      },
+    }),
     ...(!isProduction && process.env.REPL_ID !== undefined
       ? [
           await import("@replit/vite-plugin-cartographer").then((m) =>

@@ -16,7 +16,7 @@ import {
   eventSettingsTable,
 } from "@workspace/db";
 import type { EventSettings } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   archiveGeneratedReceiptForPaidBooking,
   archiveReceiptPdf,
@@ -2040,7 +2040,10 @@ export async function sendWelcomeEmail(
       .replace(/\{\{socialOutlookCalendarUrl\}\}/g, calPh.socialOutlookCalendarUrl)
       .replace(/\{\{socialIcsCalendarUrl\}\}/g, calPh.socialIcsCalendarUrl);
 
-    const html = wrapInBrandedLayout(personalised, settings);
+    const leadSharingNotice = personalised.includes("Badge scanning and sponsor leads")
+      ? ""
+      : `<div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>`;
+    const html = wrapInBrandedLayout(`${personalised}${leadSharingNotice}`, settings);
 
     const sent = await sendMail({
       to: toEmail,
@@ -2049,6 +2052,18 @@ export async function sendWelcomeEmail(
       fromName: settings.fromName,
       fromEmail: settings.fromEmail,
     });
+
+    if (sent && bookingId) {
+      await db
+        .update(attendeesTable)
+        .set({ leadSharingNoticeAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(attendeesTable.bookingId, bookingId),
+            sql`lower(${attendeesTable.workEmail}) = ${toEmail.trim().toLowerCase()}`,
+          ),
+        );
+    }
 
     await logEmail(
       bookingId,

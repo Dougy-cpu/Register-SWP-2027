@@ -113,6 +113,8 @@ export const GetBookingResponse = zod
           isTbc: zod.boolean(),
           gdprConsent: zod.boolean(),
           gdprConsentAt: zod.coerce.date().nullish(),
+          leadSharingExcluded: zod.boolean(),
+          leadSharingNoticeAt: zod.coerce.date().nullish(),
           dietaryAccessibility: zod.string().nullish(),
           seatIndex: zod.number().optional(),
           createdAt: zod.coerce.date(),
@@ -320,6 +322,8 @@ export const GetBookingBySessionResponse = zod
           isTbc: zod.boolean(),
           gdprConsent: zod.boolean(),
           gdprConsentAt: zod.coerce.date().nullish(),
+          leadSharingExcluded: zod.boolean(),
+          leadSharingNoticeAt: zod.coerce.date().nullish(),
           dietaryAccessibility: zod.string().nullish(),
           seatIndex: zod.number().optional(),
           createdAt: zod.coerce.date(),
@@ -427,6 +431,8 @@ export const UpdateAttendeeResponse = zod.object({
   isTbc: zod.boolean(),
   gdprConsent: zod.boolean(),
   gdprConsentAt: zod.coerce.date().nullish(),
+  leadSharingExcluded: zod.boolean(),
+  leadSharingNoticeAt: zod.coerce.date().nullish(),
   dietaryAccessibility: zod.string().nullish(),
   seatIndex: zod.number().optional(),
   createdAt: zod.coerce.date(),
@@ -1531,6 +1537,8 @@ export const GetRegistrationResponse = zod
             isTbc: zod.boolean(),
             gdprConsent: zod.boolean(),
             gdprConsentAt: zod.coerce.date().nullish(),
+            leadSharingExcluded: zod.boolean(),
+            leadSharingNoticeAt: zod.coerce.date().nullish(),
             dietaryAccessibility: zod.string().nullish(),
             seatIndex: zod.number().optional(),
             createdAt: zod.coerce.date(),
@@ -3481,4 +3489,444 @@ export const AcknowledgeSponsorDocumentBody = zod.object({
     .string()
     .min(acknowledgeSponsorDocumentBodyAcknowledgedByMin)
     .max(acknowledgeSponsorDocumentBodyAcknowledgedByMax),
+});
+
+/**
+ * @summary Activate one sponsor phone and attribute it to an operator
+ */
+export const activateSponsorScannerDeviceBodyOperatorNameMin = 2;
+export const activateSponsorScannerDeviceBodyOperatorNameMax = 200;
+
+export const ActivateSponsorScannerDeviceBody = zod.object({
+  operatorName: zod
+    .string()
+    .min(activateSponsorScannerDeviceBodyOperatorNameMin)
+    .max(activateSponsorScannerDeviceBodyOperatorNameMax),
+});
+
+/**
+ * @summary List only the authenticated sponsor's server-synchronised leads
+ */
+export const listSponsorLeadsResponseLeadsItemRatingMax = 5;
+
+export const listSponsorLeadsResponseLeadsItemNotesItemRatingMax = 5;
+
+export const ListSponsorLeadsResponse = zod.object({
+  leads: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string(),
+      attendeeId: zod.number(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      workEmail: zod.string().email(),
+      rating: zod.number().min(1).max(listSponsorLeadsResponseLeadsItemRatingMax).nullish(),
+      scanCount: zod.number().min(1),
+      firstScannedAt: zod.coerce.date().nullish(),
+      lastScannedAt: zod.coerce.date().nullish(),
+      scans: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          source: zod.enum(["camera", "image", "manual"]),
+          capturedAt: zod.coerce.date(),
+        }),
+      ),
+      notes: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          note: zod.string().nullable(),
+          rating: zod
+            .number()
+            .min(1)
+            .max(listSponsorLeadsResponseLeadsItemNotesItemRatingMax)
+            .nullable(),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Append a note and/or change the current rating
+ */
+export const AnnotateSponsorLeadParams = zod.object({
+  leadId: zod.coerce.string(),
+});
+
+export const annotateSponsorLeadBodyOperatorNameMin = 2;
+export const annotateSponsorLeadBodyOperatorNameMax = 200;
+
+export const annotateSponsorLeadBodyNoteMax = 4000;
+
+export const annotateSponsorLeadBodyRatingMax = 5;
+
+export const AnnotateSponsorLeadBody = zod.object({
+  operatorName: zod
+    .string()
+    .min(annotateSponsorLeadBodyOperatorNameMin)
+    .max(annotateSponsorLeadBodyOperatorNameMax),
+  note: zod.string().max(annotateSponsorLeadBodyNoteMax).nullish(),
+  rating: zod.number().min(1).max(annotateSponsorLeadBodyRatingMax).nullish(),
+});
+
+export const annotateSponsorLeadResponseRatingMax = 5;
+
+export const annotateSponsorLeadResponseNotesItemRatingMax = 5;
+
+export const AnnotateSponsorLeadResponse = zod.object({
+  id: zod.string(),
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string(),
+  attendeeId: zod.number(),
+  firstName: zod.string(),
+  lastName: zod.string(),
+  name: zod.string(),
+  jobTitle: zod.string(),
+  company: zod.string(),
+  workEmail: zod.string().email(),
+  rating: zod.number().min(1).max(annotateSponsorLeadResponseRatingMax).nullish(),
+  scanCount: zod.number().min(1),
+  firstScannedAt: zod.coerce.date().nullish(),
+  lastScannedAt: zod.coerce.date().nullish(),
+  scans: zod.array(
+    zod.object({
+      id: zod.string(),
+      operatorName: zod.string(),
+      source: zod.enum(["camera", "image", "manual"]),
+      capturedAt: zod.coerce.date(),
+    }),
+  ),
+  notes: zod.array(
+    zod.object({
+      id: zod.string(),
+      operatorName: zod.string(),
+      note: zod.string().nullable(),
+      rating: zod.number().min(1).max(annotateSponsorLeadResponseNotesItemRatingMax).nullable(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Export only the authenticated sponsor's synchronised leads
+ */
+export const exportSponsorLeadsQueryFormatDefault = `xlsx`;
+
+export const ExportSponsorLeadsQueryParams = zod.object({
+  format: zod.enum(["csv", "xlsx"]).default(exportSponsorLeadsQueryFormatDefault),
+});
+
+/**
+ * @summary Read device readiness, pack status and the scanner time window
+ */
+export const getScannerBootstrapResponseTestQrValueRegExp = new RegExp("^[0-9A-F]{12}$");
+
+export const GetScannerBootstrapResponse = zod.object({
+  device: zod.object({
+    id: zod.string(),
+    operatorName: zod.string(),
+    sponsorId: zod.number(),
+    sponsorCompany: zod.string(),
+    packVersion: zod.string().nullish(),
+    currentPackVersion: zod.string(),
+    cameraTested: zod.boolean(),
+    qrTested: zod.boolean(),
+    storageTested: zod.boolean(),
+    offlineTested: zod.boolean(),
+    syncTested: zod.boolean(),
+    ready: zod.boolean(),
+    outOfDate: zod.boolean(),
+    lastSyncedAt: zod.coerce.date().nullish(),
+  }),
+  scannerWindow: zod.object({
+    eventStartAt: zod.coerce.date().nullable(),
+    eventEndAt: zod.coerce.date().nullable(),
+    scanClosesAt: zod.coerce.date().nullable(),
+    scanningOpen: zod.boolean(),
+  }),
+  testQrValue: zod.string().regex(getScannerBootstrapResponseTestQrValueRegExp),
+});
+
+/**
+ * @summary Download the approved attendee fields encrypted for this device
+ */
+
+export const DownloadScannerOfflinePackResponse = zod.object({
+  format: zod.number(),
+  version: zod.string(),
+  generatedAt: zod.coerce.date(),
+  refreshAfter: zod.coerce.date(),
+  expiresAt: zod.coerce.date().nullable(),
+  keyContext: zod
+    .string()
+    .describe(
+      "Non-secret per-pack context used with a scanned QR value to locate and decrypt one record.",
+    ),
+  records: zod.array(
+    zod.object({
+      lookup: zod.string().describe("One-way lookup derived from the QR value and this pack."),
+      badgeVersion: zod.number().min(1),
+      iv: zod.string(),
+      ciphertext: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Record independently completed device readiness checks
+ */
+export const UpdateScannerReadinessBody = zod.object({
+  packVersion: zod.string().optional(),
+  cameraTested: zod.boolean().optional(),
+  qrTested: zod.boolean().optional(),
+  storageTested: zod.boolean().optional(),
+  offlineTested: zod.boolean().optional(),
+  syncTested: zod.boolean().optional(),
+});
+
+export const UpdateScannerReadinessResponse = zod.object({
+  success: zod.boolean(),
+  currentPackVersion: zod.string(),
+});
+
+/**
+ * @summary Idempotently synchronise locally committed scans, ratings and notes
+ */
+export const syncScannerBatchBodyScansItemIdMin = 16;
+export const syncScannerBatchBodyScansItemIdMax = 100;
+
+export const syncScannerBatchBodyScansItemCodeRegExp = new RegExp("^[0-9A-F]{12}$");
+export const syncScannerBatchBodyScansMax = 100;
+
+export const syncScannerBatchBodyAnnotationsItemIdMin = 16;
+export const syncScannerBatchBodyAnnotationsItemIdMax = 100;
+
+export const syncScannerBatchBodyAnnotationsItemScanIdMin = 16;
+export const syncScannerBatchBodyAnnotationsItemScanIdMax = 100;
+
+export const syncScannerBatchBodyAnnotationsItemNoteMax = 4000;
+
+export const syncScannerBatchBodyAnnotationsItemRatingMax = 5;
+
+export const syncScannerBatchBodyAnnotationsMax = 100;
+
+export const SyncScannerBatchBody = zod.object({
+  scans: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .min(syncScannerBatchBodyScansItemIdMin)
+          .max(syncScannerBatchBodyScansItemIdMax),
+        code: zod.string().regex(syncScannerBatchBodyScansItemCodeRegExp),
+        source: zod.enum(["camera", "image", "manual"]),
+        capturedAt: zod.coerce.date(),
+      }),
+    )
+    .max(syncScannerBatchBodyScansMax),
+  annotations: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .min(syncScannerBatchBodyAnnotationsItemIdMin)
+          .max(syncScannerBatchBodyAnnotationsItemIdMax),
+        scanId: zod
+          .string()
+          .min(syncScannerBatchBodyAnnotationsItemScanIdMin)
+          .max(syncScannerBatchBodyAnnotationsItemScanIdMax),
+        note: zod.string().max(syncScannerBatchBodyAnnotationsItemNoteMax).nullish(),
+        rating: zod.number().min(1).max(syncScannerBatchBodyAnnotationsItemRatingMax).nullish(),
+        createdAt: zod.coerce.date(),
+      }),
+    )
+    .max(syncScannerBatchBodyAnnotationsMax),
+});
+
+export const SyncScannerBatchResponse = zod.object({
+  scans: zod.array(
+    zod.object({
+      id: zod.string(),
+      status: zod.enum(["accepted", "duplicate", "rejected"]),
+      reason: zod.string().optional(),
+    }),
+  ),
+  annotations: zod.array(
+    zod.object({
+      id: zod.string(),
+      status: zod.enum(["accepted", "duplicate", "rejected"]),
+      reason: zod.string().optional(),
+    }),
+  ),
+  syncedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary View scanner devices, readiness and aggregate counts
+ */
+export const GetLeadScannerAdminOverviewResponse = zod.object({
+  leadCount: zod.number(),
+  deviceCount: zod.number(),
+  badgeCount: zod.number(),
+  currentPackVersion: zod.string(),
+  scannerWindow: zod.object({
+    eventStartAt: zod.coerce.date().nullable(),
+    eventEndAt: zod.coerce.date().nullable(),
+    scanClosesAt: zod.coerce.date().nullable(),
+    scanningOpen: zod.boolean(),
+  }),
+  devices: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string(),
+      operatorName: zod.string(),
+      status: zod.enum(["ready", "out_of_date", "not_tested", "revoked"]),
+      packVersion: zod.string().nullish(),
+      activatedAt: zod.coerce.date(),
+      lastSeenAt: zod.coerce.date(),
+      lastSyncedAt: zod.coerce.date().nullish(),
+      revokedAt: zod.coerce.date().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary List all leads or one sponsor's leads
+ */
+export const ListAdminSponsorLeadsQueryParams = zod.object({
+  sponsorId: zod.coerce.number().optional(),
+});
+
+export const listAdminSponsorLeadsResponseLeadsItemRatingMax = 5;
+
+export const listAdminSponsorLeadsResponseLeadsItemNotesItemRatingMax = 5;
+
+export const ListAdminSponsorLeadsResponse = zod.object({
+  leads: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string(),
+      attendeeId: zod.number(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      workEmail: zod.string().email(),
+      rating: zod.number().min(1).max(listAdminSponsorLeadsResponseLeadsItemRatingMax).nullish(),
+      scanCount: zod.number().min(1),
+      firstScannedAt: zod.coerce.date().nullish(),
+      lastScannedAt: zod.coerce.date().nullish(),
+      scans: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          source: zod.enum(["camera", "image", "manual"]),
+          capturedAt: zod.coerce.date(),
+        }),
+      ),
+      notes: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          note: zod.string().nullable(),
+          rating: zod
+            .number()
+            .min(1)
+            .max(listAdminSponsorLeadsResponseLeadsItemNotesItemRatingMax)
+            .nullable(),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Export all leads or one sponsor's leads
+ */
+export const exportAdminSponsorLeadsQueryFormatDefault = `xlsx`;
+
+export const ExportAdminSponsorLeadsQueryParams = zod.object({
+  sponsorId: zod.coerce.number().optional(),
+  format: zod.enum(["csv", "xlsx"]).default(exportAdminSponsorLeadsQueryFormatDefault),
+});
+
+/**
+ * @summary Revoke one sponsor scanner without rotating the whole sponsor link
+ */
+export const RevokeSponsorScannerDeviceParams = zod.object({
+  deviceId: zod.coerce.string(),
+});
+
+export const revokeSponsorScannerDeviceBodyReasonMax = 500;
+
+export const RevokeSponsorScannerDeviceBody = zod.object({
+  reason: zod.string().max(revokeSponsorScannerDeviceBodyReasonMax).optional(),
+});
+
+export const RevokeSponsorScannerDeviceResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});
+
+/**
+ * @summary List active registrations and badge readiness without exposing badge codes
+ */
+export const ListLeadScannerAttendeesResponse = zod.object({
+  attendees: zod.array(
+    zod.object({
+      attendeeId: zod.number(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      workEmail: zod.string().email(),
+      isTbc: zod.boolean(),
+      bookingStatus: zod.string(),
+      leadSharingExcluded: zod.boolean(),
+      leadSharingNoticeAt: zod.coerce.date().nullish(),
+      badgeVersion: zod.number().nullish(),
+      badgeActive: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Record disclosure confirmation or exclude an attendee from lead sharing
+ */
+export const UpdateAttendeeLeadSharingParams = zod.object({
+  attendeeId: zod.coerce.number(),
+});
+
+export const UpdateAttendeeLeadSharingBody = zod.object({
+  excluded: zod.boolean().optional(),
+  noticeConfirmed: zod.boolean().optional(),
+});
+
+export const UpdateAttendeeLeadSharingResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
+});
+
+/**
+ * @summary Replace the hidden QR value so the previous printed QR stops resolving
+ */
+export const RotateAttendeeBadgeParams = zod.object({
+  attendeeId: zod.coerce.number(),
+});
+
+export const RotateAttendeeBadgeResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string().optional(),
 });

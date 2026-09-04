@@ -18,8 +18,11 @@ import AdminActivity from "@/pages/admin/activity";
 import AdminSponsors from "@/pages/admin/sponsors";
 import AdminSponsorDetail from "@/pages/admin/sponsor-detail";
 import AdminSponsorAssets from "@/pages/admin/sponsor-assets";
+import AdminLeadScanner from "@/pages/admin/lead-scanner";
 import SponsorAccess from "@/pages/sponsor/access";
 import SponsorPortal from "@/pages/sponsor/portal";
+import SponsorScanner from "@/pages/sponsor/scanner";
+import SponsorLeads from "@/pages/sponsor/leads";
 import ManageAttendees from "@/pages/manage/ManageAttendees";
 import EditBilling from "@/pages/manage/EditBilling";
 
@@ -49,7 +52,10 @@ function Router() {
       <Route path="/admin/sponsors/:sponsorId" component={AdminSponsorDetail} />
       <Route path="/admin/sponsors" component={AdminSponsors} />
       <Route path="/admin/sponsor-assets" component={AdminSponsorAssets} />
+      <Route path="/admin/lead-scanner" component={AdminLeadScanner} />
       <Route path="/sponsor/access/:token" component={SponsorAccess} />
+      <Route path="/sponsor/scanner" component={SponsorScanner} />
+      <Route path="/sponsor/leads" component={SponsorLeads} />
       <Route path="/sponsor" component={SponsorPortal} />
       <Route path="/manage/:token/billing" component={EditBilling} />
       <Route path="/manage/:token" component={ManageAttendees} />

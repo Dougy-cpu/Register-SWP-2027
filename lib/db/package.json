@@ -10,7 +10,8 @@
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
-    "migrate:sponsors": "node ./scripts/migrate-sponsor-workspace.mjs"
+    "migrate:sponsors": "node ./scripts/migrate-sponsor-workspace.mjs",
+    "migrate:lead-scanner": "node ./scripts/migrate-lead-scanner.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

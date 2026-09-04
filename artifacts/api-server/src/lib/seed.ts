@@ -209,6 +209,7 @@ const DEFAULT_SPONSOR_STAFF_BODY = `
 <p>You have been registered as part of the <strong>{{company}}</strong> sponsor team for <strong>{{eventName}}</strong>.</p>
 <div class="info-box"><strong>Date:</strong> {{eventDate}}<br><strong>Venue:</strong> {{eventVenue}}</div>
 <p>There is nothing to pay and no invoice or receipt is needed. If any details change, your sponsor contact can update them in the sponsor workspace.</p>
+<div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>
 <p>We look forward to seeing you there.</p>
 <p>Best,<br><strong>The SWP Summit team</strong></p>
 `;
