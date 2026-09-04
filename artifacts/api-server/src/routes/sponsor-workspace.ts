@@ -39,6 +39,13 @@ import { sendSponsorInternalNotification, sendSponsorStaffWelcome } from "../lib
 import { defaultOrderRef } from "../lib/order-reference";
 import { syncBookingToSheets } from "../lib/google-sheets";
 import { logger } from "../lib/logger";
+import {
+  completePreparationTask,
+  reopenStaffPreparationTasks,
+  saveOnsiteContact,
+  saveSessionPresenters,
+  SponsorPortalError,
+} from "../lib/sponsor-portal";
 
 const router: IRouter = Router();
 const upload = multer({
@@ -75,6 +82,10 @@ function csrfTokenFromCookie(req: Request): string | null {
 }
 
 function handleError(res: Response, error: unknown): void {
+  if (error instanceof SponsorPortalError) {
+    res.status(error.status).json({ error: error.message });
+    return;
+  }
   if (error instanceof SponsorAssetValidationError) {
     res.status(400).json({ error: error.message });
     return;
@@ -140,6 +151,40 @@ router.get("/sponsor/workspace", async (req, res): Promise<void> => {
   });
   const workspace = await buildSponsorWorkspace(sponsorId, false);
   res.json({ ...workspace, csrfToken: csrfTokenFromCookie(req) });
+});
+
+router.put("/sponsor/onsite-contact", async (req, res): Promise<void> => {
+  const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
+  try {
+    const contact = await saveOnsiteContact(sponsorId, req.body ?? {});
+    await sendSponsorInternalNotification({
+      sponsorId,
+      category: "admin",
+      event: "Onsite contact confirmed",
+      summary: "The sponsor updated their event-day contact details.",
+    });
+    res.json(contact);
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+router.post("/sponsor/tasks/:taskKey/complete", async (req, res): Promise<void> => {
+  const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
+  try {
+    const key = String(req.params.taskKey);
+    const result = await completePreparationTask(sponsorId, key);
+    if (result.changed)
+      await sendSponsorInternalNotification({
+        sponsorId,
+        category: "passes",
+        event: key === "staff" ? "Sponsor team confirmed" : "Community Social details confirmed",
+        summary: "The sponsor reviewed and confirmed their current team details.",
+      });
+    res.json(result.task);
+  } catch (error) {
+    handleError(res, error);
+  }
 });
 
 interface StaffBody {
@@ -303,29 +348,7 @@ router.post("/sponsor/staff", async (req, res): Promise<void> => {
         actorLabel: `${staff.firstName} ${staff.lastName}`,
         data: { bookingId: booking.id, attendeeId: attendee.id },
       });
-      const nextStaffCount = (usage?.count ?? 0) + 1;
-      await tx
-        .update(sponsorTasksTable)
-        .set({
-          status: nextStaffCount >= sponsor.staffAllocation ? "completed" : "submitted",
-          completedAt: nextStaffCount >= sponsor.staffAllocation ? new Date() : null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(eq(sponsorTasksTable.sponsorId, sponsorId), eq(sponsorTasksTable.taskKey, "staff")),
-        );
-      if (staff.communitySocialAttending !== null) {
-        await tx
-          .update(sponsorTasksTable)
-          .set({ status: "submitted", updatedAt: new Date() })
-          .where(
-            and(
-              eq(sponsorTasksTable.sponsorId, sponsorId),
-              eq(sponsorTasksTable.taskKey, "community_social"),
-              inArray(sponsorTasksTable.status, ["todo", "overdue"]),
-            ),
-          );
-      }
+      await reopenStaffPreparationTasks(tx, sponsorId);
       return { booking, attendee, sponsor };
     });
 
@@ -425,18 +448,7 @@ router.patch("/sponsor/staff/:bookingId", async (req, res): Promise<void> => {
       actorLabel: `${staff.firstName} ${staff.lastName}`,
       data: { bookingId, attendeeId: existing.attendee.id },
     });
-    if (staff.communitySocialAttending !== null) {
-      await tx
-        .update(sponsorTasksTable)
-        .set({ status: "submitted", updatedAt: new Date() })
-        .where(
-          and(
-            eq(sponsorTasksTable.sponsorId, sponsorId),
-            eq(sponsorTasksTable.taskKey, "community_social"),
-            inArray(sponsorTasksTable.status, ["todo", "overdue"]),
-          ),
-        );
-    }
+    await reopenStaffPreparationTasks(tx, sponsorId);
   });
   if (existing.attendee.workEmail.toLowerCase() !== staff.workEmail) {
     const sent = await sendSponsorStaffWelcome(sponsorId, bookingId, existing.attendee.id);
@@ -465,58 +477,38 @@ router.delete("/sponsor/staff/:bookingId", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid staff registration" });
     return;
   }
-  const [cancelled] = await db
-    .update(bookingsTable)
-    .set({ status: "cancelled", updatedAt: new Date() })
-    .where(
-      and(
-        eq(bookingsTable.id, bookingId),
-        eq(bookingsTable.sponsorId, sponsorId),
-        eq(bookingsTable.registrationSource, "sponsor_staff"),
-        inArray(bookingsTable.status, [...ACTIVE_BOOKING_STATUSES]),
-      ),
-    )
-    .returning();
-  if (!cancelled) {
-    res.status(404).json({ error: "Active sponsor staff registration not found" });
-    return;
-  }
-  await db.insert(sponsorActivityTable).values({
-    sponsorId,
-    type: "staff_cancelled",
-    actorType: "sponsor",
-    data: { bookingId },
-  });
-  const [[sponsor], [usage]] = await Promise.all([
-    db.select().from(sponsorsTable).where(eq(sponsorsTable.id, sponsorId)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(bookingsTable)
+  const cancelled = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: sponsorsTable.id })
+      .from(sponsorsTable)
+      .where(eq(sponsorsTable.id, sponsorId))
+      .for("update");
+    const [cancelled] = await tx
+      .update(bookingsTable)
+      .set({ status: "cancelled", updatedAt: new Date() })
       .where(
         and(
+          eq(bookingsTable.id, bookingId),
           eq(bookingsTable.sponsorId, sponsorId),
           eq(bookingsTable.registrationSource, "sponsor_staff"),
           inArray(bookingsTable.status, [...ACTIVE_BOOKING_STATUSES]),
         ),
-      ),
-  ]);
-  const remainingStaffCount = usage?.count ?? 0;
-  await db
-    .update(sponsorTasksTable)
-    .set({
-      status:
-        sponsor && sponsor.staffAllocation > 0 && remainingStaffCount >= sponsor.staffAllocation
-          ? "completed"
-          : remainingStaffCount > 0
-            ? "submitted"
-            : "todo",
-      completedAt:
-        sponsor && sponsor.staffAllocation > 0 && remainingStaffCount >= sponsor.staffAllocation
-          ? new Date()
-          : null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(sponsorTasksTable.sponsorId, sponsorId), eq(sponsorTasksTable.taskKey, "staff")));
+      )
+      .returning();
+    if (!cancelled) return null;
+    await tx.insert(sponsorActivityTable).values({
+      sponsorId,
+      type: "staff_cancelled",
+      actorType: "sponsor",
+      data: { bookingId },
+    });
+    await reopenStaffPreparationTasks(tx, sponsorId);
+    return cancelled;
+  });
+  if (!cancelled) {
+    res.status(404).json({ error: "Active sponsor staff registration not found" });
+    return;
+  }
   await sendSponsorInternalNotification({
     sponsorId,
     category: "passes",
@@ -565,10 +557,12 @@ router.post("/sponsor/pass-requests", async (req, res): Promise<void> => {
 });
 
 interface SessionBody {
+  expectedRevision?: number;
   title?: string;
   description?: string;
   takeaways?: string[];
   presenters?: Array<{
+    id?: number;
     name?: string;
     jobTitle?: string;
     company?: string;
@@ -585,10 +579,14 @@ function cleanSession(body: SessionBody) {
     : [];
   const presenters = Array.isArray(body.presenters)
     ? body.presenters.map((presenter, index) => ({
+        id: presenter.id,
         name: String(presenter.name ?? "").trim(),
         jobTitle: String(presenter.jobTitle ?? "").trim(),
         company: String(presenter.company ?? "").trim(),
-        biography: presenter.biography?.trim() || null,
+        biography:
+          String(presenter.biography ?? "")
+            .trim()
+            .slice(0, 2000) || null,
         displayOrder: index,
       }))
     : [];
@@ -613,78 +611,140 @@ router.patch("/sponsor/sessions/:sessionId", async (req, res): Promise<void> => 
     res.status(400).json({ error: "Invalid session" });
     return;
   }
-  const clean = cleanSession(req.body as SessionBody);
-  const [session] = await db
-    .select()
-    .from(sponsorSessionsTable)
-    .where(
-      and(eq(sponsorSessionsTable.id, sessionId), eq(sponsorSessionsTable.sponsorId, sponsorId)),
-    );
-  if (!session) {
-    res.status(404).json({ error: "Session entitlement not found" });
-    return;
-  }
-  const nextRevision = session.currentRevision + 1;
-  const nextStatus = ["approved", "exported"].includes(session.status)
-    ? "submitted"
-    : session.status;
-  const snapshot = {
-    title: clean.title,
-    description: clean.description,
-    takeaways: clean.takeaways,
-    presenters: clean.presenters,
-  };
-  await db.transaction(async (tx) => {
-    await tx
-      .update(sponsorSessionsTable)
-      .set({
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [session] = await tx
+        .select()
+        .from(sponsorSessionsTable)
+        .where(
+          and(
+            eq(sponsorSessionsTable.id, sessionId),
+            eq(sponsorSessionsTable.sponsorId, sponsorId),
+          ),
+        )
+        .for("update");
+      if (!session) throw new SponsorPortalError("Session entitlement not found", 404);
+      const body = (req.body ?? {}) as SessionBody;
+      if (
+        body.expectedRevision !== undefined &&
+        body.expectedRevision !== session.currentRevision
+      ) {
+        throw new SponsorPortalError(
+          "This session was updated elsewhere. Your draft is still here; refresh the saved version before making further changes.",
+          409,
+        );
+      }
+      const existingPresenters = await tx
+        .select()
+        .from(sponsorPresentersTable)
+        .where(eq(sponsorPresentersTable.sessionId, sessionId))
+        .orderBy(sponsorPresentersTable.displayOrder);
+      if (
+        body.presenters !== undefined &&
+        (!Array.isArray(body.presenters) ||
+          body.presenters.length > 20 ||
+          body.presenters.some((person) => !person || typeof person !== "object"))
+      ) {
+        throw new SponsorPortalError("Check the speaker details and try again.");
+      }
+      const clean = cleanSession({
+        title: session.title ?? "",
+        description: session.description ?? "",
+        takeaways: session.takeaways,
+        presenters: existingPresenters,
+        ...body,
+      });
+      const nextRevision = session.currentRevision + 1;
+      const nextStatus = ["approved", "exported"].includes(session.status)
+        ? "submitted"
+        : session.status;
+      await saveSessionPresenters(tx, sessionId, clean.presenters);
+      const presenters = await tx
+        .select()
+        .from(sponsorPresentersTable)
+        .where(eq(sponsorPresentersTable.sessionId, sessionId))
+        .orderBy(sponsorPresentersTable.displayOrder);
+      const snapshot = {
         title: clean.title,
         description: clean.description,
         takeaways: clean.takeaways,
-        currentRevision: nextRevision,
-        status: nextStatus,
-        approvedAt: nextStatus === "submitted" ? null : session.approvedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(sponsorSessionsTable.id, sessionId));
-    await tx.delete(sponsorPresentersTable).where(eq(sponsorPresentersTable.sessionId, sessionId));
-    if (clean.presenters.length) {
+        presenters: presenters.map(({ id, name, jobTitle, company, biography, displayOrder }) => ({
+          id,
+          name,
+          jobTitle,
+          company,
+          biography,
+          displayOrder,
+        })),
+      };
       await tx
-        .insert(sponsorPresentersTable)
-        .values(clean.presenters.map((presenter) => ({ ...presenter, sessionId })));
-    }
-    await tx.insert(sponsorSessionRevisionsTable).values({
-      sessionId,
-      revision: nextRevision,
-      snapshot,
-      actor: "sponsor",
+        .update(sponsorSessionsTable)
+        .set({
+          title: clean.title,
+          description: clean.description,
+          takeaways: clean.takeaways,
+          currentRevision: nextRevision,
+          status: nextStatus,
+          approvedAt: nextStatus === "submitted" ? null : session.approvedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(sponsorSessionsTable.id, sessionId));
+      await tx.insert(sponsorSessionRevisionsTable).values({
+        sessionId,
+        revision: nextRevision,
+        snapshot,
+        actor: "sponsor",
+      });
+      await tx.insert(sponsorActivityTable).values({
+        sponsorId,
+        type: "session_updated",
+        actorType: "sponsor",
+        data: { sessionId, revision: nextRevision, previousStatus: session.status, nextStatus },
+      });
+      await tx
+        .update(sponsorTasksTable)
+        .set({
+          status: nextStatus === "submitted" ? "submitted" : "todo",
+          completedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(sponsorTasksTable.sponsorId, sponsorId),
+            inArray(sponsorTasksTable.taskKey, ["sessions", "speakers"]),
+            eq(sponsorTasksTable.required, true),
+          ),
+        );
+      return { session, nextRevision };
     });
-    await tx.insert(sponsorActivityTable).values({
+    await sendSponsorInternalNotification({
       sponsorId,
-      type: "session_updated",
-      actorType: "sponsor",
-      data: { sessionId, revision: nextRevision, previousStatus: session.status, nextStatus },
+      category: "content",
+      event: "Sponsor session updated",
+      summary: `${result.session.entitlementLabel} was saved as revision ${result.nextRevision}.${result.session.status === "exported" ? " The previous export is now outdated." : ""}`,
     });
-  });
-  await sendSponsorInternalNotification({
-    sponsorId,
-    category: "content",
-    event: "Sponsor session updated",
-    summary: `${session.entitlementLabel} was saved as revision ${nextRevision}.${session.status === "exported" ? " The previous export is now outdated." : ""}`,
-  });
-  const workspace = await buildSponsorWorkspace(sponsorId, false);
-  res.json(workspace.sessions.find((item) => item.id === sessionId));
+    const workspace = await buildSponsorWorkspace(sponsorId, false);
+    res.json(workspace.sessions.find((item) => item.id === sessionId));
+  } catch (error) {
+    handleError(res, error);
+  }
 });
 
-async function sessionSubmissionErrors(sessionId: number): Promise<string[]> {
-  const [session] = await db
+async function sessionSubmissionErrors(
+  sessionId: number,
+  connection: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+): Promise<string[]> {
+  const [session] = await connection
     .select()
     .from(sponsorSessionsTable)
     .where(eq(sponsorSessionsTable.id, sessionId));
   if (!session) return ["Session not found"];
   const [presenters, assets] = await Promise.all([
-    db.select().from(sponsorPresentersTable).where(eq(sponsorPresentersTable.sessionId, sessionId)),
-    db
+    connection
+      .select()
+      .from(sponsorPresentersTable)
+      .where(eq(sponsorPresentersTable.sessionId, sessionId)),
+    connection
       .select()
       .from(sponsorAssetsTable)
       .where(
@@ -710,9 +770,7 @@ async function sessionSubmissionErrors(sessionId: number): Promise<string[]> {
   ) {
     errors.push("Upload and link a headshot to each presenter");
   }
-  if (session.slidesRequired && !assets.some((asset) => asset.category === "slides")) {
-    errors.push("Upload the required slides");
-  }
+  // Final slides have their own checklist milestone and must not block programme review.
   return errors;
 }
 
@@ -723,49 +781,76 @@ router.post("/sponsor/sessions/:sessionId/submit", async (req, res): Promise<voi
     res.status(400).json({ error: "Invalid session" });
     return;
   }
-  const [session] = await db
-    .select()
-    .from(sponsorSessionsTable)
-    .where(
-      and(eq(sponsorSessionsTable.id, sessionId), eq(sponsorSessionsTable.sponsorId, sponsorId)),
-    );
-  if (!session) {
-    res.status(404).json({ error: "Session entitlement not found" });
-    return;
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [session] = await tx
+        .select()
+        .from(sponsorSessionsTable)
+        .where(
+          and(
+            eq(sponsorSessionsTable.id, sessionId),
+            eq(sponsorSessionsTable.sponsorId, sponsorId),
+          ),
+        )
+        .for("update");
+      if (!session) {
+        throw new SponsorPortalError("Session entitlement not found", 404);
+      }
+      if (
+        req.body?.expectedRevision !== undefined &&
+        req.body.expectedRevision !== session.currentRevision
+      ) {
+        throw new SponsorPortalError(
+          "This session was updated elsewhere. Refresh the saved version before submitting.",
+          409,
+        );
+      }
+      const errors = await sessionSubmissionErrors(sessionId, tx);
+      if (errors.length) {
+        throw new SponsorPortalError(errors.join(". "));
+      }
+      if (["submitted", "approved", "exported"].includes(session.status))
+        return { updated: session, changed: false };
+      const [updated] = await tx
+        .update(sponsorSessionsTable)
+        .set({
+          status: "submitted",
+          submittedAt: new Date(),
+          feedback: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(sponsorSessionsTable.id, sessionId))
+        .returning();
+      await tx.insert(sponsorActivityTable).values({
+        sponsorId,
+        type: "session_submitted",
+        actorType: "sponsor",
+        data: { sessionId, revision: updated.currentRevision },
+      });
+      await tx
+        .update(sponsorTasksTable)
+        .set({ status: "submitted", completedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(sponsorTasksTable.sponsorId, sponsorId),
+            inArray(sponsorTasksTable.taskKey, ["sessions", "speakers"]),
+            eq(sponsorTasksTable.required, true),
+          ),
+        );
+      return { updated, changed: true };
+    });
+    if (result.changed)
+      await sendSponsorInternalNotification({
+        sponsorId,
+        category: "content",
+        event: "Sponsor session submitted",
+        summary: `${result.updated.entitlementLabel} revision ${result.updated.currentRevision} is ready for review.`,
+      });
+    const workspace = await buildSponsorWorkspace(sponsorId, false);
+    res.json(workspace.sessions.find((item) => item.id === sessionId));
+  } catch (error) {
+    handleError(res, error);
   }
-  const errors = await sessionSubmissionErrors(sessionId);
-  if (errors.length) {
-    res.status(400).json({ error: errors.join(". "), errors });
-    return;
-  }
-  const [updated] = await db
-    .update(sponsorSessionsTable)
-    .set({ status: "submitted", submittedAt: new Date(), feedback: null, updatedAt: new Date() })
-    .where(eq(sponsorSessionsTable.id, sessionId))
-    .returning();
-  await db.insert(sponsorActivityTable).values({
-    sponsorId,
-    type: "session_submitted",
-    actorType: "sponsor",
-    data: { sessionId, revision: updated.currentRevision },
-  });
-  await db
-    .update(sponsorTasksTable)
-    .set({ status: "submitted", updatedAt: new Date() })
-    .where(
-      and(
-        eq(sponsorTasksTable.sponsorId, sponsorId),
-        inArray(sponsorTasksTable.taskKey, ["sessions", "speakers"]),
-      ),
-    );
-  await sendSponsorInternalNotification({
-    sponsorId,
-    category: "content",
-    event: "Sponsor session submitted",
-    summary: `${updated.entitlementLabel} revision ${updated.currentRevision} is ready for review.`,
-  });
-  const workspace = await buildSponsorWorkspace(sponsorId, false);
-  res.json(workspace.sessions.find((item) => item.id === sessionId));
 });
 
 router.post("/sponsor/assets", upload.single("file"), async (req, res): Promise<void> => {

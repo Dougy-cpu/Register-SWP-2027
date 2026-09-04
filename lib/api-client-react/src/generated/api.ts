@@ -96,7 +96,9 @@ import type {
   SendSponsorWelcomeBody,
   SponsorAsset,
   SponsorAssetUpload,
+  SponsorContact,
   SponsorLead,
+  SponsorOnsiteContactInput,
   SponsorSession,
   SponsorSessionEntitlementInput,
   SponsorSessionInput,
@@ -107,6 +109,7 @@ import type {
   SponsorWorkspaceAdmin,
   SponsorWorkspacePublic,
   StripeSessionResponse,
+  SubmitSponsorSessionBody,
   SuccessResponse,
   TestEmailBody,
   UnpaidInvoiceList,
@@ -6068,6 +6071,174 @@ export function useGetSponsorWorkspace<
 }
 
 /**
+ * Cookie and CSRF authenticated. Existing contacts and primary-contact status are preserved. IDs must belong to this sponsor.
+ * @summary Save an onsite contact and complete the sponsor contact task
+ */
+export const getSaveSponsorOnsiteContactUrl = () => {
+  return `/api/sponsor/onsite-contact`;
+};
+
+export const saveSponsorOnsiteContact = async (
+  sponsorOnsiteContactInput: SponsorOnsiteContactInput,
+  options?: RequestInit,
+): Promise<SponsorContact> => {
+  return customFetch<SponsorContact>(getSaveSponsorOnsiteContactUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sponsorOnsiteContactInput),
+  });
+};
+
+export const getSaveSponsorOnsiteContactMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveSponsorOnsiteContact>>,
+    TError,
+    { data: BodyType<SponsorOnsiteContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof saveSponsorOnsiteContact>>,
+  TError,
+  { data: BodyType<SponsorOnsiteContactInput> },
+  TContext
+> => {
+  const mutationKey = ["saveSponsorOnsiteContact"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof saveSponsorOnsiteContact>>,
+    { data: BodyType<SponsorOnsiteContactInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return saveSponsorOnsiteContact(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SaveSponsorOnsiteContactMutationResult = NonNullable<
+  Awaited<ReturnType<typeof saveSponsorOnsiteContact>>
+>;
+export type SaveSponsorOnsiteContactMutationBody = BodyType<SponsorOnsiteContactInput>;
+export type SaveSponsorOnsiteContactMutationError = ErrorType<void>;
+
+/**
+ * @summary Save an onsite contact and complete the sponsor contact task
+ */
+export const useSaveSponsorOnsiteContact = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveSponsorOnsiteContact>>,
+    TError,
+    { data: BodyType<SponsorOnsiteContactInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof saveSponsorOnsiteContact>>,
+  TError,
+  { data: BodyType<SponsorOnsiteContactInput> },
+  TContext
+> => {
+  return useMutation(getSaveSponsorOnsiteContactMutationOptions(options));
+};
+
+/**
+ * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Community Social confirmation requires an answer for every active staff member; an empty roster may explicitly confirm that nobody is attending. Repeated confirmation is idempotent.
+ * @summary Explicitly confirm the current team list or its Community Social answers
+ */
+export const getCompleteSponsorPreparationTaskUrl = (taskKey: "staff" | "community_social") => {
+  return `/api/sponsor/tasks/${taskKey}/complete`;
+};
+
+export const completeSponsorPreparationTask = async (
+  taskKey: "staff" | "community_social",
+  options?: RequestInit,
+): Promise<SponsorTask> => {
+  return customFetch<SponsorTask>(getCompleteSponsorPreparationTaskUrl(taskKey), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCompleteSponsorPreparationTaskMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
+    TError,
+    { taskKey: "staff" | "community_social" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
+  TError,
+  { taskKey: "staff" | "community_social" },
+  TContext
+> => {
+  const mutationKey = ["completeSponsorPreparationTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
+    { taskKey: "staff" | "community_social" }
+  > = (props) => {
+    const { taskKey } = props ?? {};
+
+    return completeSponsorPreparationTask(taskKey, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CompleteSponsorPreparationTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof completeSponsorPreparationTask>>
+>;
+
+export type CompleteSponsorPreparationTaskMutationError = ErrorType<void>;
+
+/**
+ * @summary Explicitly confirm the current team list or its Community Social answers
+ */
+export const useCompleteSponsorPreparationTask = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
+    TError,
+    { taskKey: "staff" | "community_social" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
+  TError,
+  { taskKey: "staff" | "community_social" },
+  TContext
+> => {
+  return useMutation(getCompleteSponsorPreparationTaskMutationOptions(options));
+};
+
+/**
  * @summary Explicitly confirm one zero-value Sponsor staff registration
  */
 export const getRegisterSponsorStaffUrl = () => {
@@ -6417,7 +6588,7 @@ export const updateSponsorSession = async (
 };
 
 export const getUpdateSponsorSessionMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -6456,12 +6627,12 @@ export type UpdateSponsorSessionMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateSponsorSession>>
 >;
 export type UpdateSponsorSessionMutationBody = BodyType<SponsorSessionInput>;
-export type UpdateSponsorSessionMutationError = ErrorType<unknown>;
+export type UpdateSponsorSessionMutationError = ErrorType<void>;
 
 /**
  * @summary Save a sponsor session draft; approved edits return it to submitted
  */
-export const useUpdateSponsorSession = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+export const useUpdateSponsorSession = <TError = ErrorType<void>, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateSponsorSession>>,
     TError,
@@ -6487,29 +6658,32 @@ export const getSubmitSponsorSessionUrl = (sessionId: number) => {
 
 export const submitSponsorSession = async (
   sessionId: number,
+  submitSponsorSessionBody?: SubmitSponsorSessionBody,
   options?: RequestInit,
 ): Promise<SponsorSession> => {
   return customFetch<SponsorSession>(getSubmitSponsorSessionUrl(sessionId), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(submitSponsorSessionBody),
   });
 };
 
 export const getSubmitSponsorSessionMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitSponsorSession>>,
     TError,
-    { sessionId: number },
+    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof submitSponsorSession>>,
   TError,
-  { sessionId: number },
+  { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
   TContext
 > => {
   const mutationKey = ["submitSponsorSession"];
@@ -6521,11 +6695,11 @@ export const getSubmitSponsorSessionMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof submitSponsorSession>>,
-    { sessionId: number }
+    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> }
   > = (props) => {
-    const { sessionId } = props ?? {};
+    const { sessionId, data } = props ?? {};
 
-    return submitSponsorSession(sessionId, requestOptions);
+    return submitSponsorSession(sessionId, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -6534,24 +6708,24 @@ export const getSubmitSponsorSessionMutationOptions = <
 export type SubmitSponsorSessionMutationResult = NonNullable<
   Awaited<ReturnType<typeof submitSponsorSession>>
 >;
-
-export type SubmitSponsorSessionMutationError = ErrorType<unknown>;
+export type SubmitSponsorSessionMutationBody = BodyType<SubmitSponsorSessionBody>;
+export type SubmitSponsorSessionMutationError = ErrorType<void>;
 
 /**
  * @summary Validate and submit a sponsor session for review
  */
-export const useSubmitSponsorSession = <TError = ErrorType<unknown>, TContext = unknown>(options?: {
+export const useSubmitSponsorSession = <TError = ErrorType<void>, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitSponsorSession>>,
     TError,
-    { sessionId: number },
+    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof submitSponsorSession>>,
   TError,
-  { sessionId: number },
+  { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
   TContext
 > => {
   return useMutation(getSubmitSponsorSessionMutationOptions(options));

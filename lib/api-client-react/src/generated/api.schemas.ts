@@ -59,6 +59,30 @@ export interface SponsorContact {
   isPrimary: boolean;
 }
 
+export interface SponsorOnsiteContactInput {
+  /** @minimum 1 */
+  id?: number;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  firstName: string;
+  /**
+   * @minLength 1
+   * @maxLength 100
+   */
+  lastName: string;
+  /** @maxLength 200 */
+  jobTitle?: string;
+  /** @maxLength 254 */
+  email: string;
+  /**
+   * @minLength 3
+   * @maxLength 50
+   */
+  phone: string;
+}
+
 export type SponsorTaskStatus = (typeof SponsorTaskStatus)[keyof typeof SponsorTaskStatus];
 
 export const SponsorTaskStatus = {
@@ -235,6 +259,11 @@ export interface SponsorSessionEntitlementInput {
 }
 
 export interface SponsorSessionInput {
+  /**
+   * Reject stale edits without replacing a newer revision.
+   * @minimum 0
+   */
+  expectedRevision?: number;
   /** @maxLength 250 */
   title?: string;
   /** @maxLength 1500 */
@@ -1915,6 +1944,11 @@ export type RequestMoreSponsorPassesBody = {
   requestedStaff: number;
   /** @maxLength 2000 */
   message?: string;
+};
+
+export type SubmitSponsorSessionBody = {
+  /** @minimum 0 */
+  expectedRevision?: number;
 };
 
 export type ReplaceSponsorWorkspaceAssetBody = {

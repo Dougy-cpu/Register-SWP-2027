@@ -3243,6 +3243,63 @@ export const GetSponsorWorkspaceResponse = zod
   );
 
 /**
+ * Cookie and CSRF authenticated. Existing contacts and primary-contact status are preserved. IDs must belong to this sponsor.
+ * @summary Save an onsite contact and complete the sponsor contact task
+ */
+
+export const saveSponsorOnsiteContactBodyFirstNameMax = 100;
+
+export const saveSponsorOnsiteContactBodyLastNameMax = 100;
+
+export const saveSponsorOnsiteContactBodyJobTitleMax = 200;
+
+export const saveSponsorOnsiteContactBodyEmailMax = 254;
+
+export const saveSponsorOnsiteContactBodyPhoneMin = 3;
+export const saveSponsorOnsiteContactBodyPhoneMax = 50;
+
+export const SaveSponsorOnsiteContactBody = zod.object({
+  id: zod.number().min(1).optional(),
+  firstName: zod.string().min(1).max(saveSponsorOnsiteContactBodyFirstNameMax),
+  lastName: zod.string().min(1).max(saveSponsorOnsiteContactBodyLastNameMax),
+  jobTitle: zod.string().max(saveSponsorOnsiteContactBodyJobTitleMax).optional(),
+  email: zod.string().email().max(saveSponsorOnsiteContactBodyEmailMax),
+  phone: zod
+    .string()
+    .min(saveSponsorOnsiteContactBodyPhoneMin)
+    .max(saveSponsorOnsiteContactBodyPhoneMax),
+});
+
+export const SaveSponsorOnsiteContactResponse = zod.object({
+  id: zod.number().optional(),
+  role: zod.enum(["primary", "onsite", "marketing", "other"]),
+  firstName: zod.string(),
+  lastName: zod.string(),
+  jobTitle: zod.string().nullish(),
+  email: zod.string().email(),
+  phone: zod.string().nullish(),
+  isPrimary: zod.boolean(),
+});
+
+/**
+ * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Community Social confirmation requires an answer for every active staff member; an empty roster may explicitly confirm that nobody is attending. Repeated confirmation is idempotent.
+ * @summary Explicitly confirm the current team list or its Community Social answers
+ */
+export const CompleteSponsorPreparationTaskParams = zod.object({
+  taskKey: zod.enum(["staff", "community_social"]),
+});
+
+export const CompleteSponsorPreparationTaskResponse = zod.object({
+  id: zod.number(),
+  taskKey: zod.string(),
+  label: zod.string(),
+  required: zod.boolean(),
+  dueAt: zod.coerce.date().nullish(),
+  status: zod.enum(["todo", "submitted", "completed", "overdue", "not_required"]),
+  completedAt: zod.coerce.date().nullish(),
+});
+
+/**
  * @summary Explicitly confirm one zero-value Sponsor staff registration
  */
 export const registerSponsorStaffBodyFirstNameMax = 100;
@@ -3362,6 +3419,8 @@ export const UpdateSponsorSessionParams = zod.object({
   sessionId: zod.coerce.number(),
 });
 
+export const updateSponsorSessionBodyExpectedRevisionMin = 0;
+
 export const updateSponsorSessionBodyTitleMax = 250;
 
 export const updateSponsorSessionBodyDescriptionMax = 1500;
@@ -3371,6 +3430,11 @@ export const updateSponsorSessionBodyTakeawaysItemMax = 300;
 export const updateSponsorSessionBodyTakeawaysMax = 3;
 
 export const UpdateSponsorSessionBody = zod.object({
+  expectedRevision: zod
+    .number()
+    .min(updateSponsorSessionBodyExpectedRevisionMin)
+    .optional()
+    .describe("Reject stale edits without replacing a newer revision."),
   title: zod.string().max(updateSponsorSessionBodyTitleMax).optional(),
   description: zod.string().max(updateSponsorSessionBodyDescriptionMax).optional(),
   takeaways: zod
@@ -3433,6 +3497,12 @@ export const UpdateSponsorSessionResponse = zod.object({
  */
 export const SubmitSponsorSessionParams = zod.object({
   sessionId: zod.coerce.number(),
+});
+
+export const submitSponsorSessionBodyExpectedRevisionMin = 0;
+
+export const SubmitSponsorSessionBody = zod.object({
+  expectedRevision: zod.number().min(submitSponsorSessionBodyExpectedRevisionMin).optional(),
 });
 
 export const submitSponsorSessionResponseTakeawaysMax = 3;

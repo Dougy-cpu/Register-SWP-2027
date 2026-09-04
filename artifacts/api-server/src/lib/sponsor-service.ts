@@ -19,6 +19,7 @@ import {
   sponsorTasksTable,
 } from "@workspace/db";
 import { formatSponsorAsset } from "./sponsor-assets";
+import { deriveSponsorTasks } from "./sponsor-progress";
 import { issueSponsorAccessToken } from "../middleware/sponsor-auth";
 
 export class SponsorConflictError extends Error {
@@ -685,7 +686,7 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
     contacts,
     codes,
     staffRows,
-    tasks,
+    storedTasks,
     sessions,
     assets,
     documents,
@@ -739,6 +740,33 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
       .where(and(eq(emailLogsTable.sponsorId, sponsorId), eq(emailLogsTable.status, "failed"))),
   ]);
   const activeStaff = staffRows.filter((row) => ["paid", "invoiced"].includes(row.booking.status));
+  const documentViews = await Promise.all(
+    documents.map(async (document) => {
+      const [acknowledgement] = await db
+        .select()
+        .from(sponsorDocumentAcknowledgementsTable)
+        .where(
+          and(
+            eq(sponsorDocumentAcknowledgementsTable.documentId, document.id),
+            eq(sponsorDocumentAcknowledgementsTable.version, document.acknowledgementVersion),
+          ),
+        );
+      return {
+        ...document,
+        acknowledged: Boolean(acknowledgement),
+        acknowledgedBy: acknowledgement?.acknowledgedBy ?? null,
+        acknowledgedAt: acknowledgement?.acknowledgedAt.toISOString() ?? null,
+        createdAt: document.createdAt.toISOString(),
+        updatedAt: document.updatedAt.toISOString(),
+      };
+    }),
+  );
+  const tasks = deriveSponsorTasks(storedTasks, {
+    sessions,
+    assets,
+    contacts,
+    documents: documentViews,
+  });
   const vipCode = codes.find((code) => code.kind === "vip");
   const requiredTasks = tasks.filter((task) => task.required);
   const completeTasks = requiredTasks.filter((task) => task.status === "completed");
@@ -788,27 +816,7 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
     })),
     sessions,
     assets: assets.map((asset) => formatSponsorAsset(asset, sponsor.company)),
-    documents: await Promise.all(
-      documents.map(async (document) => {
-        const [acknowledgement] = await db
-          .select()
-          .from(sponsorDocumentAcknowledgementsTable)
-          .where(
-            and(
-              eq(sponsorDocumentAcknowledgementsTable.documentId, document.id),
-              eq(sponsorDocumentAcknowledgementsTable.version, document.acknowledgementVersion),
-            ),
-          );
-        return {
-          ...document,
-          acknowledged: Boolean(acknowledgement),
-          acknowledgedBy: acknowledgement?.acknowledgedBy ?? null,
-          acknowledgedAt: acknowledgement?.acknowledgedAt.toISOString() ?? null,
-          createdAt: document.createdAt.toISOString(),
-          updatedAt: document.updatedAt.toISOString(),
-        };
-      }),
-    ),
+    documents: documentViews,
     invitationCopy,
   };
   if (!admin) return { ...summary, ...common };

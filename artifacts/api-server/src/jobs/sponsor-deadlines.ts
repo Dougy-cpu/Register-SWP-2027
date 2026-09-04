@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { db, pool, sponsorActivityTable, sponsorsTable, sponsorTasksTable } from "@workspace/db";
 import { sendSponsorInternalNotification } from "../lib/sponsor-email";
 import { logger } from "../lib/logger";
+import { buildSponsorWorkspace } from "../lib/sponsor-service";
 
 function londonDate(date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -27,7 +28,7 @@ export async function runSponsorDeadlineCheck(now = new Date()): Promise<{
       and(
         eq(sponsorTasksTable.required, true),
         lte(sponsorTasksTable.dueAt, now),
-        inArray(sponsorTasksTable.status, ["todo", "submitted", "overdue"]),
+        inArray(sponsorTasksTable.status, ["todo", "submitted", "overdue", "completed"]),
         inArray(sponsorsTable.status, ["confirmed", "completed"]),
         or(
           isNull(sponsorTasksTable.lastDeadlineCheckOn),
@@ -38,7 +39,13 @@ export async function runSponsorDeadlineCheck(now = new Date()): Promise<{
 
   const overdueTaskIds: number[] = [];
   const grouped = new Map<number, Array<(typeof dueTasks)[number]>>();
+  const workspaces = new Map<number, Awaited<ReturnType<typeof buildSponsorWorkspace>>>();
   for (const row of dueTasks) {
+    if (!workspaces.has(row.sponsor.id))
+      workspaces.set(row.sponsor.id, await buildSponsorWorkspace(row.sponsor.id, false));
+    const current = workspaces.get(row.sponsor.id)?.tasks.find((task) => task.id === row.task.id);
+    // Completed files and items awaiting the event team are not sponsor deadline failures.
+    if (!current || !["todo", "overdue"].includes(current.status)) continue;
     const updated = await db
       .update(sponsorTasksTable)
       .set({ status: "overdue", lastDeadlineCheckOn: checkedOn, updatedAt: now })

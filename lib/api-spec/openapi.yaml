@@ -1991,6 +1991,47 @@ paths:
               },
           }
 
+  /sponsor/onsite-contact:
+    put:
+      operationId: saveSponsorOnsiteContact
+      tags: [sponsor-workspace]
+      summary: Save an onsite contact and complete the sponsor contact task
+      description: Cookie and CSRF authenticated. Existing contacts and primary-contact status are preserved. IDs must belong to this sponsor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SponsorOnsiteContactInput" }
+      responses:
+        "200":
+          description: Saved onsite contact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SponsorContact" }
+        "400": { description: Contact details are incomplete or invalid }
+        "404": { description: Contact does not belong to this sponsor }
+        "409": { description: Another contact already uses this email }
+
+  /sponsor/tasks/{taskKey}/complete:
+    post:
+      operationId: completeSponsorPreparationTask
+      tags: [sponsor-workspace]
+      summary: Explicitly confirm the current team list or its Community Social answers
+      description: Cookie and CSRF authenticated. Team completion does not require using every allocated place. Community Social confirmation requires an answer for every active staff member; an empty roster may explicitly confirm that nobody is attending. Repeated confirmation is idempotent.
+      parameters:
+        - name: taskKey
+          in: path
+          required: true
+          schema: { type: string, enum: [staff, community_social] }
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SponsorTask" }
+        "400": { description: Some Community Social attendance answers are missing }
+        "404": { description: Task is not configured for this sponsor }
+
   /sponsor/staff:
     post:
       operationId: registerSponsorStaff
@@ -2077,12 +2118,24 @@ paths:
               { application/json: { schema: { $ref: "#/components/schemas/SponsorSession" } } },
           }
 
+        "400": { description: Invalid session or speaker details }
+        "404": { description: Session not found in this sponsor workspace }
+        "409": { description: A newer revision exists; preserve local edits and refresh }
+
   /sponsor/sessions/{sessionId}/submit:
     post:
       operationId: submitSponsorSession
       tags: [sponsor-workspace]
       summary: Validate and submit a sponsor session for review
       parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedRevision: { type: integer, minimum: 0 }
       responses:
         "200":
           {
@@ -2090,6 +2143,10 @@ paths:
             content:
               { application/json: { schema: { $ref: "#/components/schemas/SponsorSession" } } },
           }
+
+        "400": { description: Required session or speaker details are missing }
+        "404": { description: Session not found in this sponsor workspace }
+        "409": { description: A newer revision exists; refresh before submitting }
 
   /sponsor/assets:
     post:
@@ -2517,6 +2574,18 @@ components:
         isPrimary: { type: boolean }
       required: [role, firstName, lastName, email, isPrimary]
 
+    SponsorOnsiteContactInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        jobTitle: { type: string, maxLength: 200 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, minLength: 3, maxLength: 50 }
+      required: [firstName, lastName, email, phone]
+
     SponsorTask:
       type: object
       properties:
@@ -2669,6 +2738,12 @@ components:
     SponsorSessionInput:
       type: object
       properties:
+        expectedRevision:
+          {
+            type: integer,
+            minimum: 0,
+            description: Reject stale edits without replacing a newer revision.,
+          }
         title: { type: string, maxLength: 250 }
         description: { type: string, maxLength: 1500 }
         takeaways: { type: array, maxItems: 3, items: { type: string, maxLength: 300 } }

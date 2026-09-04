@@ -8,6 +8,11 @@
 import type { SponsorPresenter } from "./sponsorPresenter";
 
 export interface SponsorSessionInput {
+  /**
+   * Reject stale edits without replacing a newer revision.
+   * @minimum 0
+   */
+  expectedRevision?: number;
   /** @maxLength 250 */
   title?: string;
   /** @maxLength 1500 */
