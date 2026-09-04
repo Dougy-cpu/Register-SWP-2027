@@ -12,7 +12,6 @@ import {
   CloudUpload,
   Download,
   Image as ImageIcon,
-  Keyboard,
   Lightbulb,
   RefreshCw,
   ShieldCheck,
@@ -115,8 +114,6 @@ export default function SponsorScanner() {
   const [pendingCount, setPendingCount] = useState(0);
   const [recoveryItems, setRecoveryItems] = useState<RejectedSyncItem[]>([]);
   const [scanConfirmationKey, setScanConfirmationKey] = useState(0);
-  const [manualCode, setManualCode] = useState("");
-  const [showManual, setShowManual] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -840,54 +837,18 @@ export default function SponsorScanner() {
             <div>
               <h2 className="font-bold">Scanner help</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Try refreshing the scanner, or enter a QR value manually if the organiser gives you
-                one.
+                If a badge will not scan, refresh the scanner and try again.
               </p>
             </div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void downloadAndStorePack()}
-                disabled={preparing || !navigator.onLine}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${preparing ? "animate-spin" : ""}`} />
-                Refresh scanner
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowManual((value) => !value)}
-                disabled={!offlineUsable}
-              >
-                <Keyboard className="h-4 w-4 mr-2" /> Enter QR value
-              </Button>
-            </div>
-
-            {showManual && (
-              <div className="rounded-xl border border-slate-200 p-3">
-                <Label htmlFor="manual-code">QR value</Label>
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    id="manual-code"
-                    value={manualCode}
-                    onChange={(event) =>
-                      setManualCode(event.target.value.toUpperCase().slice(0, 12))
-                    }
-                    className="font-mono uppercase tracking-widest"
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                  />
-                  <Button
-                    onClick={() => {
-                      void handleDecoded(manualCode, "manual");
-                      setManualCode("");
-                    }}
-                    disabled={!normaliseScannedValue(manualCode)}
-                  >
-                    Add
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => void downloadAndStorePack()}
+              disabled={preparing || !navigator.onLine}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${preparing ? "animate-spin" : ""}`} />
+              Refresh scanner
+            </Button>
 
             <div className="pt-1 border-t border-slate-200 flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
