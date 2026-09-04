@@ -411,7 +411,7 @@ export default function SponsorScanner() {
       setCameraActive(false);
       setError(
         caught instanceof Error && /permission|notallowed/i.test(caught.message)
-          ? "Camera access is needed to scan a badge. Allow it when your phone asks, or use a photo instead."
+          ? "Camera access is needed to scan a badge. Allow it when your phone asks, or upload a photo instead."
           : scannerErrorMessage(caught),
       );
     }
@@ -818,7 +818,7 @@ export default function SponsorScanner() {
             onClick={() => imageInputRef.current?.click()}
             disabled={!offlineUsable}
           >
-            <ImageIcon className="h-4 w-4 mr-2" /> Use a photo instead
+            <ImageIcon className="h-4 w-4 mr-2" /> Upload photos
           </Button>
         </div>
 
