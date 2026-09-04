@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   activateScanner,
   downloadOfflinePack,
@@ -45,7 +44,6 @@ import {
   normaliseScannedValue,
   observeOfflineReloadTest,
   pendingScannerCount,
-  queueAnnotation,
   queueScan,
   rejectedScannerItems,
   saveScannerCredential,
@@ -97,9 +95,9 @@ export default function SponsorScanner() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
   const processingRef = useRef(false);
-  const leadSheetOpenRef = useRef(false);
-  const resumeCameraAfterLeadRef = useRef(false);
   const lastDecodeRef = useRef({ code: "", at: 0 });
+  const recentScansRef = useRef(new Map<string, number>());
+  const scanToastTimerRef = useRef<number | null>(null);
   const downloadingPackRef = useRef(false);
   const handleDecodedRef = useRef<(rawValue: string, source: ScanSource) => Promise<void>>(
     async () => undefined,
@@ -116,10 +114,7 @@ export default function SponsorScanner() {
   const [flashOn, setFlashOn] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [recoveryItems, setRecoveryItems] = useState<RejectedSyncItem[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [latestScan, setLatestScan] = useState<PendingScan | null>(null);
-  const [rating, setRating] = useState<number | null>(null);
-  const [note, setNote] = useState("");
+  const [scanConfirmationKey, setScanConfirmationKey] = useState(0);
   const [manualCode, setManualCode] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -150,7 +145,6 @@ export default function SponsorScanner() {
         await refreshCounts();
         return;
       }
-      setSyncing(true);
       try {
         const result = await syncPendingScannerItems();
         await refreshCounts();
@@ -166,8 +160,6 @@ export default function SponsorScanner() {
         await refreshBootstrap().catch(() => undefined);
       } catch (caught) {
         if (!quiet) setError(scannerErrorMessage(caught));
-      } finally {
-        setSyncing(false);
       }
     },
     [refreshBootstrap, refreshCounts],
@@ -299,9 +291,22 @@ export default function SponsorScanner() {
     () => () => {
       qrScannerRef.current?.destroy();
       qrScannerRef.current = null;
+      if (scanToastTimerRef.current !== null) {
+        window.clearTimeout(scanToastTimerRef.current);
+        scanToastTimerRef.current = null;
+      }
     },
     [],
   );
+
+  const showScanConfirmation = useCallback(() => {
+    if (scanToastTimerRef.current !== null) window.clearTimeout(scanToastTimerRef.current);
+    setScanConfirmationKey((value) => value + 1);
+    scanToastTimerRef.current = window.setTimeout(() => {
+      setScanConfirmationKey(0);
+      scanToastTimerRef.current = null;
+    }, 1_200);
+  }, []);
 
   const activate = async () => {
     if (operatorName.trim().length < 2) return;
@@ -322,7 +327,7 @@ export default function SponsorScanner() {
 
   const handleDecoded = useCallback(
     async (rawValue: string, source: ScanSource) => {
-      if (processingRef.current || leadSheetOpenRef.current) return;
+      if (processingRef.current) return;
       processingRef.current = true;
       setError("");
       try {
@@ -331,6 +336,11 @@ export default function SponsorScanner() {
         const now = Date.now();
         if (lastDecodeRef.current.code === code && now - lastDecodeRef.current.at < 1_500) return;
         lastDecodeRef.current = { code, at: now };
+        const recentScanAt = recentScansRef.current.get(code);
+        if (recentScanAt && now - recentScanAt < 10_000) return;
+        for (const [recentCode, scannedAt] of recentScansRef.current) {
+          if (now - scannedAt > 60_000) recentScansRef.current.delete(recentCode);
+        }
         if (bootstrap && code === bootstrap.testQrValue) {
           if (source === "camera") {
             qrScannerRef.current?.stop();
@@ -342,6 +352,7 @@ export default function SponsorScanner() {
             ...(source === "camera" ? { cameraTested: true } : {}),
           });
           setNotice("Test badge recognised. QR scanning is ready.");
+          recentScansRef.current.set(code, now);
           await refreshBootstrap();
           return;
         }
@@ -356,18 +367,10 @@ export default function SponsorScanner() {
         if (!attendee) {
           throw new Error("This badge isn't ready to scan yet. Please ask the organiser for help.");
         }
-        const queued = await queueScan({ code, source, attendee });
-        leadSheetOpenRef.current = true;
-        if (source === "camera") {
-          resumeCameraAfterLeadRef.current = true;
-          qrScannerRef.current?.stop();
-          setCameraActive(false);
-          setFlashOn(false);
-        }
-        setLatestScan(queued);
-        setRating(null);
-        setNote("");
-        navigator.vibrate?.(80);
+        await queueScan({ code, source, attendee });
+        recentScansRef.current.set(code, Date.now());
+        showScanConfirmation();
+        navigator.vibrate?.(50);
         await refreshCounts();
         if (navigator.onLine) void syncNow(true);
       } catch (caught) {
@@ -376,7 +379,7 @@ export default function SponsorScanner() {
         processingRef.current = false;
       }
     },
-    [bootstrap, refreshBootstrap, refreshCounts, syncNow],
+    [bootstrap, refreshBootstrap, refreshCounts, showScanConfirmation, syncNow],
   );
 
   useEffect(() => {
@@ -501,24 +504,6 @@ export default function SponsorScanner() {
     }
   };
 
-  const finishLead = async () => {
-    if (!latestScan) return;
-    try {
-      await queueAnnotation({ scanId: latestScan.id, rating, note });
-      const shouldResumeCamera = resumeCameraAfterLeadRef.current;
-      resumeCameraAfterLeadRef.current = false;
-      leadSheetOpenRef.current = false;
-      setLatestScan(null);
-      setRating(null);
-      setNote("");
-      await refreshCounts();
-      if (navigator.onLine) void syncNow(true);
-      if (shouldResumeCamera) await startCamera();
-    } catch (caught) {
-      setError(scannerErrorMessage(caught));
-    }
-  };
-
   const downloadRecovery = () => {
     const headings = [
       "Type",
@@ -586,9 +571,7 @@ export default function SponsorScanner() {
     setPack(null);
     setPendingCount(0);
     setRecoveryItems([]);
-    setLatestScan(null);
-    leadSheetOpenRef.current = false;
-    resumeCameraAfterLeadRef.current = false;
+    recentScansRef.current.clear();
   };
 
   if (initialising) {
@@ -665,7 +648,7 @@ export default function SponsorScanner() {
               </p>
             </div>
           </button>
-          {(rejectedCount > 0 || pendingCount > 0 || !navigator.onLine) && (
+          {(rejectedCount > 0 || !navigator.onLine) && (
             <div
               className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
                 rejectedCount
@@ -676,14 +659,10 @@ export default function SponsorScanner() {
             >
               {rejectedCount ? (
                 <TriangleAlert className="h-3.5 w-3.5" />
-              ) : syncing ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : !navigator.onLine ? (
-                <WifiOff className="h-3.5 w-3.5" />
               ) : (
-                <Check className="h-3.5 w-3.5" />
+                <WifiOff className="h-3.5 w-3.5" />
               )}
-              {rejectedCount ? "Help needed" : pendingCount ? "Saved" : "Working offline"}
+              {rejectedCount ? "Help needed" : "Working offline"}
             </div>
           )}
         </div>
@@ -925,15 +904,18 @@ export default function SponsorScanner() {
         )}
       </main>
 
-      {latestScan && (
-        <LeadCapturedSheet
-          scan={latestScan}
-          rating={rating}
-          note={note}
-          onRating={setRating}
-          onNote={setNote}
-          onFinish={() => void finishLead()}
-        />
+      {scanConfirmationKey > 0 && (
+        <div
+          key={scanConfirmationKey}
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4"
+        >
+          <div className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_36px_rgba(16,185,129,0.35)]">
+            <CheckCircle2 className="h-5 w-5" strokeWidth={3} />
+            Added to leads
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1016,71 +998,6 @@ function ReadinessPanel({
         the organiser's Lead Scanner admin page.
       </p>
     </Card>
-  );
-}
-
-function LeadCapturedSheet({
-  scan,
-  rating,
-  note,
-  onRating,
-  onNote,
-  onFinish,
-}: {
-  scan: PendingScan;
-  rating: number | null;
-  note: string;
-  onRating: (rating: number | null) => void;
-  onNote: (note: string) => void;
-  onFinish: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm grid items-end sm:items-center sm:justify-center">
-      <Card className="rounded-t-3xl sm:rounded-3xl border-0 w-full sm:max-w-lg p-6 sm:p-8 text-slate-950">
-        <div className="h-14 w-14 rounded-full bg-emerald-100 grid place-items-center">
-          <Check className="h-7 w-7 text-emerald-700" strokeWidth={3} />
-        </div>
-        <p className="text-xs uppercase tracking-[0.14em] font-bold text-emerald-700 mt-5">
-          Lead saved
-        </p>
-        <h2 className="text-3xl font-bold mt-1">{scan.attendee.name}</h2>
-        <p className="text-lg text-slate-600 mt-1">{scan.attendee.jobTitle}</p>
-        <p className="text-slate-500">{scan.attendee.company}</p>
-
-        <div className="mt-6">
-          <Label>Interest level (optional)</Label>
-          <div className="grid grid-cols-5 gap-2 mt-2">
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button
-                key={value}
-                className={`h-12 rounded-xl border-2 font-bold text-lg transition-colors ${
-                  rating === value
-                    ? "bg-primary border-primary text-white"
-                    : "border-slate-200 hover:border-blue-300"
-                }`}
-                onClick={() => onRating(rating === value ? null : value)}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="mt-5">
-          <Label htmlFor="lead-note">Note (optional)</Label>
-          <Textarea
-            id="lead-note"
-            value={note}
-            onChange={(event) => onNote(event.target.value.slice(0, 4000))}
-            rows={3}
-            placeholder="What did you discuss?"
-            className="mt-2"
-          />
-        </div>
-        <Button className="w-full h-12 mt-6 text-base" onClick={onFinish}>
-          {rating || note.trim() ? "Save and scan next" : "Done, scan next"}
-        </Button>
-      </Card>
-    </div>
   );
 }
 

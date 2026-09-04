@@ -17,7 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { syncPendingScannerItems } from "@/lib/scanner-api";
-import { pendingScannerCount, rejectedScannerItems } from "@/lib/scanner-storage";
+import {
+  getScannerCredential,
+  pendingScannerCount,
+  rejectedScannerItems,
+} from "@/lib/scanner-storage";
 import { sponsorFetch, sponsorJson } from "@/lib/sponsor-api";
 import type { SponsorLead } from "@/types/lead-scanner";
 
@@ -66,6 +70,11 @@ export default function SponsorLeads() {
   }, []);
 
   useEffect(() => {
+    void getScannerCredential()
+      .then((credential) => {
+        if (credential) setOperatorName((current) => current || credential.operatorName);
+      })
+      .catch(() => undefined);
     void load();
   }, [load]);
 
@@ -144,7 +153,7 @@ export default function SponsorLeads() {
             <img src={logoUrl} alt="SWP Summit" className="h-10 w-auto hidden sm:block" />
             <div>
               <h1 className="font-bold">Leads</h1>
-              <p className="text-xs text-muted-foreground">Server-synchronised sponsor leads</p>
+              <p className="text-xs text-muted-foreground">Review, rate and add notes</p>
             </div>
           </button>
           <Button onClick={() => navigate("/sponsor/scanner")}>Scan badge</Button>
@@ -184,6 +193,9 @@ export default function SponsorLeads() {
             <p className="text-muted-foreground mt-2">
               {leads.length} unique lead{leads.length === 1 ? "" : "s"}. Duplicate scans are kept in
               the history, not added as extra people.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Open any lead when you are ready to add a rating or notes.
             </p>
           </div>
           <div className="flex gap-2">
@@ -243,11 +255,14 @@ export default function SponsorLeads() {
                       Last scanned {formatDateTime(lead.lastScannedAt)}
                     </p>
                   </div>
-                  {expanded === lead.id ? (
-                    <ChevronUp className="h-5 w-5 shrink-0" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 shrink-0" />
-                  )}
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-primary shrink-0">
+                    Review
+                    {expanded === lead.id ? (
+                      <ChevronUp className="h-5 w-5" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5" />
+                    )}
+                  </span>
                 </button>
                 {expanded === lead.id && (
                   <div className="border-t bg-slate-50/70 p-5 space-y-5">
@@ -292,7 +307,7 @@ export default function SponsorLeads() {
                       </div>
                     </div>
                     <div className="border-t pt-5">
-                      <h4 className="font-semibold">Add an update</h4>
+                      <h4 className="font-semibold">Add a rating or note</h4>
                       <div className="grid md:grid-cols-[220px_1fr] gap-4 mt-3">
                         <div>
                           <Label htmlFor={`operator-${lead.id}`}>Your name</Label>
