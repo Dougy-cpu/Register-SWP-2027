@@ -2,7 +2,6 @@ import app from "./app";
 import { pool } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { getPort } from "./lib/env";
-import { seed, runMigrations } from "./lib/seed";
 import { checkSchemaConsistency } from "./lib/schema-check";
 
 const port = getPort();
@@ -58,8 +57,7 @@ process.on("uncaughtException", (err) => {
 });
 
 async function start() {
-  await runMigrations();
-
+  // Startup is read-only. Migrations and default-data changes need a separate approved action.
   const schemaOk = await checkSchemaConsistency();
   if (!schemaOk) {
     logger.error(
@@ -75,7 +73,6 @@ async function start() {
     }
 
     logger.info({ port }, "Server listening");
-    seed().catch((seedErr) => logger.error({ err: seedErr }, "Seed failed"));
   });
 
   server.keepAliveTimeout = 65_000;
