@@ -10,9 +10,6 @@ import {
   sponsorAssetsTable,
   sponsorDocumentAcknowledgementsTable,
   sponsorDocumentsTable,
-  sponsorPassRequestsTable,
-  sponsorPresentersTable,
-  sponsorSessionRevisionsTable,
   sponsorSessionsTable,
   sponsorsTable,
   sponsorTasksTable,
@@ -24,7 +21,13 @@ import {
   type SponsorRequest,
   verifySponsorAccessToken,
 } from "../middleware/sponsor-auth";
-import { buildSponsorWorkspace } from "../lib/sponsor-service";
+import { buildSponsorWorkspace, SponsorConflictError } from "../lib/sponsor-service";
+import { requestAdditionalPasses } from "../lib/sponsor-pass-requests";
+import {
+  saveSessionDraft,
+  sessionSubmissionErrors,
+  type SessionBody,
+} from "../lib/sponsor-session-draft";
 import {
   createSponsorAsset,
   formatSponsorAsset,
@@ -43,7 +46,6 @@ import {
   completePreparationTask,
   reopenStaffPreparationTasks,
   saveOnsiteContact,
-  saveSessionPresenters,
   SponsorPortalError,
 } from "../lib/sponsor-portal";
 
@@ -82,6 +84,10 @@ function csrfTokenFromCookie(req: Request): string | null {
 }
 
 function handleError(res: Response, error: unknown): void {
+  if (error instanceof SponsorConflictError) {
+    res.status(409).json({ error: error.message });
+    return;
+  }
   if (error instanceof SponsorPortalError) {
     res.status(error.status).json({ error: error.message });
     return;
@@ -520,259 +526,46 @@ router.delete("/sponsor/staff/:bookingId", async (req, res): Promise<void> => {
 
 router.post("/sponsor/pass-requests", async (req, res): Promise<void> => {
   const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
-  const requestedVip = Number(req.body.requestedVip ?? 0);
-  const requestedStaff = Number(req.body.requestedStaff ?? 0);
-  if (
-    !Number.isInteger(requestedVip) ||
-    requestedVip < 0 ||
-    !Number.isInteger(requestedStaff) ||
-    requestedStaff < 0 ||
-    requestedVip + requestedStaff < 1
-  ) {
-    res.status(400).json({ error: "Request at least one additional VIP or staff pass" });
-    return;
+  try {
+    const result = await requestAdditionalPasses(sponsorId, {
+      requestedVip: Number(req.body.requestedVip ?? 0),
+      requestedStaff: Number(req.body.requestedStaff ?? 0),
+      message:
+        typeof req.body.message === "string"
+          ? req.body.message.trim().slice(0, 2000) || null
+          : null,
+    });
+    if (result.created)
+      await sendSponsorInternalNotification({
+        sponsorId,
+        category: "passes",
+        event: "More passes requested",
+        summary: `${result.request.requestedVip} extra VIP and ${result.request.requestedStaff} extra staff passes requested.`,
+      });
+    res.status(result.created ? 201 : 200).json(result.request);
+  } catch (error) {
+    handleError(res, error);
   }
-  const [request] = await db
-    .insert(sponsorPassRequestsTable)
-    .values({
-      sponsorId,
-      requestedVip,
-      requestedStaff,
-      message: typeof req.body.message === "string" ? req.body.message.trim().slice(0, 2000) : null,
-    })
-    .returning();
-  await db.insert(sponsorActivityTable).values({
-    sponsorId,
-    type: "passes_requested",
-    actorType: "sponsor",
-    data: { requestId: request.id, requestedVip, requestedStaff },
-  });
-  await sendSponsorInternalNotification({
-    sponsorId,
-    category: "passes",
-    event: "More passes requested",
-    summary: `${requestedVip} additional VIP and ${requestedStaff} additional staff passes requested.${request.message ? ` Message: ${request.message}` : ""}`,
-  });
-  res.status(201).json(request);
 });
 
-interface SessionBody {
-  expectedRevision?: number;
-  title?: string;
-  description?: string;
-  takeaways?: string[];
-  presenters?: Array<{
-    id?: number;
-    name?: string;
-    jobTitle?: string;
-    company?: string;
-    biography?: string | null;
-  }>;
-}
-
-function cleanSession(body: SessionBody) {
-  const takeaways = Array.isArray(body.takeaways)
-    ? body.takeaways
-        .map((item) => String(item).trim())
-        .filter(Boolean)
-        .slice(0, 3)
-    : [];
-  const presenters = Array.isArray(body.presenters)
-    ? body.presenters.map((presenter, index) => ({
-        id: presenter.id,
-        name: String(presenter.name ?? "").trim(),
-        jobTitle: String(presenter.jobTitle ?? "").trim(),
-        company: String(presenter.company ?? "").trim(),
-        biography:
-          String(presenter.biography ?? "")
-            .trim()
-            .slice(0, 2000) || null,
-        displayOrder: index,
-      }))
-    : [];
-  return {
-    title:
-      String(body.title ?? "")
-        .trim()
-        .slice(0, 250) || null,
-    description:
-      String(body.description ?? "")
-        .trim()
-        .slice(0, 1500) || null,
-    takeaways,
-    presenters,
-  };
-}
-
 router.patch("/sponsor/sessions/:sessionId", async (req, res): Promise<void> => {
-  const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
-  const sessionId = idParam(req.params.sessionId);
+  const sponsorId = sponsorReq(req).sponsorSession.sponsorId,
+    sessionId = idParam(req.params.sessionId);
   if (!sessionId) {
     res.status(400).json({ error: "Invalid session" });
     return;
   }
   try {
-    const result = await db.transaction(async (tx) => {
-      const [session] = await tx
-        .select()
-        .from(sponsorSessionsTable)
-        .where(
-          and(
-            eq(sponsorSessionsTable.id, sessionId),
-            eq(sponsorSessionsTable.sponsorId, sponsorId),
-          ),
-        )
-        .for("update");
-      if (!session) throw new SponsorPortalError("Session entitlement not found", 404);
-      const body = (req.body ?? {}) as SessionBody;
-      if (
-        body.expectedRevision !== undefined &&
-        body.expectedRevision !== session.currentRevision
-      ) {
-        throw new SponsorPortalError(
-          "This session was updated elsewhere. Your draft is still here; refresh the saved version before making further changes.",
-          409,
-        );
-      }
-      const existingPresenters = await tx
-        .select()
-        .from(sponsorPresentersTable)
-        .where(eq(sponsorPresentersTable.sessionId, sessionId))
-        .orderBy(sponsorPresentersTable.displayOrder);
-      if (
-        body.presenters !== undefined &&
-        (!Array.isArray(body.presenters) ||
-          body.presenters.length > 20 ||
-          body.presenters.some((person) => !person || typeof person !== "object"))
-      ) {
-        throw new SponsorPortalError("Check the speaker details and try again.");
-      }
-      const clean = cleanSession({
-        title: session.title ?? "",
-        description: session.description ?? "",
-        takeaways: session.takeaways,
-        presenters: existingPresenters,
-        ...body,
-      });
-      const nextRevision = session.currentRevision + 1;
-      const nextStatus = ["approved", "exported"].includes(session.status)
-        ? "submitted"
-        : session.status;
-      await saveSessionPresenters(tx, sessionId, clean.presenters);
-      const presenters = await tx
-        .select()
-        .from(sponsorPresentersTable)
-        .where(eq(sponsorPresentersTable.sessionId, sessionId))
-        .orderBy(sponsorPresentersTable.displayOrder);
-      const snapshot = {
-        title: clean.title,
-        description: clean.description,
-        takeaways: clean.takeaways,
-        presenters: presenters.map(({ id, name, jobTitle, company, biography, displayOrder }) => ({
-          id,
-          name,
-          jobTitle,
-          company,
-          biography,
-          displayOrder,
-        })),
-      };
-      await tx
-        .update(sponsorSessionsTable)
-        .set({
-          title: clean.title,
-          description: clean.description,
-          takeaways: clean.takeaways,
-          currentRevision: nextRevision,
-          status: nextStatus,
-          approvedAt: nextStatus === "submitted" ? null : session.approvedAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(sponsorSessionsTable.id, sessionId));
-      await tx.insert(sponsorSessionRevisionsTable).values({
-        sessionId,
-        revision: nextRevision,
-        snapshot,
-        actor: "sponsor",
-      });
-      await tx.insert(sponsorActivityTable).values({
-        sponsorId,
-        type: "session_updated",
-        actorType: "sponsor",
-        data: { sessionId, revision: nextRevision, previousStatus: session.status, nextStatus },
-      });
-      await tx
-        .update(sponsorTasksTable)
-        .set({
-          status: nextStatus === "submitted" ? "submitted" : "todo",
-          completedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(sponsorTasksTable.sponsorId, sponsorId),
-            inArray(sponsorTasksTable.taskKey, ["sessions", "speakers"]),
-            eq(sponsorTasksTable.required, true),
-          ),
-        );
-      return { session, nextRevision };
-    });
-    await sendSponsorInternalNotification({
-      sponsorId,
-      category: "content",
-      event: "Sponsor session updated",
-      summary: `${result.session.entitlementLabel} was saved as revision ${result.nextRevision}.${result.session.status === "exported" ? " The previous export is now outdated." : ""}`,
-    });
+    await db.transaction((tx) =>
+      saveSessionDraft(tx, sponsorId, sessionId, (req.body ?? {}) as SessionBody),
+    );
+    // Saving a draft is intentionally quiet. Only explicit submission notifies reviewers.
     const workspace = await buildSponsorWorkspace(sponsorId, false);
     res.json(workspace.sessions.find((item) => item.id === sessionId));
   } catch (error) {
     handleError(res, error);
   }
 });
-
-async function sessionSubmissionErrors(
-  sessionId: number,
-  connection: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
-): Promise<string[]> {
-  const [session] = await connection
-    .select()
-    .from(sponsorSessionsTable)
-    .where(eq(sponsorSessionsTable.id, sessionId));
-  if (!session) return ["Session not found"];
-  const [presenters, assets] = await Promise.all([
-    connection
-      .select()
-      .from(sponsorPresentersTable)
-      .where(eq(sponsorPresentersTable.sessionId, sessionId)),
-    connection
-      .select()
-      .from(sponsorAssetsTable)
-      .where(
-        and(eq(sponsorAssetsTable.sessionId, sessionId), eq(sponsorAssetsTable.status, "active")),
-      ),
-  ]);
-  const errors: string[] = [];
-  if (!session.title) errors.push("Add a session title");
-  if (!session.description) errors.push("Add a concise session description");
-  if (!presenters.length || presenters.some((p) => !p.name || !p.jobTitle || !p.company)) {
-    errors.push("Add complete presenter details");
-  }
-  if (session.takeawaysRequired && !session.takeaways.length)
-    errors.push("Add at least one takeaway");
-  if (
-    session.headshotRequired &&
-    presenters.some(
-      (presenter) =>
-        !assets.some(
-          (asset) => asset.category === "headshot" && asset.presenterId === presenter.id,
-        ),
-    )
-  ) {
-    errors.push("Upload and link a headshot to each presenter");
-  }
-  // Final slides have their own checklist milestone and must not block programme review.
-  return errors;
-}
 
 router.post("/sponsor/sessions/:sessionId/submit", async (req, res): Promise<void> => {
   const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
@@ -783,6 +576,12 @@ router.post("/sponsor/sessions/:sessionId/submit", async (req, res): Promise<voi
   }
   try {
     const result = await db.transaction(async (tx) => {
+      const visible = req.body ?? {};
+      if (["title", "description", "takeaways", "presenters"].some((key) => key in visible)) {
+        const saved = await saveSessionDraft(tx, sponsorId, sessionId, visible as SessionBody);
+        // The rest of the transaction validates exactly this newly saved version.
+        visible.expectedRevision = saved.nextRevision;
+      }
       const [session] = await tx
         .select()
         .from(sponsorSessionsTable)

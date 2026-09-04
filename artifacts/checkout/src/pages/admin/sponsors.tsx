@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Building2, ChevronRight, CircleAlert, Plus, Search, Users, X } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import SponsorAttention from "@/components/admin/SponsorAttention";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -713,6 +714,7 @@ export default function AdminSponsors() {
           </Card>
         </div>
 
+        <SponsorAttention />
         <Card className="p-4 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />

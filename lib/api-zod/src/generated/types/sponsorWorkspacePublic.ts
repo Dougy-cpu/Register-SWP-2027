@@ -9,6 +9,7 @@ import type { SponsorAsset } from "./sponsorAsset";
 import type { SponsorCode } from "./sponsorCode";
 import type { SponsorContact } from "./sponsorContact";
 import type { SponsorDocument } from "./sponsorDocument";
+import type { SponsorPassRequest } from "./sponsorPassRequest";
 import type { SponsorSession } from "./sponsorSession";
 import type { SponsorStaff } from "./sponsorStaff";
 import type { SponsorSummary } from "./sponsorSummary";
@@ -20,6 +21,7 @@ import type { SponsorWorkspacePublicInvitationCopy } from "./sponsorWorkspacePub
  */
 export interface SponsorWorkspacePublic {
   sponsor: SponsorSummary;
+  passRequests?: SponsorPassRequest[];
   contacts: SponsorContact[];
   codes: SponsorCode[];
   staff: SponsorStaff[];

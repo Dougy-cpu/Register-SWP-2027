@@ -32,6 +32,9 @@ import {
   ScannerApiError,
   syncPendingScannerItems,
   updateReadiness,
+  recoverScanner,
+  importScannerLink,
+  lookupScannerBadge,
 } from "@/lib/scanner-api";
 import {
   armOfflineReloadTest,
@@ -49,6 +52,11 @@ import {
   storeOfflinePack,
   verifyOfflineQueue,
   verifyOfflineStorage,
+  cachedScannerBootstrap,
+  readScannerValue,
+  cachedScannerLeads,
+  pendingScannerItems,
+  retryRejectedScans,
 } from "@/lib/scanner-storage";
 import type {
   PendingAnnotation,
@@ -68,11 +76,13 @@ function recoveryCsvCell(value: unknown): string {
 
 function scannerErrorMessage(caught: unknown): string {
   if (caught instanceof ScannerApiError && caught.status === 401) {
-    return "Scanner access needs refreshing. Return to the sponsor workspace and tap Scan badge.";
+    return "Your saved leads are safe. Tap Reconnect scanner, or ask your sponsor organiser for a renewed scanner link.";
   }
   if (caught instanceof TypeError && /fetch|network/i.test(caught.message)) {
     return "We couldn't connect just now. Check your signal and try again.";
   }
+  if (caught instanceof Error && caught.name === "AbortError")
+    return "The connection is slow. Saved leads will sync automatically when it improves.";
   if (caught instanceof Error) return caught.message;
   return "Something went wrong. Please try again.";
 }
@@ -123,6 +133,8 @@ export default function SponsorScanner() {
   const [scanConfirmationKey, setScanConfirmationKey] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [error, setError] = useState("");
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState("Added to leads");
   const [notice, setNotice] = useState("");
   const [updateWaiting, setUpdateWaiting] = useState(false);
   const [offlineTestStage, setOfflineTestStage] = useState<"none" | "armed" | "observed">("none");
@@ -134,11 +146,22 @@ export default function SponsorScanner() {
   }, []);
 
   const refreshBootstrap = useCallback(async () => {
-    const state = await getScannerBootstrap();
+    let state: ScannerBootstrap;
+    try {
+      state = await getScannerBootstrap();
+    } catch (caught) {
+      if (!(caught instanceof ScannerApiError) || caught.code !== "access_refresh") throw caught;
+      const saved = await getScannerCredential();
+      if (!saved) throw caught;
+      const renewed = await recoverScanner(saved);
+      setCredential(renewed);
+      state = await getScannerBootstrap();
+    }
     if (!state?.device || !state.scannerWindow) {
       throw new TypeError("Network request failed");
     }
     setBootstrap(state);
+    setAccessError(null);
     return state;
   }, []);
 
@@ -175,6 +198,8 @@ export default function SponsorScanner() {
     setPreparing(true);
     setError("");
     try {
+      const downloadingFor = await getScannerCredential();
+      if (!downloadingFor) return;
       const downloaded = await downloadOfflinePack();
       if (
         downloaded?.format !== 1 ||
@@ -184,7 +209,7 @@ export default function SponsorScanner() {
       ) {
         throw new TypeError("Network request failed");
       }
-      const stored = await storeOfflinePack(downloaded);
+      const stored = await storeOfflinePack(downloaded, downloadingFor);
       setPack(stored);
       const storageOk = await verifyOfflineStorage();
       await updateReadiness({
@@ -229,12 +254,20 @@ export default function SponsorScanner() {
     void (async () => {
       let localPack: StoredOfflinePack | null = null;
       try {
-        const saved = await getScannerCredential();
+        const linkToken = new URLSearchParams(window.location.hash.slice(1)).get("activate");
+        if (linkToken) window.history.replaceState(null, "", window.location.pathname);
+        const saved = linkToken ? await importScannerLink(linkToken) : await getScannerCredential();
         if (cancelled) return;
         setCredential(saved);
         localPack = await getOfflinePack();
         setPack(localPack);
+        if (saved) {
+          setBootstrap(await cachedScannerBootstrap());
+          setAccessError(await readScannerValue<string>("access-error"));
+        }
         await refreshCounts();
+        // Local readiness is usable immediately; no network promise holds the screen open.
+        if (!cancelled) setInitialising(false);
         const offlineStage = await observeOfflineReloadTest(!navigator.onLine);
         setOfflineTestStage(offlineStage);
         if (offlineStage === "observed" && !navigator.onLine) {
@@ -265,6 +298,17 @@ export default function SponsorScanner() {
       cancelled = true;
     };
   }, [downloadAndStorePack, finaliseObservedOfflineTest, refreshBootstrap, refreshCounts, syncNow]);
+
+  useEffect(() => {
+    const revoked = (event: Event) => {
+      const caught = (event as CustomEvent<ScannerApiError>).detail;
+      setAccessError(caught.code ?? "invalid_device");
+      qrScannerRef.current?.stop();
+      setCameraActive(false);
+    };
+    window.addEventListener("swp:scanner-access", revoked);
+    return () => window.removeEventListener("swp:scanner-access", revoked);
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -303,7 +347,8 @@ export default function SponsorScanner() {
     [],
   );
 
-  const showScanConfirmation = useCallback(() => {
+  const showScanConfirmation = useCallback((message = "Added to leads") => {
+    setConfirmation(message);
     if (scanToastTimerRef.current !== null) window.clearTimeout(scanToastTimerRef.current);
     setScanConfirmationKey((value) => value + 1);
     scanToastTimerRef.current = window.setTimeout(() => {
@@ -337,11 +382,18 @@ export default function SponsorScanner() {
       try {
         const code = normaliseScannedValue(rawValue);
         if (!code) throw new Error("That QR is not an SWP attendee badge");
+        if (accessError)
+          throw new Error("Reconnect this scanner before scanning. Your existing leads are safe.");
         const now = Date.now();
-        if (lastDecodeRef.current.code === code && now - lastDecodeRef.current.at < 1_500) return;
+        const sameFrame =
+          lastDecodeRef.current.code === code && now - lastDecodeRef.current.at < 1_500;
         lastDecodeRef.current = { code, at: now };
+        if (sameFrame) return;
         const recentScanAt = recentScansRef.current.get(code);
-        if (recentScanAt && now - recentScanAt < 10_000) return;
+        if (recentScanAt && now - recentScanAt < 10_000) {
+          showScanConfirmation("Already added");
+          return;
+        }
         for (const [recentCode, scannedAt] of recentScansRef.current) {
           if (now - scannedAt > 60_000) recentScansRef.current.delete(recentCode);
         }
@@ -367,13 +419,33 @@ export default function SponsorScanner() {
               : "The organiser must configure the event end time before scanning can begin",
           );
         }
-        const attendee = await decryptPackAttendee(code);
+        let attendee = await decryptPackAttendee(code);
         if (!attendee) {
-          throw new Error("This badge isn't ready to scan yet. Please ask the organiser for help.");
+          if (navigator.onLine) {
+            try {
+              attendee = await lookupScannerBadge(code);
+            } catch (caught) {
+              if (caught instanceof ScannerApiError && [400, 401, 403, 404].includes(caught.status))
+                throw caught;
+              // A slow/offline lookup is recoverable; the server will check the original scan later.
+            }
+          }
+        }
+        const [pending, confirmed] = await Promise.all([
+          pendingScannerItems(),
+          cachedScannerLeads(),
+        ]);
+        const alreadyAdded =
+          pending.scans.some((scan) => scan.code === code) ||
+          Boolean(attendee && confirmed.some((lead) => lead.attendeeId === attendee.attendeeId));
+        if (alreadyAdded) {
+          recentScansRef.current.set(code, now);
+          showScanConfirmation("Already added");
+          return;
         }
         await queueScan({ code, source, attendee });
         recentScansRef.current.set(code, Date.now());
-        showScanConfirmation();
+        showScanConfirmation(attendee ? "Added to leads" : "Saved for checking");
         navigator.vibrate?.(50);
         await refreshCounts();
         if (navigator.onLine) void syncNow(true);
@@ -383,7 +455,7 @@ export default function SponsorScanner() {
         processingRef.current = false;
       }
     },
-    [bootstrap, refreshBootstrap, refreshCounts, showScanConfirmation, syncNow],
+    [accessError, bootstrap, refreshBootstrap, refreshCounts, showScanConfirmation, syncNow],
   );
 
   useEffect(() => {
@@ -529,9 +601,9 @@ export default function SponsorScanner() {
         item.kind,
         credential?.operatorName ?? "",
         scan?.id ?? annotation?.scanId ?? "",
-        scan?.attendee.name ?? "",
-        scan?.attendee.company ?? "",
-        scan?.attendee.workEmail ?? "",
+        scan?.attendee?.name ?? "Awaiting badge check",
+        scan?.attendee?.company ?? "",
+        scan?.attendee?.workEmail ?? "",
         scan?.capturedAt ?? annotation?.createdAt ?? "",
         annotation?.rating ?? "",
         annotation?.note ?? "",
@@ -551,20 +623,9 @@ export default function SponsorScanner() {
   };
 
   const forgetPhone = async () => {
-    if (pendingCount > 0) {
-      setError("Sync the saved items on this phone before removing it.");
-      return;
-    }
-    if (
-      recoveryItems.length > 0 &&
-      !window.confirm(
-        "This phone still holds rejected items for organiser recovery. Removing it now permanently deletes them. Continue only after downloading the recovery file.",
-      )
-    )
-      return;
     if (
       !window.confirm(
-        "Remove this scanner identity and all downloaded attendee data from this phone?",
+        "Disconnect this scanner? Saved work stays on this phone. Open the same person's scanner link to reconnect it.",
       )
     )
       return;
@@ -641,17 +702,20 @@ export default function SponsorScanner() {
       <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-white/10">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <button
-            onClick={() => navigate("/sponsor")}
+            onClick={() => navigate("/sponsor/leads")}
             className="flex items-center gap-3 text-left"
           >
             <ArrowLeft className="h-5 w-5" />
             <div>
-              <p className="font-semibold leading-tight">Scan badge</p>
+              <p className="font-semibold leading-tight">Scan · Leads</p>
               <p className="text-xs text-slate-400 truncate max-w-44 sm:max-w-none">
                 {credential.sponsorCompany} · {credential.operatorName}
               </p>
             </div>
           </button>
+          <Button variant="secondary" onClick={() => navigate("/sponsor/leads")}>
+            Leads
+          </Button>
           {(rejectedCount > 0 || !navigator.onLine) && (
             <div
               className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
@@ -673,11 +737,50 @@ export default function SponsorScanner() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+        {accessError && (
+          <div role="alert" className="rounded-xl bg-amber-50 text-amber-950 p-4 space-y-3">
+            <p>
+              Your saved leads are safe.{" "}
+              {accessError === "device_revoked"
+                ? "Your organiser needs to restore this phone from Team & passes and give you a new scanner link."
+                : "Reconnect, or ask your organiser for a renewed scanner link."}
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void (async () => {
+                  if (!credential) return;
+                  try {
+                    const renewed = await recoverScanner(credential);
+                    setCredential(renewed);
+                    await refreshBootstrap();
+                    setError("");
+                    void syncNow(true);
+                  } catch (caught) {
+                    setError(
+                      caught instanceof ScannerApiError && caught.status === 401
+                        ? "Ask your sponsor organiser for a renewed scanner link. Open it on this phone; your saved leads will reconnect automatically."
+                        : scannerErrorMessage(caught),
+                    );
+                  }
+                })()
+              }
+            >
+              Reconnect scanner
+            </Button>
+            <Button variant="secondary" onClick={() => navigate("/sponsor/leads")}>
+              View saved leads
+            </Button>
+          </div>
+        )}
         {diagnosticsEnabled && updateWaiting && (
           <div className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-3 text-sm text-blue-100">
             An update is ready, but this running event-day scanner will not replace itself. Reload
             only when the organiser tells you to.
           </div>
+        )}
+        {diagnosticsEnabled && (
+          <p className="text-xs text-slate-400">{pendingCount} items waiting to sync</p>
         )}
         {notice && (
           <div className="rounded-xl bg-emerald-500/15 border border-emerald-400/30 p-3 text-sm text-emerald-100 flex gap-2">
@@ -700,6 +803,18 @@ export default function SponsorScanner() {
             </div>
             <Button size="sm" variant="secondary" className="mt-3" onClick={downloadRecovery}>
               <Download className="h-4 w-4 mr-2" /> Download recovery file
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-3 ml-2"
+              onClick={() =>
+                void retryRejectedScans()
+                  .then(() => syncNow())
+                  .catch((caught) => setError(scannerErrorMessage(caught)))
+              }
+            >
+              Check again
             </Button>
           </div>
         )}
@@ -753,15 +868,15 @@ export default function SponsorScanner() {
                 </p>
                 <Button
                   className="mt-6 h-14 px-8 text-base"
-                  onClick={() => void (offlineUsable ? startCamera() : downloadAndStorePack())}
-                  disabled={preparing}
+                  onClick={() => void startCamera()}
+                  disabled={Boolean(accessError) || (!offlineUsable && preparing)}
                 >
                   {preparing ? (
                     <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
                   ) : (
                     <Camera className="h-5 w-5 mr-2" />
                   )}
-                  {preparing ? "Getting ready…" : offlineUsable ? "Start scanning" : "Try again"}
+                  {preparing && !offlineUsable ? "Getting ready…" : "Start scanning"}
                 </Button>
               </div>
             </div>
@@ -823,7 +938,7 @@ export default function SponsorScanner() {
             variant="secondary"
             className="h-12 w-full"
             onClick={() => imageInputRef.current?.click()}
-            disabled={!offlineUsable}
+            disabled={Boolean(accessError)}
           >
             <ImageIcon className="h-4 w-4 mr-2" /> Upload photos
           </Button>
@@ -865,7 +980,7 @@ export default function SponsorScanner() {
                 className="shrink-0 text-xs text-slate-500 underline underline-offset-4"
                 onClick={() => void forgetPhone()}
               >
-                Remove phone
+                Disconnect phone
               </button>
             </div>
           </Card>
@@ -881,7 +996,7 @@ export default function SponsorScanner() {
         >
           <div className="flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_36px_rgba(16,185,129,0.35)]">
             <CheckCircle2 className="h-5 w-5" strokeWidth={3} />
-            Added to leads
+            {confirmation}
           </div>
         </div>
       )}

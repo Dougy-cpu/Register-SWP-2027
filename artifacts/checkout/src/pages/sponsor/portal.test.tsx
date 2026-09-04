@@ -16,6 +16,7 @@ const api = vi.mocked(sponsorJson);
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal(
     "fetch",
@@ -57,17 +58,13 @@ describe("Sponsor session editing", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
     await screen.findByText(/Your session is with the event team/);
-    expect(api).toHaveBeenCalledTimes(2);
-    expect(api.mock.calls.map(([path]) => path)).toEqual([
-      "/api/sponsor/sessions/11",
-      "/api/sponsor/sessions/11/submit",
-    ]);
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(api.mock.calls.map(([path]) => path)).toEqual(["/api/sponsor/sessions/11/submit"]);
     expect(JSON.parse(String(api.mock.calls[0][1]?.body))).toMatchObject({
       title: "Updated title",
       expectedRevision: 1,
       presenters: [{ id: 21 }],
     });
-    expect(JSON.parse(String(api.mock.calls[1][1]?.body))).toEqual({ expectedRevision: 2 });
   });
   it("keeps the draft and never submits when saving fails", async () => {
     api.mockRejectedValue(new Error("Connection interrupted. Try again."));
@@ -81,7 +78,7 @@ describe("Sponsor session editing", () => {
     expect((screen.getByLabelText("Session title") as HTMLInputElement).value).toBe(
       "Keep this text",
     );
-    expect(JSON.parse(sessionStorage.getItem(sessionDraftKey(1, 11))!).draft.title).toBe(
+    expect(JSON.parse(localStorage.getItem(sessionDraftKey(1, 11))!).draft.title).toBe(
       "Keep this text",
     );
   });
@@ -91,6 +88,9 @@ describe("Sponsor session editing", () => {
       target: { value: "Unfinished draft" },
     });
     first.unmount();
+    // Leaving flushes a quiet draft; a stale editor still must not submit it.
+    expect(api.mock.calls[0][0]).toBe("/api/sponsor/sessions/11");
+    api.mockClear();
     render(
       <SessionHarness
         initial={makeSession({ currentRevision: 3, title: "Someone else's update" })}

@@ -13,4 +13,5 @@ export const ScannerSyncItemResultStatus = {
   accepted: "accepted",
   duplicate: "duplicate",
   rejected: "rejected",
+  deferred: "deferred",
 } as const;

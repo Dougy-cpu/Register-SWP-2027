@@ -50,8 +50,10 @@ import type {
   EventSettingsUpdate,
   ExportAdminSponsorLeadsParams,
   ExportRegistrationsParams,
+  ExportScannerLeadsParams,
   ExportSponsorLeadsParams,
   GetBookingPricingParams,
+  GetSponsorAttention200,
   HealthStatus,
   InvoiceResponse,
   LeadAnnotationInput,
@@ -63,12 +65,14 @@ import type {
   ListEmailLogsParams,
   ListLeadScannerAttendees200,
   ListRegistrationsParams,
+  ListScannerLeads200,
   ListSponsorAssets200,
   ListSponsorAssetsParams,
   ListSponsorLeads200,
   ListSponsors200,
   ListSponsorsParams,
   ListUnpaidInvoicesParams,
+  LookupScannerBadgeBody,
   ManualRegistrationBody,
   PlanAllSponsorBackup200,
   PlanAllSponsorBackupBody,
@@ -77,17 +81,20 @@ import type {
   PromoCode,
   PromoCodeValidationResult,
   PublicEventSettings,
+  RecoverSponsorScannerBody,
   RegistrationEmailResendResult,
   RegistrationList,
   RegistrationRedeliveryResult,
   ReplaceSponsorAssetBody,
   ReplaceSponsorWorkspaceAssetBody,
   RequestMoreSponsorPassesBody,
+  ResolveSponsorPassRequestBody,
   ReviewSponsorSessionBody,
   RevokeSponsorScannerDeviceBody,
   RotateSponsorAccess200,
   ScannerActivation,
   ScannerBootstrap,
+  ScannerLookupAttendee,
   ScannerOfflinePack,
   ScannerReadinessInput,
   ScannerSyncRequest,
@@ -109,7 +116,6 @@ import type {
   SponsorWorkspaceAdmin,
   SponsorWorkspacePublic,
   StripeSessionResponse,
-  SubmitSponsorSessionBody,
   SuccessResponse,
   TestEmailBody,
   UnpaidInvoiceList,
@@ -6503,7 +6509,7 @@ export const requestMoreSponsorPasses = async (
 };
 
 export const getRequestMoreSponsorPassesMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -6542,13 +6548,13 @@ export type RequestMoreSponsorPassesMutationResult = NonNullable<
   Awaited<ReturnType<typeof requestMoreSponsorPasses>>
 >;
 export type RequestMoreSponsorPassesMutationBody = BodyType<RequestMoreSponsorPassesBody>;
-export type RequestMoreSponsorPassesMutationError = ErrorType<unknown>;
+export type RequestMoreSponsorPassesMutationError = ErrorType<void>;
 
 /**
  * @summary Request more VIP or staff places and immediately notify the internal team
  */
 export const useRequestMoreSponsorPasses = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -6568,7 +6574,7 @@ export const useRequestMoreSponsorPasses = <
 };
 
 /**
- * @summary Save a sponsor session draft; approved edits return it to submitted
+ * @summary Quietly save a sponsor draft; changed content requires explicit submission
  */
 export const getUpdateSponsorSessionUrl = (sessionId: number) => {
   return `/api/sponsor/sessions/${sessionId}`;
@@ -6630,7 +6636,7 @@ export type UpdateSponsorSessionMutationBody = BodyType<SponsorSessionInput>;
 export type UpdateSponsorSessionMutationError = ErrorType<void>;
 
 /**
- * @summary Save a sponsor session draft; approved edits return it to submitted
+ * @summary Quietly save a sponsor draft; changed content requires explicit submission
  */
 export const useUpdateSponsorSession = <TError = ErrorType<void>, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
@@ -6650,7 +6656,7 @@ export const useUpdateSponsorSession = <TError = ErrorType<void>, TContext = unk
 };
 
 /**
- * @summary Validate and submit a sponsor session for review
+ * @summary Atomically save visible content, validate and submit for review
  */
 export const getSubmitSponsorSessionUrl = (sessionId: number) => {
   return `/api/sponsor/sessions/${sessionId}/submit`;
@@ -6658,14 +6664,14 @@ export const getSubmitSponsorSessionUrl = (sessionId: number) => {
 
 export const submitSponsorSession = async (
   sessionId: number,
-  submitSponsorSessionBody?: SubmitSponsorSessionBody,
+  sponsorSessionInput?: SponsorSessionInput,
   options?: RequestInit,
 ): Promise<SponsorSession> => {
   return customFetch<SponsorSession>(getSubmitSponsorSessionUrl(sessionId), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(submitSponsorSessionBody),
+    body: JSON.stringify(sponsorSessionInput),
   });
 };
 
@@ -6676,14 +6682,14 @@ export const getSubmitSponsorSessionMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitSponsorSession>>,
     TError,
-    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
+    { sessionId: number; data: BodyType<SponsorSessionInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof submitSponsorSession>>,
   TError,
-  { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
+  { sessionId: number; data: BodyType<SponsorSessionInput> },
   TContext
 > => {
   const mutationKey = ["submitSponsorSession"];
@@ -6695,7 +6701,7 @@ export const getSubmitSponsorSessionMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof submitSponsorSession>>,
-    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> }
+    { sessionId: number; data: BodyType<SponsorSessionInput> }
   > = (props) => {
     const { sessionId, data } = props ?? {};
 
@@ -6708,24 +6714,24 @@ export const getSubmitSponsorSessionMutationOptions = <
 export type SubmitSponsorSessionMutationResult = NonNullable<
   Awaited<ReturnType<typeof submitSponsorSession>>
 >;
-export type SubmitSponsorSessionMutationBody = BodyType<SubmitSponsorSessionBody>;
+export type SubmitSponsorSessionMutationBody = BodyType<SponsorSessionInput>;
 export type SubmitSponsorSessionMutationError = ErrorType<void>;
 
 /**
- * @summary Validate and submit a sponsor session for review
+ * @summary Atomically save visible content, validate and submit for review
  */
 export const useSubmitSponsorSession = <TError = ErrorType<void>, TContext = unknown>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof submitSponsorSession>>,
     TError,
-    { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
+    { sessionId: number; data: BodyType<SponsorSessionInput> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof submitSponsorSession>>,
   TError,
-  { sessionId: number; data: BodyType<SubmitSponsorSessionBody> },
+  { sessionId: number; data: BodyType<SponsorSessionInput> },
   TContext
 > => {
   return useMutation(getSubmitSponsorSessionMutationOptions(options));
@@ -7072,6 +7078,601 @@ export const useAcknowledgeSponsorDocument = <
 > => {
   return useMutation(getAcknowledgeSponsorDocumentMutationOptions(options));
 };
+
+/**
+ * @summary Renew the same phone after access rotation; never bypass explicit revocation
+ */
+export const getRecoverSponsorScannerUrl = (deviceId: string) => {
+  return `/api/sponsor/scanner/devices/${deviceId}/recover`;
+};
+
+export const recoverSponsorScanner = async (
+  deviceId: string,
+  recoverSponsorScannerBody: RecoverSponsorScannerBody,
+  options?: RequestInit,
+): Promise<ScannerActivation> => {
+  return customFetch<ScannerActivation>(getRecoverSponsorScannerUrl(deviceId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(recoverSponsorScannerBody),
+  });
+};
+
+export const getRecoverSponsorScannerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recoverSponsorScanner>>,
+    TError,
+    { deviceId: string; data: BodyType<RecoverSponsorScannerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recoverSponsorScanner>>,
+  TError,
+  { deviceId: string; data: BodyType<RecoverSponsorScannerBody> },
+  TContext
+> => {
+  const mutationKey = ["recoverSponsorScanner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recoverSponsorScanner>>,
+    { deviceId: string; data: BodyType<RecoverSponsorScannerBody> }
+  > = (props) => {
+    const { deviceId, data } = props ?? {};
+
+    return recoverSponsorScanner(deviceId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecoverSponsorScannerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recoverSponsorScanner>>
+>;
+export type RecoverSponsorScannerMutationBody = BodyType<RecoverSponsorScannerBody>;
+export type RecoverSponsorScannerMutationError = ErrorType<void>;
+
+/**
+ * @summary Renew the same phone after access rotation; never bypass explicit revocation
+ */
+export const useRecoverSponsorScanner = <TError = ErrorType<void>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recoverSponsorScanner>>,
+    TError,
+    { deviceId: string; data: BodyType<RecoverSponsorScannerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recoverSponsorScanner>>,
+  TError,
+  { deviceId: string; data: BodyType<RecoverSponsorScannerBody> },
+  TContext
+> => {
+  return useMutation(getRecoverSponsorScannerMutationOptions(options));
+};
+
+/**
+ * @summary Organiser explicitly restores an existing phone and issues a fresh scanner-only link
+ */
+export const getRestoreSponsorScannerUrl = (deviceId: string) => {
+  return `/api/sponsor/scanner/devices/${deviceId}/restore`;
+};
+
+export const restoreSponsorScanner = async (
+  deviceId: string,
+  options?: RequestInit,
+): Promise<ScannerActivation> => {
+  return customFetch<ScannerActivation>(getRestoreSponsorScannerUrl(deviceId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRestoreSponsorScannerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreSponsorScanner>>,
+    TError,
+    { deviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restoreSponsorScanner>>,
+  TError,
+  { deviceId: string },
+  TContext
+> => {
+  const mutationKey = ["restoreSponsorScanner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restoreSponsorScanner>>,
+    { deviceId: string }
+  > = (props) => {
+    const { deviceId } = props ?? {};
+
+    return restoreSponsorScanner(deviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestoreSponsorScannerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof restoreSponsorScanner>>
+>;
+
+export type RestoreSponsorScannerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Organiser explicitly restores an existing phone and issues a fresh scanner-only link
+ */
+export const useRestoreSponsorScanner = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreSponsorScanner>>,
+    TError,
+    { deviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof restoreSponsorScanner>>,
+  TError,
+  { deviceId: string },
+  TContext
+> => {
+  return useMutation(getRestoreSponsorScannerMutationOptions(options));
+};
+
+/**
+ * @summary Check a newly issued badge online, enforcing current sharing eligibility
+ */
+export const getLookupScannerBadgeUrl = () => {
+  return `/api/scanner/lookup`;
+};
+
+export const lookupScannerBadge = async (
+  lookupScannerBadgeBody: LookupScannerBadgeBody,
+  options?: RequestInit,
+): Promise<ScannerLookupAttendee> => {
+  return customFetch<ScannerLookupAttendee>(getLookupScannerBadgeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(lookupScannerBadgeBody),
+  });
+};
+
+export const getLookupScannerBadgeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof lookupScannerBadge>>,
+    TError,
+    { data: BodyType<LookupScannerBadgeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof lookupScannerBadge>>,
+  TError,
+  { data: BodyType<LookupScannerBadgeBody> },
+  TContext
+> => {
+  const mutationKey = ["lookupScannerBadge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof lookupScannerBadge>>,
+    { data: BodyType<LookupScannerBadgeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return lookupScannerBadge(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LookupScannerBadgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof lookupScannerBadge>>
+>;
+export type LookupScannerBadgeMutationBody = BodyType<LookupScannerBadgeBody>;
+export type LookupScannerBadgeMutationError = ErrorType<void>;
+
+/**
+ * @summary Check a newly issued badge online, enforcing current sharing eligibility
+ */
+export const useLookupScannerBadge = <TError = ErrorType<void>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof lookupScannerBadge>>,
+    TError,
+    { data: BodyType<LookupScannerBadgeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof lookupScannerBadge>>,
+  TError,
+  { data: BodyType<LookupScannerBadgeBody> },
+  TContext
+> => {
+  return useMutation(getLookupScannerBadgeMutationOptions(options));
+};
+
+/**
+ * @summary Read only this scanner's sponsor leads, without workspace access
+ */
+export const getListScannerLeadsUrl = () => {
+  return `/api/scanner/leads`;
+};
+
+export const listScannerLeads = async (options?: RequestInit): Promise<ListScannerLeads200> => {
+  return customFetch<ListScannerLeads200>(getListScannerLeadsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListScannerLeadsQueryKey = () => {
+  return [`/api/scanner/leads`] as const;
+};
+
+export const getListScannerLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listScannerLeads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listScannerLeads>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListScannerLeadsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listScannerLeads>>> = ({ signal }) =>
+    listScannerLeads({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listScannerLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListScannerLeadsQueryResult = NonNullable<Awaited<ReturnType<typeof listScannerLeads>>>;
+export type ListScannerLeadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read only this scanner's sponsor leads, without workspace access
+ */
+
+export function useListScannerLeads<
+  TData = Awaited<ReturnType<typeof listScannerLeads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listScannerLeads>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListScannerLeadsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export confirmed leads only; pending scans do not block this export
+ */
+export const getExportScannerLeadsUrl = (params?: ExportScannerLeadsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/scanner/leads/export?${stringifiedParams}`
+    : `/api/scanner/leads/export`;
+};
+
+export const exportScannerLeads = async (
+  params?: ExportScannerLeadsParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportScannerLeadsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportScannerLeadsQueryKey = (params?: ExportScannerLeadsParams) => {
+  return [`/api/scanner/leads/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getExportScannerLeadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportScannerLeads>>,
+  TError = ErrorType<void>,
+>(
+  params?: ExportScannerLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportScannerLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportScannerLeadsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportScannerLeads>>> = ({ signal }) =>
+    exportScannerLeads(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportScannerLeads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportScannerLeadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportScannerLeads>>
+>;
+export type ExportScannerLeadsQueryError = ErrorType<void>;
+
+/**
+ * @summary Export confirmed leads only; pending scans do not block this export
+ */
+
+export function useExportScannerLeads<
+  TData = Awaited<ReturnType<typeof exportScannerLeads>>,
+  TError = ErrorType<void>,
+>(
+  params?: ExportScannerLeadsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof exportScannerLeads>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportScannerLeadsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getResolveSponsorPassRequestUrl = (sponsorId: number, requestId: number) => {
+  return `/api/admin/sponsors/${sponsorId}/pass-requests/${requestId}/resolve`;
+};
+
+export const resolveSponsorPassRequest = async (
+  sponsorId: number,
+  requestId: number,
+  resolveSponsorPassRequestBody: ResolveSponsorPassRequestBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getResolveSponsorPassRequestUrl(sponsorId, requestId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resolveSponsorPassRequestBody),
+  });
+};
+
+export const getResolveSponsorPassRequestMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveSponsorPassRequest>>,
+    TError,
+    { sponsorId: number; requestId: number; data: BodyType<ResolveSponsorPassRequestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resolveSponsorPassRequest>>,
+  TError,
+  { sponsorId: number; requestId: number; data: BodyType<ResolveSponsorPassRequestBody> },
+  TContext
+> => {
+  const mutationKey = ["resolveSponsorPassRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resolveSponsorPassRequest>>,
+    { sponsorId: number; requestId: number; data: BodyType<ResolveSponsorPassRequestBody> }
+  > = (props) => {
+    const { sponsorId, requestId, data } = props ?? {};
+
+    return resolveSponsorPassRequest(sponsorId, requestId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResolveSponsorPassRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resolveSponsorPassRequest>>
+>;
+export type ResolveSponsorPassRequestMutationBody = BodyType<ResolveSponsorPassRequestBody>;
+export type ResolveSponsorPassRequestMutationError = ErrorType<void>;
+
+export const useResolveSponsorPassRequest = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resolveSponsorPassRequest>>,
+    TError,
+    { sponsorId: number; requestId: number; data: BodyType<ResolveSponsorPassRequestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resolveSponsorPassRequest>>,
+  TError,
+  { sponsorId: number; requestId: number; data: BodyType<ResolveSponsorPassRequestBody> },
+  TContext
+> => {
+  return useMutation(getResolveSponsorPassRequestMutationOptions(options));
+};
+
+/**
+ * @summary Prioritised sponsor approvals, requests, deadlines and delivery or storage failures
+ */
+export const getGetSponsorAttentionUrl = () => {
+  return `/api/admin/sponsors/attention`;
+};
+
+export const getSponsorAttention = async (
+  options?: RequestInit,
+): Promise<GetSponsorAttention200> => {
+  return customFetch<GetSponsorAttention200>(getGetSponsorAttentionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSponsorAttentionQueryKey = () => {
+  return [`/api/admin/sponsors/attention`] as const;
+};
+
+export const getGetSponsorAttentionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSponsorAttention>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSponsorAttention>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSponsorAttentionQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSponsorAttention>>> = ({ signal }) =>
+    getSponsorAttention({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSponsorAttention>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSponsorAttentionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSponsorAttention>>
+>;
+export type GetSponsorAttentionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Prioritised sponsor approvals, requests, deadlines and delivery or storage failures
+ */
+
+export function useGetSponsorAttention<
+  TData = Awaited<ReturnType<typeof getSponsorAttention>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSponsorAttention>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSponsorAttentionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List owned scanner phones without disclosing tokens
+ */
+export const getListSponsorScannerDevicesUrl = () => {
+  return `/api/sponsor/scanner/devices`;
+};
+
+export const listSponsorScannerDevices = async (options?: RequestInit): Promise<void> => {
+  return customFetch<void>(getListSponsorScannerDevicesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSponsorScannerDevicesQueryKey = () => {
+  return [`/api/sponsor/scanner/devices`] as const;
+};
+
+export const getListSponsorScannerDevicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSponsorScannerDevices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorScannerDevices>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSponsorScannerDevicesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSponsorScannerDevices>>> = ({
+    signal,
+  }) => listSponsorScannerDevices({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSponsorScannerDevices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSponsorScannerDevicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSponsorScannerDevices>>
+>;
+export type ListSponsorScannerDevicesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List owned scanner phones without disclosing tokens
+ */
+
+export function useListSponsorScannerDevices<
+  TData = Awaited<ReturnType<typeof listSponsorScannerDevices>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listSponsorScannerDevices>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSponsorScannerDevicesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Activate one sponsor phone and attribute it to an operator

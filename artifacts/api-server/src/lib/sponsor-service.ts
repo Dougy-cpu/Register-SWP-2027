@@ -11,6 +11,7 @@ import {
   sponsorDocumentAcknowledgementsTable,
   sponsorDocumentsTable,
   sponsorPresentersTable,
+  sponsorPassRequestsTable,
   sponsorPromoCodesTable,
   sponsorRedemptionsTable,
   sponsorSessionRevisionsTable,
@@ -692,6 +693,7 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
     documents,
     activity,
     failedEmailCount,
+    passRequests,
   ] = await Promise.all([
     db
       .select()
@@ -738,6 +740,11 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
       .select({ count: sql<number>`count(*)::int` })
       .from(emailLogsTable)
       .where(and(eq(emailLogsTable.sponsorId, sponsorId), eq(emailLogsTable.status, "failed"))),
+    db
+      .select()
+      .from(sponsorPassRequestsTable)
+      .where(eq(sponsorPassRequestsTable.sponsorId, sponsorId))
+      .orderBy(desc(sponsorPassRequestsTable.createdAt)),
   ]);
   const activeStaff = staffRows.filter((row) => ["paid", "invoiced"].includes(row.booking.status));
   const documentViews = await Promise.all(
@@ -771,6 +778,8 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
   const requiredTasks = tasks.filter((task) => task.required);
   const completeTasks = requiredTasks.filter((task) => task.status === "completed");
   const needsAttention =
+    passRequests.filter((request) => request.status === "open").length +
+    sessions.filter((session) => session.status === "submitted").length +
     tasks.filter((task) => task.status === "overdue").length +
     sessions.filter((session) => session.status === "changes_requested").length +
     assets.filter((asset) => asset.status === "missing").length +
@@ -818,6 +827,11 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
     assets: assets.map((asset) => formatSponsorAsset(asset, sponsor.company)),
     documents: documentViews,
     invitationCopy,
+    passRequests: passRequests.map((request) => ({
+      ...request,
+      createdAt: request.createdAt.toISOString(),
+      resolvedAt: request.resolvedAt?.toISOString() ?? null,
+    })),
   };
   if (!admin) return { ...summary, ...common };
   return {
@@ -830,6 +844,7 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
       ? sponsorAccessUrl(sponsor)
       : null,
     welcomeEmailSentAt: sponsor.welcomeEmailSentAt?.toISOString() ?? null,
+    deliveryFailureCount: failedEmailCount[0]?.count ?? 0,
     activity: activity.map((item) => ({
       ...item,
       createdAt: item.createdAt.toISOString(),

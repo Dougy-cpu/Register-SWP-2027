@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, sponsorScannerDevicesTable, sponsorsTable } from "@workspace/db";
 
 export interface ScannerDeviceSession {
@@ -29,7 +29,9 @@ function bearerToken(req: Request): string | null {
 export async function scannerAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const token = bearerToken(req);
   if (!token) {
-    res.status(401).json({ error: "This scanner has not been activated" });
+    res
+      .status(401)
+      .json({ error: "Open your scanner link to get started", code: "invalid_device" });
     return;
   }
   const [record] = await db
@@ -44,21 +46,24 @@ export async function scannerAuth(req: Request, res: Response, next: NextFunctio
     })
     .from(sponsorScannerDevicesTable)
     .innerJoin(sponsorsTable, eq(sponsorsTable.id, sponsorScannerDevicesTable.sponsorId))
-    .where(
-      and(
-        eq(sponsorScannerDevicesTable.tokenHash, scannerTokenHash(token)),
-        isNull(sponsorScannerDevicesTable.revokedAt),
-      ),
-    );
+    .where(eq(sponsorScannerDevicesTable.tokenHash, scannerTokenHash(token)));
   if (
     !record ||
     record.revokedAt ||
     record.accessVersion !== record.sponsorAccessVersion ||
     !["confirmed", "completed"].includes(record.sponsorStatus)
   ) {
-    res
-      .status(401)
-      .json({ error: "This scanner has been revoked or the sponsor link has changed" });
+    const code = !record
+      ? "invalid_device"
+      : record.revokedAt
+        ? "device_revoked"
+        : !["confirmed", "completed"].includes(record.sponsorStatus)
+          ? "sponsor_inactive"
+          : "access_refresh";
+    res.status(401).json({
+      error: "Scanner access needs renewing. Your saved leads are safe on this phone.",
+      code,
+    });
     return;
   }
   await db

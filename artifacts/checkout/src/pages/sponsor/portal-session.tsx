@@ -26,7 +26,7 @@ function initialEdit(session: SponsorSession, key: string) {
     modified: false,
   };
   try {
-    const stored = JSON.parse(sessionStorage.getItem(key) ?? "null");
+    const stored = JSON.parse(localStorage.getItem(key) ?? sessionStorage.getItem(key) ?? "null");
     if (
       stored &&
       Number.isInteger(stored.baseRevision) &&
@@ -80,6 +80,12 @@ export function PortalSession({
   const [notice, setNotice] = useState("");
   const [storageProblem, setStorageProblem] = useState(false);
   const operation = useRef(false);
+  const editRef = useRef(edit);
+  const sessionRef = useRef(session);
+  const saveInFlight = useRef<Promise<SponsorSession> | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  editRef.current = edit;
+  sessionRef.current = session;
   const [submitting, setSubmitting] = useState(false);
   const busy = saving || uploading || submitting;
   const conflict = edit.modified && edit.baseRevision !== session.currentRevision;
@@ -99,11 +105,14 @@ export function PortalSession({
   useEffect(() => {
     try {
       if (edit.modified)
-        sessionStorage.setItem(
+        localStorage.setItem(
           key,
           JSON.stringify({ draft: edit.draft, baseRevision: edit.baseRevision }),
         );
-      else sessionStorage.removeItem(key);
+      else {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      }
       setStorageProblem(false);
     } catch {
       setStorageProblem(true);
@@ -119,37 +128,118 @@ export function PortalSession({
     return () => window.removeEventListener("beforeunload", protect);
   }, [edit.modified]);
   const update = (next: SessionDraft) => {
-    setEdit((current) => ({
-      ...current,
+    const value = {
+      ...editRef.current,
       draft: next,
       modified: JSON.stringify(next) !== JSON.stringify(sessionDraft(session)),
-    }));
+    };
+    editRef.current = value;
+    setEdit(value);
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      setStorageProblem(true);
+    }
     setNotice("");
   };
   const rememberSaved = (saved: SponsorSession) => {
-    setEdit({ draft: sessionDraft(saved), baseRevision: saved.currentRevision, modified: false });
+    const next = {
+      draft: sessionDraft(saved),
+      baseRevision: saved.currentRevision,
+      modified: false,
+    };
+    editRef.current = next;
+    sessionRef.current = saved;
+    setEdit(next);
     onSaved(saved);
   };
-  const save = async () => {
-    if (conflict)
+  const save = async (quiet = false): Promise<SponsorSession> => {
+    if (saveInFlight.current) await saveInFlight.current;
+    const captured = editRef.current,
+      current = sessionRef.current;
+    if (captured.modified && captured.baseRevision !== current.currentRevision)
       throw new Error("A newer version is available. Review it before saving your draft.");
-    if (!edit.modified && session.presenters.length) return session;
-    setSaving(true);
-    try {
+    if (!captured.modified && current.presenters.length) return current;
+    if (!quiet) setSaving(true);
+    setAutoSaving(true);
+    const pending = (async () => {
       const saved = await sponsorJson<SponsorSession>(`/api/sponsor/sessions/${session.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          ...draft,
-          takeaways: draft.takeaways.filter((value) => value.trim()),
-          expectedRevision: edit.baseRevision,
+          ...captured.draft,
+          takeaways: captured.draft.takeaways.filter((value) => value.trim()),
+          expectedRevision: captured.baseRevision,
         }),
       });
-      rememberSaved(saved);
+      const latest = editRef.current;
+      if (JSON.stringify(latest.draft) === JSON.stringify(captured.draft)) rememberSaved(saved);
+      else {
+        // Preserve typing that happened while the request was in flight, and retain new speaker IDs.
+        const next = {
+          ...latest,
+          baseRevision: saved.currentRevision,
+          draft: {
+            ...latest.draft,
+            presenters: latest.draft.presenters.map((person, index) => ({
+              ...person,
+              id: person.id ?? saved.presenters[index]?.id,
+            })),
+          },
+        };
+        editRef.current = next;
+        sessionRef.current = saved;
+        setEdit(next);
+        onSaved(saved);
+      }
+      setError("");
       return saved;
+    })();
+    saveInFlight.current = pending;
+    try {
+      return await pending;
     } finally {
+      saveInFlight.current = null;
+      setAutoSaving(false);
       setSaving(false);
     }
   };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    if (!edit.modified || conflict || busy || operation.current) return;
+    const timer = window.setTimeout(() => {
+      void saveRef
+        .current(true)
+        .catch((caught) =>
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "Draft saved on this device. Reconnect to finish saving.",
+          ),
+        );
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [edit, conflict, busy]);
+  useEffect(() => {
+    const retry = () => {
+      if (editRef.current.modified && !operation.current)
+        void saveRef.current(true).catch(() => undefined);
+    };
+    window.addEventListener("online", retry);
+    const timer = window.setInterval(retry, 15000);
+    return () => {
+      window.removeEventListener("online", retry);
+      clearInterval(timer);
+    };
+  }, []);
+  useEffect(
+    () => () => {
+      // Navigating away flushes the latest draft in the background, with a local fallback retained.
+      if (editRef.current.modified && !operation.current)
+        void saveRef.current(true).catch(() => undefined);
+    },
+    [],
+  );
   const saveDraft = async () => {
     if (operation.current || busy) return;
     operation.current = true;
@@ -165,6 +255,12 @@ export function PortalSession({
   };
   const submit = async () => {
     if (busy || operation.current) return;
+    if (conflict) {
+      setError(
+        "A newer version is available. Your draft is still here; review the latest version before submitting.",
+      );
+      return;
+    }
     setError("");
     setNotice("");
     if (missing.length) {
@@ -174,11 +270,15 @@ export function PortalSession({
     operation.current = true;
     setSubmitting(true);
     try {
-      const saved = await save();
+      if (saveInFlight.current) await saveInFlight.current;
+      const visible = editRef.current;
       setSaving(true);
       const submitted = await sponsorJson<SponsorSession>(
         `/api/sponsor/sessions/${session.id}/submit`,
-        { method: "POST", body: JSON.stringify({ expectedRevision: saved.currentRevision }) },
+        {
+          method: "POST",
+          body: JSON.stringify({ ...visible.draft, expectedRevision: visible.baseRevision }),
+        },
       );
       rememberSaved(submitted);
       setNotice(
@@ -229,6 +329,15 @@ export function PortalSession({
           <p className="mt-2 whitespace-pre-wrap text-sm">{session.feedback}</p>
         </div>
       )}
+      <p role="status" className="text-xs text-muted-foreground">
+        {autoSaving
+          ? "Saving draft…"
+          : edit.modified
+            ? "Draft kept on this device · saving automatically."
+            : session.status === "draft"
+              ? "Draft saved. Only Submit for review sends it to the event team."
+              : "All changes saved."}
+      </p>
       {conflict && (
         <Card className="space-y-3 border-amber-300 p-4">
           <p role="alert">
@@ -436,12 +545,13 @@ export function PortalSession({
           </div>
           <p className="text-xs text-muted-foreground">
             {edit.modified
-              ? "Your edits are kept in this browser tab. Submit includes everything you have entered."
+              ? "Your draft saves automatically. Submit includes everything you have entered."
               : "You can return to this session whenever you need to."}
           </p>
           {["approved", "exported"].includes(session.status) && (
             <p className="text-sm text-muted-foreground">
-              Saving changes to approved details sends them back to the event team for review.
+              Changes save as a draft. Submit your updated details when you are ready for another
+              review.
             </p>
           )}
         </Card>

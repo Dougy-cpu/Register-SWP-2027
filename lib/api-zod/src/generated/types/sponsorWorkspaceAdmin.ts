@@ -9,6 +9,7 @@ import type { SponsorAsset } from "./sponsorAsset";
 import type { SponsorCode } from "./sponsorCode";
 import type { SponsorContact } from "./sponsorContact";
 import type { SponsorDocument } from "./sponsorDocument";
+import type { SponsorPassRequest } from "./sponsorPassRequest";
 import type { SponsorSession } from "./sponsorSession";
 import type { SponsorStaff } from "./sponsorStaff";
 import type { SponsorSummary } from "./sponsorSummary";
@@ -19,6 +20,8 @@ export type SponsorWorkspaceAdmin = SponsorSummary & {
   notes?: string | null;
   accessUrl?: string | null;
   welcomeEmailSentAt?: Date | null;
+  deliveryFailureCount?: number;
+  passRequests?: SponsorPassRequest[];
   contacts: SponsorContact[];
   codes: SponsorCode[];
   staff: SponsorStaff[];

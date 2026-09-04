@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { rateLimit } from "express-rate-limit";
 import ExcelJS from "exceljs";
 import { v4 as uuidv4 } from "uuid";
@@ -10,6 +10,7 @@ import {
   bookingsTable,
   db,
   sponsorLeadsTable,
+  sponsorActivityTable,
   sponsorScannerDevicesTable,
   sponsorsTable,
 } from "@workspace/db";
@@ -88,6 +89,109 @@ const scannerDeviceLimiter = rateLimit({
   message: { error: "This scanner is sending requests too quickly. Please wait a moment." },
 });
 
+router.get("/sponsor/scanner/devices", sponsorAuth, async (req, res): Promise<void> => {
+  const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
+  const devices = await db
+    .select({
+      id: sponsorScannerDevicesTable.id,
+      operatorName: sponsorScannerDevicesTable.operatorName,
+      revokedAt: sponsorScannerDevicesTable.revokedAt,
+      lastSyncedAt: sponsorScannerDevicesTable.lastSyncedAt,
+      accessVersion: sponsorScannerDevicesTable.accessVersion,
+      currentAccessVersion: sponsorsTable.portalAccessVersion,
+    })
+    .from(sponsorScannerDevicesTable)
+    .innerJoin(sponsorsTable, eq(sponsorsTable.id, sponsorScannerDevicesTable.sponsorId))
+    .where(eq(sponsorScannerDevicesTable.sponsorId, sponsorId));
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    devices: devices.map(({ accessVersion, currentAccessVersion, ...device }) => ({
+      ...device,
+      needsRefresh: accessVersion !== currentAccessVersion,
+    })),
+  });
+});
+
+for (const action of ["recover", "restore"] as const) {
+  router.post(
+    `/sponsor/scanner/devices/:deviceId/${action}`,
+    sponsorAuth,
+    activationLimiter,
+    async (req, res): Promise<void> => {
+      const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
+      const result = await db.transaction(async (tx) => {
+        const [sponsor] = await tx
+          .select()
+          .from(sponsorsTable)
+          .where(eq(sponsorsTable.id, sponsorId))
+          .for("update");
+        if (!sponsor || !["confirmed", "completed"].includes(sponsor.status))
+          return { status: 403, error: "Sponsor access is paused" };
+        const [device] = await tx
+          .select()
+          .from(sponsorScannerDevicesTable)
+          .where(
+            and(
+              eq(sponsorScannerDevicesTable.id, textParam(req.params.deviceId)),
+              eq(sponsorScannerDevicesTable.sponsorId, sponsorId),
+            ),
+          )
+          .for("update");
+        const suppliedToken = typeof req.body?.token === "string" ? req.body.token : "";
+        if (
+          !device ||
+          (action === "recover" && scannerTokenHash(suppliedToken) !== device.tokenHash)
+        )
+          return {
+            status: 404,
+            error:
+              "Open the scanner link for this sponsor. Saved leads stay with their original sponsor.",
+          };
+        if (action === "recover" && device.revokedAt)
+          return {
+            status: 403,
+            error: "The organiser must restore this phone from Team & passes",
+            code: "device_revoked",
+          };
+        // Refresh keeps the bearer and device ID, so a lost response can safely be retried.
+        const token = action === "recover" ? suppliedToken : randomBytes(32).toString("base64url");
+        await tx
+          .update(sponsorScannerDevicesTable)
+          .set({
+            tokenHash: scannerTokenHash(token),
+            accessVersion: sponsor.portalAccessVersion,
+            revokedAt: null,
+            revokedReason: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(sponsorScannerDevicesTable.id, device.id));
+        if (action === "restore" || device.accessVersion !== sponsor.portalAccessVersion)
+          await tx.insert(sponsorActivityTable).values({
+            sponsorId,
+            type: `scanner_${action}`,
+            actorType: "sponsor",
+            data: { deviceId: device.id },
+          });
+        return {
+          status: 200,
+          credential: {
+            id: device.id,
+            token,
+            operatorName: device.operatorName,
+            sponsorId,
+            sponsorCompany: sponsor.company,
+            testQrValue: SCANNER_TEST_CODE,
+          },
+        };
+      });
+      res.setHeader("Cache-Control", "no-store");
+      res
+        .status(result.status)
+        .json(result.credential ?? { error: result.error, code: result.code });
+    },
+  );
+}
+
 router.post(
   "/sponsor/scanner/devices",
   sponsorAuth,
@@ -121,6 +225,7 @@ router.post(
       operatorName,
       userAgent: req.get("user-agent")?.slice(0, 1000) ?? null,
     });
+    res.setHeader("Cache-Control", "no-store");
     res.status(201).json({
       id,
       token,
@@ -271,6 +376,64 @@ router.get("/sponsor/leads/export", sponsorAuth, async (req, res): Promise<void>
 });
 
 router.use("/scanner", scannerAuth, scannerDeviceLimiter);
+
+router.use("/scanner", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
+router.post("/scanner/lookup", async (req, res): Promise<void> => {
+  const code = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
+  if (!/^[0-9A-F]{12}$/.test(code)) {
+    res.status(400).json({ error: "This is not an SWP badge" });
+    return;
+  }
+  const [attendee] = await db
+    .select({
+      attendeeId: attendeesTable.id,
+      firstName: attendeesTable.firstName,
+      lastName: attendeesTable.lastName,
+      jobTitle: attendeesTable.jobTitle,
+      company: attendeesTable.company,
+      workEmail: attendeesTable.workEmail,
+    })
+    .from(attendeeBadgesTable)
+    .innerJoin(attendeesTable, eq(attendeesTable.id, attendeeBadgesTable.attendeeId))
+    .innerJoin(bookingsTable, eq(bookingsTable.id, attendeesTable.bookingId))
+    .where(
+      and(
+        eq(attendeeBadgesTable.code, code),
+        eq(attendeeBadgesTable.active, true),
+        inArray(bookingsTable.status, [...ACTIVE_BOOKING_STATUSES]),
+        eq(attendeesTable.isTbc, false),
+        eq(attendeesTable.leadSharingExcluded, false),
+        isNotNull(attendeesTable.leadSharingNoticeAt),
+      ),
+    );
+  if (!attendee) {
+    res.status(404).json({ error: "This badge cannot be added. Please ask the event team." });
+    return;
+  }
+  res.json({ ...attendee, name: `${attendee.firstName} ${attendee.lastName}`.trim() });
+});
+
+router.get("/scanner/leads", async (req, res): Promise<void> => {
+  res.json({ leads: await listLeadRows(scannerReq(req).scannerDevice.sponsorId) });
+});
+
+router.get("/scanner/leads/export", async (req, res): Promise<void> => {
+  const leads = await listLeadRows(scannerReq(req).scannerDevice.sponsorId);
+  if (!leads.length) {
+    res.status(409).json({ error: "No confirmed leads to export yet" });
+    return;
+  }
+  await sendLeadExport(
+    res,
+    leads,
+    req.query.format === "csv" ? "csv" : "xlsx",
+    "swp-2027-confirmed-leads",
+  );
+});
 
 router.get("/scanner/bootstrap", async (req, res): Promise<void> => {
   try {

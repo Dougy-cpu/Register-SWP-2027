@@ -274,7 +274,11 @@ export interface ScannerIdentity {
   operatorName: string;
 }
 
-type SyncResult = { id: string; status: "accepted" | "duplicate" | "rejected"; reason?: string };
+type SyncResult = {
+  id: string;
+  status: "accepted" | "duplicate" | "rejected" | "deferred";
+  reason?: string;
+};
 
 function parsedClientDate(value: string): Date | null {
   const parsed = new Date(value);
@@ -291,7 +295,7 @@ function annotationValues(annotation: ScannerSyncAnnotation): {
   const note = typeof annotation.note === "string" ? annotation.note.trim().slice(0, 4000) : null;
   const rating = Number.isInteger(annotation.rating) ? Number(annotation.rating) : null;
   const createdAt = parsedClientDate(annotation.createdAt);
-  if (!createdAt || (!note && rating === null)) return null;
+  if (!createdAt) return null;
   if (rating !== null && (rating < 1 || rating > 5)) return null;
   return { note: note || null, rating, createdAt };
 }
@@ -300,7 +304,12 @@ export async function syncScannerBatch(
   identity: ScannerIdentity,
   scans: ScannerSyncScan[],
   annotations: ScannerSyncAnnotation[],
-): Promise<{ scans: SyncResult[]; annotations: SyncResult[]; syncedAt: string }> {
+): Promise<{
+  scans: SyncResult[];
+  annotations: SyncResult[];
+  syncedAt: string;
+  leads: LeadListRow[];
+}> {
   if (scans.length > MAX_SYNC_BATCH || annotations.length > MAX_SYNC_BATCH) {
     throw new Error(`A sync batch cannot contain more than ${MAX_SYNC_BATCH} items of each type`);
   }
@@ -354,11 +363,22 @@ export async function syncScannerBatch(
         continue;
       }
       const [existingEvent] = await tx
-        .select({ id: sponsorLeadScanEventsTable.id })
+        .select({
+          id: sponsorLeadScanEventsTable.id,
+          sponsorId: sponsorLeadScanEventsTable.sponsorId,
+          deviceId: sponsorLeadScanEventsTable.scannerDeviceId,
+        })
         .from(sponsorLeadScanEventsTable)
         .where(eq(sponsorLeadScanEventsTable.id, scan.id));
       if (existingEvent) {
-        scanResults.push({ id: scan.id, status: "duplicate" });
+        scanResults.push({
+          id: scan.id,
+          status:
+            existingEvent.sponsorId === identity.sponsorId && existingEvent.deviceId === identity.id
+              ? "duplicate"
+              : "rejected",
+          reason: "Scan identifier already belongs to another phone",
+        });
         continue;
       }
       const [badge] = await tx
@@ -463,8 +483,24 @@ export async function syncScannerBatch(
       if (!event) {
         annotationResults.push({
           id: annotation.id,
-          status: "rejected",
+          status: "deferred",
           reason: "The matching scan has not been accepted",
+        });
+        continue;
+      }
+      const [existingNote] = await tx
+        .select()
+        .from(sponsorLeadNotesTable)
+        .where(eq(sponsorLeadNotesTable.id, annotation.id))
+        .for("update");
+      if (
+        existingNote &&
+        (existingNote.scannerDeviceId !== identity.id || existingNote.leadId !== event.leadId)
+      ) {
+        annotationResults.push({
+          id: annotation.id,
+          status: "rejected",
+          reason: "This note belongs to another phone",
         });
         continue;
       }
@@ -479,16 +515,30 @@ export async function syncScannerBatch(
           rating: values.rating,
           createdAt: values.createdAt,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: sponsorLeadNotesTable.id,
+          set: { note: values.note, rating: values.rating, createdAt: values.createdAt },
+          setWhere: and(
+            eq(sponsorLeadNotesTable.scannerDeviceId, identity.id),
+            eq(sponsorLeadNotesTable.leadId, event.leadId),
+            sql`${sponsorLeadNotesTable.createdAt} < ${values.createdAt}`,
+          ),
+        })
         .returning({ id: sponsorLeadNotesTable.id });
       if (!inserted.length) {
         annotationResults.push({ id: annotation.id, status: "duplicate" });
         continue;
       }
-      if (values.rating !== null) {
+      {
+        const [latestRating] = await tx
+          .select({ rating: sponsorLeadNotesTable.rating })
+          .from(sponsorLeadNotesTable)
+          .where(eq(sponsorLeadNotesTable.leadId, event.leadId))
+          .orderBy(desc(sponsorLeadNotesTable.createdAt), desc(sponsorLeadNotesTable.id))
+          .limit(1);
         await tx
           .update(sponsorLeadsTable)
-          .set({ rating: values.rating, updatedAt: new Date() })
+          .set({ rating: latestRating?.rating ?? null, updatedAt: new Date() })
           .where(eq(sponsorLeadsTable.id, event.leadId));
       }
       annotationResults.push({ id: annotation.id, status: "accepted" });
@@ -500,7 +550,12 @@ export async function syncScannerBatch(
       .where(eq(sponsorScannerDevicesTable.id, identity.id));
   });
 
-  return { scans: scanResults, annotations: annotationResults, syncedAt: new Date().toISOString() };
+  return {
+    scans: scanResults,
+    annotations: annotationResults,
+    syncedAt: new Date().toISOString(),
+    leads: await listLeadRows(identity.sponsorId),
+  };
 }
 
 export interface LeadListRow {

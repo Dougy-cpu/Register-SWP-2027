@@ -1917,6 +1917,10 @@ export const GetAdminSponsorParams = zod.object({
   sponsorId: zod.coerce.number(),
 });
 
+export const getAdminSponsorResponseTwoPassRequestsItemRequestedVipMin = 0;
+
+export const getAdminSponsorResponseTwoPassRequestsItemRequestedStaffMin = 0;
+
 export const getAdminSponsorResponseTwoSessionsItemTakeawaysMax = 3;
 
 export const GetAdminSponsorResponse = zod
@@ -1940,6 +1944,24 @@ export const GetAdminSponsorResponse = zod
       notes: zod.string().nullish(),
       accessUrl: zod.string().url().nullish(),
       welcomeEmailSentAt: zod.coerce.date().nullish(),
+      deliveryFailureCount: zod.number().optional(),
+      passRequests: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            requestedVip: zod
+              .number()
+              .min(getAdminSponsorResponseTwoPassRequestsItemRequestedVipMin),
+            requestedStaff: zod
+              .number()
+              .min(getAdminSponsorResponseTwoPassRequestsItemRequestedStaffMin),
+            message: zod.string().nullish(),
+            status: zod.enum(["open", "resolved", "declined"]),
+            createdAt: zod.coerce.date(),
+            resolvedAt: zod.coerce.date().nullish(),
+          }),
+        )
+        .optional(),
       contacts: zod.array(
         zod.object({
           id: zod.number().optional(),
@@ -2174,6 +2196,10 @@ export const UpdateAdminSponsorBody = zod.object({
     .describe("Every contracted sponsor session slot, including repeated or mixed types."),
 });
 
+export const updateAdminSponsorResponseTwoPassRequestsItemRequestedVipMin = 0;
+
+export const updateAdminSponsorResponseTwoPassRequestsItemRequestedStaffMin = 0;
+
 export const updateAdminSponsorResponseTwoSessionsItemTakeawaysMax = 3;
 
 export const UpdateAdminSponsorResponse = zod
@@ -2197,6 +2223,24 @@ export const UpdateAdminSponsorResponse = zod
       notes: zod.string().nullish(),
       accessUrl: zod.string().url().nullish(),
       welcomeEmailSentAt: zod.coerce.date().nullish(),
+      deliveryFailureCount: zod.number().optional(),
+      passRequests: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            requestedVip: zod
+              .number()
+              .min(updateAdminSponsorResponseTwoPassRequestsItemRequestedVipMin),
+            requestedStaff: zod
+              .number()
+              .min(updateAdminSponsorResponseTwoPassRequestsItemRequestedStaffMin),
+            message: zod.string().nullish(),
+            status: zod.enum(["open", "resolved", "declined"]),
+            createdAt: zod.coerce.date(),
+            resolvedAt: zod.coerce.date().nullish(),
+          }),
+        )
+        .optional(),
       contacts: zod.array(
         zod.object({
           id: zod.number().optional(),
@@ -2352,6 +2396,10 @@ export const ConfirmSponsorParams = zod.object({
   sponsorId: zod.coerce.number(),
 });
 
+export const confirmSponsorResponseTwoPassRequestsItemRequestedVipMin = 0;
+
+export const confirmSponsorResponseTwoPassRequestsItemRequestedStaffMin = 0;
+
 export const confirmSponsorResponseTwoSessionsItemTakeawaysMax = 3;
 
 export const ConfirmSponsorResponse = zod
@@ -2375,6 +2423,24 @@ export const ConfirmSponsorResponse = zod
       notes: zod.string().nullish(),
       accessUrl: zod.string().url().nullish(),
       welcomeEmailSentAt: zod.coerce.date().nullish(),
+      deliveryFailureCount: zod.number().optional(),
+      passRequests: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            requestedVip: zod
+              .number()
+              .min(confirmSponsorResponseTwoPassRequestsItemRequestedVipMin),
+            requestedStaff: zod
+              .number()
+              .min(confirmSponsorResponseTwoPassRequestsItemRequestedStaffMin),
+            message: zod.string().nullish(),
+            status: zod.enum(["open", "resolved", "declined"]),
+            createdAt: zod.coerce.date(),
+            resolvedAt: zod.coerce.date().nullish(),
+          }),
+        )
+        .optional(),
       contacts: zod.array(
         zod.object({
           id: zod.number().optional(),
@@ -2642,6 +2708,10 @@ export const UpdateAdminSponsorSessionEntitlementBody = zod.object({
     .default(updateAdminSponsorSessionEntitlementBodySlidesRequiredDefault),
 });
 
+export const updateAdminSponsorSessionEntitlementResponseTwoPassRequestsItemRequestedVipMin = 0;
+
+export const updateAdminSponsorSessionEntitlementResponseTwoPassRequestsItemRequestedStaffMin = 0;
+
 export const updateAdminSponsorSessionEntitlementResponseTwoSessionsItemTakeawaysMax = 3;
 
 export const UpdateAdminSponsorSessionEntitlementResponse = zod
@@ -2665,6 +2735,26 @@ export const UpdateAdminSponsorSessionEntitlementResponse = zod
       notes: zod.string().nullish(),
       accessUrl: zod.string().url().nullish(),
       welcomeEmailSentAt: zod.coerce.date().nullish(),
+      deliveryFailureCount: zod.number().optional(),
+      passRequests: zod
+        .array(
+          zod.object({
+            id: zod.number(),
+            requestedVip: zod
+              .number()
+              .min(updateAdminSponsorSessionEntitlementResponseTwoPassRequestsItemRequestedVipMin),
+            requestedStaff: zod
+              .number()
+              .min(
+                updateAdminSponsorSessionEntitlementResponseTwoPassRequestsItemRequestedStaffMin,
+              ),
+            message: zod.string().nullish(),
+            status: zod.enum(["open", "resolved", "declined"]),
+            createdAt: zod.coerce.date(),
+            resolvedAt: zod.coerce.date().nullish(),
+          }),
+        )
+        .optional(),
       contacts: zod.array(
         zod.object({
           id: zod.number().optional(),
@@ -2821,8 +2911,11 @@ export const ReviewSponsorSessionParams = zod.object({
   sessionId: zod.coerce.number(),
 });
 
+export const reviewSponsorSessionBodyExpectedRevisionMin = 0;
+
 export const ReviewSponsorSessionBody = zod.object({
   status: zod.enum(["changes_requested", "approved"]),
+  expectedRevision: zod.number().min(reviewSponsorSessionBodyExpectedRevisionMin).optional(),
   feedback: zod.string().nullish(),
 });
 
@@ -3072,6 +3165,10 @@ export const ExchangeSponsorAccessTokenParams = zod.object({
 /**
  * @summary Get the private privacy-redacted sponsor workspace
  */
+export const getSponsorWorkspaceResponsePassRequestsItemRequestedVipMin = 0;
+
+export const getSponsorWorkspaceResponsePassRequestsItemRequestedStaffMin = 0;
+
 export const getSponsorWorkspaceResponseSessionsItemTakeawaysMax = 3;
 
 export const GetSponsorWorkspaceResponse = zod
@@ -3091,6 +3188,23 @@ export const GetSponsorWorkspaceResponse = zod
       needsAttention: zod.number(),
       updatedAt: zod.coerce.date(),
     }),
+    passRequests: zod
+      .array(
+        zod.object({
+          id: zod.number(),
+          requestedVip: zod
+            .number()
+            .min(getSponsorWorkspaceResponsePassRequestsItemRequestedVipMin),
+          requestedStaff: zod
+            .number()
+            .min(getSponsorWorkspaceResponsePassRequestsItemRequestedStaffMin),
+          message: zod.string().nullish(),
+          status: zod.enum(["open", "resolved", "declined"]),
+          createdAt: zod.coerce.date(),
+          resolvedAt: zod.coerce.date().nullish(),
+        }),
+      )
+      .optional(),
     contacts: zod.array(
       zod.object({
         id: zod.number().optional(),
@@ -3413,7 +3527,7 @@ export const RequestMoreSponsorPassesBody = zod.object({
 });
 
 /**
- * @summary Save a sponsor session draft; approved edits return it to submitted
+ * @summary Quietly save a sponsor draft; changed content requires explicit submission
  */
 export const UpdateSponsorSessionParams = zod.object({
   sessionId: zod.coerce.number(),
@@ -3493,7 +3607,7 @@ export const UpdateSponsorSessionResponse = zod.object({
 });
 
 /**
- * @summary Validate and submit a sponsor session for review
+ * @summary Atomically save visible content, validate and submit for review
  */
 export const SubmitSponsorSessionParams = zod.object({
   sessionId: zod.coerce.number(),
@@ -3501,8 +3615,39 @@ export const SubmitSponsorSessionParams = zod.object({
 
 export const submitSponsorSessionBodyExpectedRevisionMin = 0;
 
+export const submitSponsorSessionBodyTitleMax = 250;
+
+export const submitSponsorSessionBodyDescriptionMax = 1500;
+
+export const submitSponsorSessionBodyTakeawaysItemMax = 300;
+
+export const submitSponsorSessionBodyTakeawaysMax = 3;
+
 export const SubmitSponsorSessionBody = zod.object({
-  expectedRevision: zod.number().min(submitSponsorSessionBodyExpectedRevisionMin).optional(),
+  expectedRevision: zod
+    .number()
+    .min(submitSponsorSessionBodyExpectedRevisionMin)
+    .optional()
+    .describe("Reject stale edits without replacing a newer revision."),
+  title: zod.string().max(submitSponsorSessionBodyTitleMax).optional(),
+  description: zod.string().max(submitSponsorSessionBodyDescriptionMax).optional(),
+  takeaways: zod
+    .array(zod.string().max(submitSponsorSessionBodyTakeawaysItemMax))
+    .max(submitSponsorSessionBodyTakeawaysMax)
+    .optional(),
+  presenters: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        name: zod.string(),
+        jobTitle: zod.string(),
+        company: zod.string(),
+        biography: zod.string().nullish(),
+        displayOrder: zod.number().optional(),
+      }),
+    )
+    .min(1)
+    .optional(),
 });
 
 export const submitSponsorSessionResponseTakeawaysMax = 3;
@@ -3584,6 +3729,147 @@ export const AcknowledgeSponsorDocumentBody = zod.object({
     .string()
     .min(acknowledgeSponsorDocumentBodyAcknowledgedByMin)
     .max(acknowledgeSponsorDocumentBodyAcknowledgedByMax),
+});
+
+/**
+ * @summary Renew the same phone after access rotation; never bypass explicit revocation
+ */
+export const RecoverSponsorScannerParams = zod.object({
+  deviceId: zod.coerce.string(),
+});
+
+export const recoverSponsorScannerBodyTokenMin = 40;
+export const recoverSponsorScannerBodyTokenMax = 200;
+
+export const RecoverSponsorScannerBody = zod.object({
+  token: zod.string().min(recoverSponsorScannerBodyTokenMin).max(recoverSponsorScannerBodyTokenMax),
+});
+
+export const recoverSponsorScannerResponseTestQrValueRegExp = new RegExp("^[0-9A-F]{12}$");
+
+export const RecoverSponsorScannerResponse = zod.object({
+  id: zod.string(),
+  token: zod.string().describe("Returned only on activation; store in device IndexedDB."),
+  operatorName: zod.string(),
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string(),
+  testQrValue: zod.string().regex(recoverSponsorScannerResponseTestQrValueRegExp),
+});
+
+/**
+ * @summary Organiser explicitly restores an existing phone and issues a fresh scanner-only link
+ */
+export const RestoreSponsorScannerParams = zod.object({
+  deviceId: zod.coerce.string(),
+});
+
+export const restoreSponsorScannerResponseTestQrValueRegExp = new RegExp("^[0-9A-F]{12}$");
+
+export const RestoreSponsorScannerResponse = zod.object({
+  id: zod.string(),
+  token: zod.string().describe("Returned only on activation; store in device IndexedDB."),
+  operatorName: zod.string(),
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string(),
+  testQrValue: zod.string().regex(restoreSponsorScannerResponseTestQrValueRegExp),
+});
+
+/**
+ * @summary Check a newly issued badge online, enforcing current sharing eligibility
+ */
+export const lookupScannerBadgeBodyCodeRegExp = new RegExp("^[0-9A-F]{12}$");
+
+export const LookupScannerBadgeBody = zod.object({
+  code: zod.string().regex(lookupScannerBadgeBodyCodeRegExp),
+});
+
+export const LookupScannerBadgeResponse = zod.object({
+  attendeeId: zod.number(),
+  name: zod.string(),
+  firstName: zod.string(),
+  lastName: zod.string(),
+  jobTitle: zod.string(),
+  company: zod.string(),
+  workEmail: zod.string(),
+});
+
+/**
+ * @summary Read only this scanner's sponsor leads, without workspace access
+ */
+export const listScannerLeadsResponseLeadsItemRatingMax = 5;
+
+export const listScannerLeadsResponseLeadsItemNotesItemRatingMax = 5;
+
+export const ListScannerLeadsResponse = zod.object({
+  leads: zod.array(
+    zod.object({
+      id: zod.string(),
+      sponsorId: zod.number(),
+      sponsorCompany: zod.string(),
+      attendeeId: zod.number(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      name: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      workEmail: zod.string().email(),
+      rating: zod.number().min(1).max(listScannerLeadsResponseLeadsItemRatingMax).nullish(),
+      scanCount: zod.number().min(1),
+      firstScannedAt: zod.coerce.date().nullish(),
+      lastScannedAt: zod.coerce.date().nullish(),
+      scans: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          source: zod.enum(["camera", "image", "manual"]),
+          capturedAt: zod.coerce.date(),
+        }),
+      ),
+      notes: zod.array(
+        zod.object({
+          id: zod.string(),
+          operatorName: zod.string(),
+          note: zod.string().nullable(),
+          rating: zod
+            .number()
+            .min(1)
+            .max(listScannerLeadsResponseLeadsItemNotesItemRatingMax)
+            .nullable(),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Export confirmed leads only; pending scans do not block this export
+ */
+export const ExportScannerLeadsQueryParams = zod.object({
+  format: zod.enum(["csv", "xlsx"]).optional(),
+});
+
+export const ResolveSponsorPassRequestParams = zod.object({
+  sponsorId: zod.coerce.number(),
+  requestId: zod.coerce.number(),
+});
+
+export const ResolveSponsorPassRequestBody = zod.object({
+  decision: zod.enum(["approved", "declined"]),
+});
+
+/**
+ * @summary Prioritised sponsor approvals, requests, deadlines and delivery or storage failures
+ */
+export const GetSponsorAttentionResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      sponsorId: zod.number(),
+      company: zod.string(),
+      label: zod.string(),
+      section: zod.string(),
+    }),
+  ),
 });
 
 /**
@@ -3845,22 +4131,67 @@ export const SyncScannerBatchBody = zod.object({
     .max(syncScannerBatchBodyAnnotationsMax),
 });
 
+export const syncScannerBatchResponseLeadsItemRatingMax = 5;
+
+export const syncScannerBatchResponseLeadsItemNotesItemRatingMax = 5;
+
 export const SyncScannerBatchResponse = zod.object({
   scans: zod.array(
     zod.object({
       id: zod.string(),
-      status: zod.enum(["accepted", "duplicate", "rejected"]),
+      status: zod.enum(["accepted", "duplicate", "rejected", "deferred"]),
       reason: zod.string().optional(),
     }),
   ),
   annotations: zod.array(
     zod.object({
       id: zod.string(),
-      status: zod.enum(["accepted", "duplicate", "rejected"]),
+      status: zod.enum(["accepted", "duplicate", "rejected", "deferred"]),
       reason: zod.string().optional(),
     }),
   ),
   syncedAt: zod.coerce.date(),
+  leads: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        sponsorId: zod.number(),
+        sponsorCompany: zod.string(),
+        attendeeId: zod.number(),
+        firstName: zod.string(),
+        lastName: zod.string(),
+        name: zod.string(),
+        jobTitle: zod.string(),
+        company: zod.string(),
+        workEmail: zod.string().email(),
+        rating: zod.number().min(1).max(syncScannerBatchResponseLeadsItemRatingMax).nullish(),
+        scanCount: zod.number().min(1),
+        firstScannedAt: zod.coerce.date().nullish(),
+        lastScannedAt: zod.coerce.date().nullish(),
+        scans: zod.array(
+          zod.object({
+            id: zod.string(),
+            operatorName: zod.string(),
+            source: zod.enum(["camera", "image", "manual"]),
+            capturedAt: zod.coerce.date(),
+          }),
+        ),
+        notes: zod.array(
+          zod.object({
+            id: zod.string(),
+            operatorName: zod.string(),
+            note: zod.string().nullable(),
+            rating: zod
+              .number()
+              .min(1)
+              .max(syncScannerBatchResponseLeadsItemNotesItemRatingMax)
+              .nullable(),
+            createdAt: zod.coerce.date(),
+          }),
+        ),
+      }),
+    )
+    .optional(),
 });
 
 /**

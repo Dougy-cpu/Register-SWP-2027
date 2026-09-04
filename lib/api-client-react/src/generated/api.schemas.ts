@@ -368,10 +368,33 @@ export interface SponsorUpsert {
 
 export type SponsorWorkspaceAdminActivityItem = { [key: string]: unknown };
 
+export type SponsorPassRequestStatus =
+  (typeof SponsorPassRequestStatus)[keyof typeof SponsorPassRequestStatus];
+
+export const SponsorPassRequestStatus = {
+  open: "open",
+  resolved: "resolved",
+  declined: "declined",
+} as const;
+
+export interface SponsorPassRequest {
+  id: number;
+  /** @minimum 0 */
+  requestedVip: number;
+  /** @minimum 0 */
+  requestedStaff: number;
+  message?: string | null;
+  status: SponsorPassRequestStatus;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 export type SponsorWorkspaceAdmin = SponsorSummary & {
   notes?: string | null;
   accessUrl?: string | null;
   welcomeEmailSentAt?: string | null;
+  deliveryFailureCount?: number;
+  passRequests?: SponsorPassRequest[];
   contacts: SponsorContact[];
   codes: SponsorCode[];
   staff: SponsorStaff[];
@@ -392,6 +415,7 @@ export type SponsorWorkspacePublicInvitationCopy = {
  */
 export interface SponsorWorkspacePublic {
   sponsor: SponsorSummary;
+  passRequests?: SponsorPassRequest[];
   contacts: SponsorContact[];
   codes: SponsorCode[];
   staff: SponsorStaff[];
@@ -529,33 +553,13 @@ export const ScannerSyncItemResultStatus = {
   accepted: "accepted",
   duplicate: "duplicate",
   rejected: "rejected",
+  deferred: "deferred",
 } as const;
 
 export interface ScannerSyncItemResult {
   id: string;
   status: ScannerSyncItemResultStatus;
   reason?: string;
-}
-
-export interface ScannerSyncResponse {
-  scans: ScannerSyncItemResult[];
-  annotations: ScannerSyncItemResult[];
-  syncedAt: string;
-}
-
-export interface LeadAnnotationInput {
-  /**
-   * @minLength 2
-   * @maxLength 200
-   */
-  operatorName: string;
-  /** @maxLength 4000 */
-  note?: string | null;
-  /**
-   * @minimum 1
-   * @maximum 5
-   */
-  rating?: number | null;
 }
 
 export type SponsorLeadScanSource =
@@ -608,6 +612,38 @@ export interface SponsorLead {
   lastScannedAt?: string | null;
   scans: SponsorLeadScan[];
   notes: SponsorLeadNote[];
+}
+
+export interface ScannerSyncResponse {
+  scans: ScannerSyncItemResult[];
+  annotations: ScannerSyncItemResult[];
+  syncedAt: string;
+  leads?: SponsorLead[];
+}
+
+export interface ScannerLookupAttendee {
+  attendeeId: number;
+  name: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  company: string;
+  workEmail: string;
+}
+
+export interface LeadAnnotationInput {
+  /**
+   * @minLength 2
+   * @maxLength 200
+   */
+  operatorName: string;
+  /** @maxLength 4000 */
+  note?: string | null;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  rating?: number | null;
 }
 
 export type LeadScannerDeviceStatus =
@@ -1850,6 +1886,8 @@ export const ReviewSponsorSessionBodyStatus = {
 
 export type ReviewSponsorSessionBody = {
   status: ReviewSponsorSessionBodyStatus;
+  /** @minimum 0 */
+  expectedRevision?: number;
   feedback?: string | null;
 };
 
@@ -1946,11 +1984,6 @@ export type RequestMoreSponsorPassesBody = {
   message?: string;
 };
 
-export type SubmitSponsorSessionBody = {
-  /** @minimum 0 */
-  expectedRevision?: number;
-};
-
 export type ReplaceSponsorWorkspaceAssetBody = {
   file: Blob;
 };
@@ -1961,6 +1994,58 @@ export type AcknowledgeSponsorDocumentBody = {
    * @maxLength 200
    */
   acknowledgedBy: string;
+};
+
+export type RecoverSponsorScannerBody = {
+  /**
+   * @minLength 40
+   * @maxLength 200
+   */
+  token: string;
+};
+
+export type LookupScannerBadgeBody = {
+  /** @pattern ^[0-9A-F]{12}$ */
+  code: string;
+};
+
+export type ListScannerLeads200 = {
+  leads: SponsorLead[];
+};
+
+export type ExportScannerLeadsParams = {
+  format?: ExportScannerLeadsFormat;
+};
+
+export type ExportScannerLeadsFormat =
+  (typeof ExportScannerLeadsFormat)[keyof typeof ExportScannerLeadsFormat];
+
+export const ExportScannerLeadsFormat = {
+  csv: "csv",
+  xlsx: "xlsx",
+} as const;
+
+export type ResolveSponsorPassRequestBodyDecision =
+  (typeof ResolveSponsorPassRequestBodyDecision)[keyof typeof ResolveSponsorPassRequestBodyDecision];
+
+export const ResolveSponsorPassRequestBodyDecision = {
+  approved: "approved",
+  declined: "declined",
+} as const;
+
+export type ResolveSponsorPassRequestBody = {
+  decision: ResolveSponsorPassRequestBodyDecision;
+};
+
+export type GetSponsorAttention200ItemsItem = {
+  sponsorId: number;
+  company: string;
+  label: string;
+  section: string;
+};
+
+export type GetSponsorAttention200 = {
+  items: GetSponsorAttention200ItemsItem[];
 };
 
 export type ActivateSponsorScannerDeviceBody = {

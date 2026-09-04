@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SubmitSponsorSessionBody = {
-  /** @minimum 0 */
-  expectedRevision?: number;
+export type GetSponsorAttention200ItemsItem = {
+  sponsorId: number;
+  company: string;
+  label: string;
+  section: string;
 };

@@ -19,6 +19,8 @@ import {
   saveSessionPresenters,
 } from "./sponsor-portal";
 import { deriveSponsorTasks } from "./sponsor-progress";
+import { saveSessionDraft, sessionSubmissionErrors } from "./sponsor-session-draft";
+import { requestAdditionalPasses, resolvePassRequest } from "./sponsor-pass-requests";
 
 beforeAll(async () => {
   database = new PGlite();
@@ -55,6 +57,95 @@ afterAll(async () => {
 });
 
 describe("Sponsor portal persistence using the real PostgreSQL schema", () => {
+  it("quietly saves drafts, preserves headshots, rejects stale writes and rolls back invalid visible submissions", async () => {
+    const body = {
+      title: "Visible title",
+      description: "Visible description",
+      takeaways: ["A takeaway"],
+      presenters: [{ id: 21, name: "Alex", jobTitle: "Director", company: "Sample sponsor" }],
+      expectedRevision: 0,
+    };
+    const saved = await testDb.transaction((tx) => saveSessionDraft(tx as never, 1, 11, body));
+    expect(saved.nextRevision).toBe(1);
+    expect(saved.session.status).toBe("draft");
+    expect(await sessionSubmissionErrors(11, testDb as never)).toEqual([]);
+    expect(
+      (await database.query("SELECT presenter_id FROM sponsor_assets WHERE id='headshot'")).rows,
+    ).toEqual([{ presenter_id: 21 }]);
+    const repeated = await testDb.transaction((tx) => saveSessionDraft(tx as never, 1, 11, body));
+    expect(repeated.changed).toBe(false);
+    await expect(
+      testDb.transaction((tx) =>
+        saveSessionDraft(tx as never, 1, 11, { ...body, title: "Stale edit" }),
+      ),
+    ).rejects.toThrow(/updated elsewhere/);
+    await expect(
+      testDb.transaction(async (tx) => {
+        await saveSessionDraft(tx as never, 1, 11, { ...body, title: "", expectedRevision: 1 });
+        const errors = await sessionSubmissionErrors(11, tx as never);
+        if (errors.length) throw new Error(errors.join(". "));
+      }),
+    ).rejects.toThrow(/title/);
+    expect(
+      (await database.query("SELECT title,current_revision FROM sponsor_sessions WHERE id=11"))
+        .rows,
+    ).toEqual([{ title: "Visible title", current_revision: 1 }]);
+    await database.exec(
+      "UPDATE sponsor_sessions SET status='exported',exported_revision=1 WHERE id=11",
+    );
+    await testDb.transaction((tx) =>
+      saveSessionDraft(tx as never, 1, 11, { ...body, title: "New draft", expectedRevision: 1 }),
+    );
+    expect(
+      (
+        await database.query(
+          "SELECT status,current_revision,exported_revision FROM sponsor_sessions WHERE id=11",
+        )
+      ).rows,
+    ).toEqual([{ status: "draft", current_revision: 2, exported_revision: 1 }]);
+  });
+  it("records one open request and applies a decision once using the existing database constraint", async () => {
+    await database.exec(
+      "ALTER TABLE promo_codes ADD COLUMN max_uses INTEGER; ALTER TABLE promo_codes ADD COLUMN updated_at TIMESTAMPTZ; UPDATE sponsors SET status='confirmed' WHERE id=1; INSERT INTO promo_codes (id,code,max_uses) VALUES (71,'SAMPLEVIP',0); INSERT INTO sponsor_promo_codes (sponsor_id,promo_code_id,kind) VALUES (1,71,'vip');",
+    );
+    const input = { requestedVip: 3, requestedStaff: 2, message: "Please add places" };
+    const requests = await Promise.all([
+      requestAdditionalPasses(1, input),
+      requestAdditionalPasses(1, input),
+    ]);
+    expect(requests[0].request.id).toBe(requests[1].request.id);
+    expect(requests.filter((item) => item.created)).toHaveLength(1);
+    await expect(requestAdditionalPasses(1, { ...input, requestedVip: 4 })).rejects.toThrow(
+      /earlier request/,
+    );
+    const decisions = await Promise.all([
+      resolvePassRequest(1, requests[0].request.id, "approved"),
+      resolvePassRequest(1, requests[0].request.id, "approved"),
+    ]);
+    expect(decisions.filter((item) => item.changed)).toHaveLength(1);
+    expect(
+      (await database.query("SELECT vip_allocation,staff_allocation FROM sponsors WHERE id=1"))
+        .rows,
+    ).toEqual([{ vip_allocation: 3, staff_allocation: 6 }]);
+    expect((await database.query("SELECT max_uses FROM promo_codes WHERE id=71")).rows).toEqual([
+      { max_uses: 3 },
+    ]);
+    await expect(resolvePassRequest(2, requests[0].request.id, "approved")).rejects.toThrow(
+      /not found/,
+    );
+    await expect(resolvePassRequest(1, requests[0].request.id, "declined")).rejects.toThrow(
+      /different decision/,
+    );
+    const declined = await requestAdditionalPasses(1, {
+      requestedVip: 1,
+      requestedStaff: 0,
+      message: null,
+    });
+    await resolvePassRequest(1, declined.request.id, "declined");
+    expect((await database.query("SELECT vip_allocation FROM sponsors WHERE id=1")).rows).toEqual([
+      { vip_allocation: 3 },
+    ]);
+  });
   it("updates a presenter in place so their headshot remains linked", async () => {
     await testDb.transaction((tx) =>
       saveSessionPresenters(tx as never, 11, [

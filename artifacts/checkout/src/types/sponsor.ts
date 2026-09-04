@@ -142,6 +142,15 @@ export interface SponsorDocument {
 }
 
 export interface SponsorWorkspace extends SponsorSummary {
+  passRequests?: Array<{
+    id: number;
+    requestedVip: number;
+    requestedStaff: number;
+    message: string | null;
+    status: "open" | "resolved" | "declined";
+    createdAt: string;
+    resolvedAt: string | null;
+  }>;
   sponsor: SponsorSummary;
   notes?: string | null;
   vipCodeDraft?: string;

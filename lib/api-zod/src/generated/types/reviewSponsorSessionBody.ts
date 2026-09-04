@@ -9,5 +9,7 @@ import type { ReviewSponsorSessionBodyStatus } from "./reviewSponsorSessionBodyS
 
 export type ReviewSponsorSessionBody = {
   status: ReviewSponsorSessionBodyStatus;
+  /** @minimum 0 */
+  expectedRevision?: number;
   feedback?: string | null;
 };

@@ -9,6 +9,7 @@ import { sponsorJson } from "@/lib/sponsor-api";
 import type { SponsorStaff, SponsorWorkspace } from "@/types/sponsor";
 import { activeStaff } from "./portal-helpers";
 import { InlineError } from "./portal-ui";
+import { PortalScannerAccess } from "./portal-scanner-access";
 
 const emptyTeamMember = (company: string) => ({
   firstName: "",
@@ -511,7 +512,8 @@ export function PortalTeam({
         </Card>
       )}
       <Invitations workspace={workspace} />
-      <PassRequest />
+      <PassRequest workspace={workspace} onRefresh={onRefresh} />
+      <PortalScannerAccess />
     </section>
   );
 }
@@ -606,24 +608,46 @@ function Invitations({ workspace }: { workspace: SponsorWorkspace }) {
   );
 }
 
-function PassRequest() {
+function PassRequest({
+  workspace,
+  onRefresh,
+}: {
+  workspace: SponsorWorkspace;
+  onRefresh: () => Promise<void>;
+}) {
   const [vip, setVip] = useState("0");
   const [staff, setStaff] = useState("0");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const pending = workspace.passRequests?.some((request) => request.status === "open");
   const valid =
     [Number(vip), Number(staff)].every((value) => Number.isInteger(value) && value >= 0) &&
     Number(vip) + Number(staff) > 0;
   return (
-    <details className="rounded-xl border bg-white p-5">
+    <details className="rounded-xl border bg-white p-5" open={pending || undefined}>
       <summary className="cursor-pointer py-1 font-semibold">Need more passes?</summary>
+      {(workspace.passRequests ?? []).map((request) => (
+        <div key={request.id} className="mt-4 rounded-lg border p-3 text-sm">
+          <p className="font-semibold">
+            {request.status === "open"
+              ? "Waiting for the event team"
+              : request.status === "resolved"
+                ? "Approved · allocation updated"
+                : "Not approved · contact the event team"}
+          </p>
+          <p className="mt-1">
+            {request.requestedVip} extra VIP / {request.requestedStaff} extra staff ·{" "}
+            {new Date(request.createdAt).toLocaleDateString("en-GB")}
+          </p>
+        </div>
+      ))}
       <form
         className="mt-4 space-y-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (!valid || busy) return;
+          if (!valid || busy || pending) return;
           setBusy(true);
           setError("");
           setNotice("");
@@ -642,6 +666,7 @@ function PassRequest() {
             setVip("0");
             setStaff("0");
             setMessage("");
+            await onRefresh();
           } catch (caught) {
             setError(caught instanceof Error ? caught.message : "The request could not be sent.");
           } finally {
@@ -689,7 +714,7 @@ function PassRequest() {
             {notice}
           </p>
         )}
-        <Button type="submit" className="min-h-11" disabled={busy || !valid}>
+        <Button type="submit" className="min-h-11" disabled={busy || !valid || pending}>
           {busy ? "Sending request…" : "Request passes"}
         </Button>
       </form>

@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScannerSyncItemResult } from "./scannerSyncItemResult";
+import type { SponsorLead } from "./sponsorLead";
 
 export interface ScannerSyncResponse {
   scans: ScannerSyncItemResult[];
   annotations: ScannerSyncItemResult[];
   syncedAt: Date;
+  leads?: SponsorLead[];
 }

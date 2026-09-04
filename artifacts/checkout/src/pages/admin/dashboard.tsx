@@ -3,6 +3,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import { Card } from "@/components/ui/card";
 import { Users, CreditCard, Receipt, TrendingUp, Clock, Handshake } from "lucide-react";
 import UnpaidInvoicesWidget from "@/components/admin/UnpaidInvoicesWidget";
+import SponsorAttention from "@/components/admin/SponsorAttention";
 
 type RegRow = {
   id: number;
@@ -291,6 +292,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mb-8">
+        <SponsorAttention />
         <UnpaidInvoicesWidget />
       </div>
 

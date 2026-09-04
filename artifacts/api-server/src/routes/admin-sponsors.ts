@@ -43,6 +43,7 @@ import {
   sendSponsorInternalNotification,
 } from "../lib/sponsor-email";
 import { logger } from "../lib/logger";
+import { resolvePassRequest } from "../lib/sponsor-pass-requests";
 
 const router: IRouter = Router();
 const upload = multer({
@@ -159,6 +160,80 @@ async function refreshSessionTasks(sponsorId: number, resetContent = false): Pro
     }
   }
 }
+
+router.get("/admin/sponsors/attention", async (_req, res): Promise<void> => {
+  const sponsors = await db
+    .select({ id: sponsorsTable.id })
+    .from(sponsorsTable)
+    .where(inArray(sponsorsTable.status, ["confirmed", "completed"]));
+  const workspaces = await Promise.all(
+    sponsors.map((item) => buildSponsorWorkspace(item.id, true)),
+  );
+  const items: Array<{ sponsorId: number; company: string; label: string; section: string }> = [];
+  for (const workspace of workspaces) {
+    const add = (label: string, section: string) =>
+      items.push({ sponsorId: workspace.id, company: workspace.company, label, section });
+    for (const session of workspace.sessions.filter((item) => item.status === "submitted"))
+      add(`Review ${session.entitlementLabel}`, "sessions");
+    for (const request of workspace.passRequests.filter((item) => item.status === "open"))
+      add(
+        `Decide pass request: ${request.requestedVip} VIP / ${request.requestedStaff} staff`,
+        "requests",
+      );
+    for (const task of workspace.tasks.filter(
+      (item) =>
+        item.required &&
+        item.status !== "completed" &&
+        item.status !== "submitted" &&
+        item.dueAt &&
+        new Date(item.dueAt) < new Date(),
+    ))
+      add(
+        `Overdue: ${task.label}`,
+        ["sessions", "speakers", "slides"].includes(task.taskKey)
+          ? "sessions"
+          : task.taskKey === "assets"
+            ? "assets"
+            : "overview",
+      );
+    for (const asset of workspace.assets.filter((item) => item.status === "missing"))
+      add(`Missing file: ${asset.originalName}`, "assets");
+    if ("deliveryFailureCount" in workspace && workspace.deliveryFailureCount)
+      add(`${workspace.deliveryFailureCount} failed email deliveries to review`, "activity");
+    if (
+      workspace.tasks.some(
+        (item) => item.taskKey === "storage_error" && item.status !== "completed",
+      )
+    )
+      add("Resolve App Storage problem", "assets");
+  }
+  res.json({ items });
+});
+
+router.post(
+  "/admin/sponsors/:sponsorId/pass-requests/:requestId/resolve",
+  async (req, res): Promise<void> => {
+    const sponsorId = idParam(req.params.sponsorId),
+      requestId = idParam(req.params.requestId);
+    if (!sponsorId || !requestId || !["approved", "declined"].includes(req.body?.decision)) {
+      res.status(400).json({ error: "Choose approve or decline for a valid request" });
+      return;
+    }
+    try {
+      const result = await resolvePassRequest(sponsorId, requestId, req.body.decision);
+      if (result.changed)
+        await sendSponsorInternalNotification({
+          sponsorId,
+          category: "passes",
+          event: "Pass request resolved",
+          summary: `Request #${requestId} was ${req.body.decision}. The sponsor can see the result in Team & passes.`,
+        });
+      res.json(result.request);
+    } catch (error) {
+      sendRouteError(res, error);
+    }
+  },
+);
 
 router.get("/admin/sponsors", async (req, res): Promise<void> => {
   const sponsors = await listSponsorSummaries({
@@ -503,6 +578,16 @@ router.patch(
       res.status(409).json({ error: "Only a submitted session can be reviewed" });
       return;
     }
+    if (
+      req.body.expectedRevision !== undefined &&
+      req.body.expectedRevision !== session.currentRevision
+    ) {
+      res.status(409).json({
+        error:
+          "This session changed after you opened it. Refresh and review the current submission.",
+      });
+      return;
+    }
     const [updated] = await db
       .update(sponsorSessionsTable)
       .set({
@@ -511,8 +596,20 @@ router.patch(
         approvedAt: status === "approved" ? new Date() : null,
         updatedAt: new Date(),
       })
-      .where(eq(sponsorSessionsTable.id, sessionId))
+      .where(
+        and(
+          eq(sponsorSessionsTable.id, sessionId),
+          eq(sponsorSessionsTable.currentRevision, session.currentRevision),
+          eq(sponsorSessionsTable.status, session.status),
+        ),
+      )
       .returning();
+    if (!updated) {
+      res
+        .status(409)
+        .json({ error: "The sponsor has started a newer draft. Refresh before reviewing." });
+      return;
+    }
     const allSessions = await db
       .select({ status: sponsorSessionsTable.status })
       .from(sponsorSessionsTable)
@@ -565,79 +662,88 @@ router.get("/admin/sponsors/:sponsorId/sessions/export.csv", async (req, res): P
     res.status(400).json({ error: "Invalid sponsor" });
     return;
   }
-  const sessions = await db
-    .select()
-    .from(sponsorSessionsTable)
-    .where(
-      and(
-        eq(sponsorSessionsTable.sponsorId, sponsorId),
-        inArray(sponsorSessionsTable.status, ["approved", "exported"]),
-      ),
-    )
-    .orderBy(asc(sponsorSessionsTable.id));
-  if (!sessions.length) {
-    res.status(409).json({ error: "There are no approved sessions to export" });
-    return;
-  }
-  const rows: string[] = [];
-  for (const session of sessions) {
-    const presenters = await db
-      .select()
-      .from(sponsorPresentersTable)
-      .where(eq(sponsorPresentersTable.sessionId, session.id))
-      .orderBy(asc(sponsorPresentersTable.displayOrder));
-    rows.push(
-      [
-        session.id,
-        session.type,
-        session.entitlementLabel,
-        session.title,
-        session.description,
-        session.takeaways.join(" | "),
-        presenters.map((p) => p.name).join(" | "),
-        presenters.map((p) => p.jobTitle).join(" | "),
-        presenters.map((p) => p.company).join(" | "),
-        session.currentRevision,
-      ]
-        .map(csvCell)
-        .join(","),
+  try {
+    const csv = await db.transaction(async (tx) => {
+      const sessions = await tx
+        .select()
+        .from(sponsorSessionsTable)
+        .where(
+          and(
+            eq(sponsorSessionsTable.sponsorId, sponsorId),
+            inArray(sponsorSessionsTable.status, ["approved", "exported"]),
+          ),
+        )
+        .orderBy(asc(sponsorSessionsTable.id))
+        .for("update");
+      if (!sessions.length) {
+        throw new SponsorConflictError("There are no approved sessions to export");
+      }
+      const rows: string[] = [];
+      for (const session of sessions) {
+        const presenters = await tx
+          .select()
+          .from(sponsorPresentersTable)
+          .where(eq(sponsorPresentersTable.sessionId, session.id))
+          .orderBy(asc(sponsorPresentersTable.displayOrder));
+        rows.push(
+          [
+            session.id,
+            session.type,
+            session.entitlementLabel,
+            session.title,
+            session.description,
+            session.takeaways.join(" | "),
+            presenters.map((p) => p.name).join(" | "),
+            presenters.map((p) => p.jobTitle).join(" | "),
+            presenters.map((p) => p.company).join(" | "),
+            session.currentRevision,
+          ]
+            .map(csvCell)
+            .join(","),
+        );
+      }
+      const header = [
+        "session_id",
+        "type",
+        "entitlement",
+        "title",
+        "description",
+        "takeaways",
+        "presenter_names",
+        "presenter_job_titles",
+        "presenter_companies",
+        "revision",
+      ];
+      const now = new Date();
+      for (const session of sessions) {
+        await tx
+          .update(sponsorSessionsTable)
+          .set({
+            status: "exported",
+            exportedAt: now,
+            exportedRevision: session.currentRevision,
+            updatedAt: now,
+          })
+          .where(eq(sponsorSessionsTable.id, session.id));
+        await tx.insert(sponsorActivityTable).values({
+          sponsorId,
+          type: "session_exported",
+          actorType: "admin",
+          data: { sessionId: session.id, revision: session.currentRevision },
+        });
+      }
+
+      return `${header.map(csvCell).join(",")}\r\n${rows.join("\r\n")}\r\n`;
+    });
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sponsor-${sponsorId}-sessions.csv"`,
     );
+    res.send(csv);
+  } catch (error) {
+    sendRouteError(res, error);
   }
-  const header = [
-    "session_id",
-    "type",
-    "entitlement",
-    "title",
-    "description",
-    "takeaways",
-    "presenter_names",
-    "presenter_job_titles",
-    "presenter_companies",
-    "revision",
-  ];
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    for (const session of sessions) {
-      await tx
-        .update(sponsorSessionsTable)
-        .set({
-          status: "exported",
-          exportedAt: now,
-          exportedRevision: session.currentRevision,
-          updatedAt: now,
-        })
-        .where(eq(sponsorSessionsTable.id, session.id));
-      await tx.insert(sponsorActivityTable).values({
-        sponsorId,
-        type: "session_exported",
-        actorType: "admin",
-        data: { sessionId: session.id, revision: session.currentRevision },
-      });
-    }
-  });
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="sponsor-${sponsorId}-sessions.csv"`);
-  res.send(`${header.map(csvCell).join(",")}\r\n${rows.join("\r\n")}\r\n`);
 });
 
 router.get("/admin/sponsors/:sponsorId/assets", async (req, res): Promise<void> => {

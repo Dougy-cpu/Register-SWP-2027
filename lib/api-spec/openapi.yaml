@@ -1696,6 +1696,7 @@ paths:
               type: object
               properties:
                 status: { type: string, enum: [changes_requested, approved] }
+                expectedRevision: { type: integer, minimum: 0 }
                 feedback: { type: string, nullable: true }
               required: [status]
       responses:
@@ -2097,13 +2098,16 @@ paths:
                 requestedStaff: { type: integer, minimum: 0 }
                 message: { type: string, maxLength: 2000 }
               required: [requestedVip, requestedStaff]
-      responses: { "201": { description: Request recorded } }
+      responses:
+        "201": { description: Request recorded }
+        "200": { description: Identical pending request already recorded }
+        "409": { description: An earlier request still needs a decision }
 
   /sponsor/sessions/{sessionId}:
     patch:
       operationId: updateSponsorSession
       tags: [sponsor-workspace]
-      summary: Save a sponsor session draft; approved edits return it to submitted
+      summary: Quietly save a sponsor draft; changed content requires explicit submission
       parameters: [{ $ref: "#/components/parameters/SessionId" }]
       requestBody:
         required: true
@@ -2126,16 +2130,13 @@ paths:
     post:
       operationId: submitSponsorSession
       tags: [sponsor-workspace]
-      summary: Validate and submit a sponsor session for review
+      summary: Atomically save visible content, validate and submit for review
       parameters: [{ $ref: "#/components/parameters/SessionId" }]
       requestBody:
         required: false
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                expectedRevision: { type: integer, minimum: 0 }
+            schema: { $ref: "#/components/schemas/SponsorSessionInput" }
       responses:
         "200":
           {
@@ -2219,7 +2220,147 @@ paths:
       responses: { "201": { description: Current version acknowledged } }
 
   # ==================== SPONSOR LEAD SCANNER ====================
+  /sponsor/scanner/devices/{deviceId}/recover:
+    post:
+      operationId: recoverSponsorScanner
+      tags: [lead-scanner]
+      summary: Renew the same phone after access rotation; never bypass explicit revocation
+      parameters:
+        - { name: deviceId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { token: { type: string, minLength: 40, maxLength: 200 } }
+              required: [token]
+      responses:
+        "200":
+          description: Same device credential; pending scan identifiers remain unchanged
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ScannerActivation" } }
+        "403": { description: Revoked or inactive; organiser must explicitly restore access }
+        "404": { description: Device is not owned by this sponsor or credential is invalid }
+
+  /sponsor/scanner/devices/{deviceId}/restore:
+    post:
+      operationId: restoreSponsorScanner
+      tags: [lead-scanner]
+      summary: Organiser explicitly restores an existing phone and issues a fresh scanner-only link
+      parameters:
+        - { name: deviceId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Replacement credential, returned once
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ScannerActivation" } }
+
+  /scanner/lookup:
+    post:
+      operationId: lookupScannerBadge
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Check a newly issued badge online, enforcing current sharing eligibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { code: { type: string, pattern: "^[0-9A-F]{12}$" } }
+              required: [code]
+      responses:
+        "200":
+          description: Eligible attendee
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ScannerLookupAttendee" } }
+        "404": { description: Badge not currently eligible; no attendee details returned }
+
+  /scanner/leads:
+    get:
+      operationId: listScannerLeads
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Read only this scanner's sponsor leads, without workspace access
+      responses:
+        "200":
+          description: Confirmed leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
+                required: [leads]
+
+  /scanner/leads/export:
+    get:
+      operationId: exportScannerLeads
+      tags: [lead-scanner]
+      security: [{ ScannerToken: [] }]
+      summary: Export confirmed leads only; pending scans do not block this export
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [csv, xlsx] } }
+      responses:
+        "200":
+          description: Confirmed lead export
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+        "409": { description: No confirmed leads to export }
+
+  /admin/sponsors/{sponsorId}/pass-requests/{requestId}/resolve:
+    post:
+      operationId: resolveSponsorPassRequest
+      tags: [sponsors]
+      parameters:
+        - { $ref: "#/components/parameters/SponsorId" }
+        - { name: requestId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decision: { type: string, enum: [approved, declined] }
+              required: [decision]
+      responses:
+        "200": { description: Request resolved once; approved allocations added atomically }
+        "409": { description: Already resolved differently or sponsor inactive }
+
+  /admin/sponsors/attention:
+    get:
+      operationId: getSponsorAttention
+      tags: [sponsors]
+      summary: Prioritised sponsor approvals, requests, deadlines and delivery or storage failures
+      responses:
+        "200":
+          description: Action queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sponsorId: { type: integer }
+                        company: { type: string }
+                        label: { type: string }
+                        section: { type: string }
+                      required: [sponsorId, company, label, section]
+                required: [items]
+
   /sponsor/scanner/devices:
+    get:
+      operationId: listSponsorScannerDevices
+      tags: [lead-scanner]
+      summary: List owned scanner phones without disclosing tokens
+      responses:
+        "200": { description: "Scanner phones, access status and last sync" }
     post:
       operationId: activateSponsorScannerDevice
       tags: [lead-scanner]
@@ -2868,6 +3009,9 @@ components:
             notes: { type: string, nullable: true }
             accessUrl: { type: string, format: uri, nullable: true }
             welcomeEmailSentAt: { type: string, format: date-time, nullable: true }
+            deliveryFailureCount: { type: integer }
+            passRequests:
+              { type: array, items: { $ref: "#/components/schemas/SponsorPassRequest" } }
             contacts: { type: array, items: { $ref: "#/components/schemas/SponsorContact" } }
             codes: { type: array, items: { $ref: "#/components/schemas/SponsorCode" } }
             staff: { type: array, items: { $ref: "#/components/schemas/SponsorStaff" } }
@@ -2883,6 +3027,7 @@ components:
       description: Sponsor-facing projection. Guest emails, phones, payments and revenue are never included.
       properties:
         sponsor: { $ref: "#/components/schemas/SponsorSummary" }
+        passRequests: { type: array, items: { $ref: "#/components/schemas/SponsorPassRequest" } }
         contacts: { type: array, items: { $ref: "#/components/schemas/SponsorContact" } }
         codes: { type: array, items: { $ref: "#/components/schemas/SponsorCode" } }
         staff: { type: array, items: { $ref: "#/components/schemas/SponsorStaff" } }
@@ -2898,6 +3043,18 @@ components:
           required: [vip, public]
       required:
         [sponsor, contacts, codes, staff, tasks, sessions, assets, documents, invitationCopy]
+
+    SponsorPassRequest:
+      type: object
+      properties:
+        id: { type: integer }
+        requestedVip: { type: integer, minimum: 0 }
+        requestedStaff: { type: integer, minimum: 0 }
+        message: { type: string, nullable: true }
+        status: { type: string, enum: [open, resolved, declined] }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+      required: [id, requestedVip, requestedStaff, status, createdAt]
 
     ScannerActivation:
       type: object
@@ -3033,7 +3190,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        status: { type: string, enum: [accepted, duplicate, rejected] }
+        status: { type: string, enum: [accepted, duplicate, rejected, deferred] }
         reason: { type: string }
       required: [id, status]
 
@@ -3043,7 +3200,20 @@ components:
         scans: { type: array, items: { $ref: "#/components/schemas/ScannerSyncItemResult" } }
         annotations: { type: array, items: { $ref: "#/components/schemas/ScannerSyncItemResult" } }
         syncedAt: { type: string, format: date-time }
+        leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
       required: [scans, annotations, syncedAt]
+
+    ScannerLookupAttendee:
+      type: object
+      properties:
+        attendeeId: { type: integer }
+        name: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        jobTitle: { type: string }
+        company: { type: string }
+        workEmail: { type: string }
+      required: [attendeeId, name, firstName, lastName, jobTitle, company, workEmail]
 
     LeadAnnotationInput:
       type: object

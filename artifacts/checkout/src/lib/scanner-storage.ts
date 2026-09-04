@@ -7,6 +7,8 @@ import type {
   ScannerCredential,
   ScannerOfflinePackDownload,
   StoredOfflinePack,
+  SponsorLead,
+  ScannerBootstrap,
 } from "@/types/lead-scanner";
 
 interface OfflineReadinessMarker {
@@ -17,6 +19,7 @@ interface OfflineReadinessMarker {
 }
 
 interface ScannerDatabase extends DBSchema {
+  leads: { key: string; value: { key: string; scope: string; lead: SponsorLead } };
   config: {
     key: string;
     value: ScannerCredential | OfflineReadinessMarker | { key: string; value: string };
@@ -43,21 +46,75 @@ interface ScannerDatabase extends DBSchema {
 }
 
 let databasePromise: Promise<IDBPDatabase<ScannerDatabase>> | null = null;
+export const scannerScope = (credential: Pick<ScannerCredential, "id" | "sponsorId">) =>
+  `swp-2027:${credential.sponsorId}:${credential.id}`;
+function changed() {
+  window.dispatchEvent(new Event("swp:scanner-data"));
+}
 
 function database(): Promise<IDBPDatabase<ScannerDatabase>> {
   if (!databasePromise) {
-    databasePromise = openDB<ScannerDatabase>("swp-sponsor-scanner", 1, {
-      upgrade(db) {
-        db.createObjectStore("config");
-        db.createObjectStore("packs", { keyPath: "key" });
-        const scans = db.createObjectStore("pendingScans", { keyPath: "id" });
-        scans.createIndex("by-captured-at", "capturedAt");
-        const annotations = db.createObjectStore("pendingAnnotations", { keyPath: "id" });
-        annotations.createIndex("by-created-at", "createdAt");
-        annotations.createIndex("by-scan-id", "scanId");
-        const rejected = db.createObjectStore("rejectedItems", { keyPath: "id" });
-        rejected.createIndex("by-rejected-at", "rejectedAt");
-      },
+    databasePromise = new Promise<IDBPDatabase<ScannerDatabase>>((resolve, reject) => {
+      let blocked = false;
+      let connection: IDBPDatabase<ScannerDatabase> | null = null;
+      void openDB<ScannerDatabase>("swp-sponsor-scanner", 2, {
+        blocked() {
+          blocked = true;
+          reject(
+            new Error(
+              "Close any other open scanner tabs, then reload this page. Your saved leads have not been removed.",
+            ),
+          );
+        },
+        blocking() {
+          connection?.close();
+          databasePromise = null;
+        },
+        terminated() {
+          databasePromise = null;
+        },
+        upgrade(db, oldVersion, _newVersion, tx) {
+          if (oldVersion < 1) {
+            db.createObjectStore("config");
+            db.createObjectStore("packs", { keyPath: "key" });
+            const scans = db.createObjectStore("pendingScans", { keyPath: "id" });
+            scans.createIndex("by-captured-at", "capturedAt");
+            const annotations = db.createObjectStore("pendingAnnotations", { keyPath: "id" });
+            annotations.createIndex("by-created-at", "createdAt");
+            annotations.createIndex("by-scan-id", "scanId");
+            const rejected = db.createObjectStore("rejectedItems", { keyPath: "id" });
+            rejected.createIndex("by-rejected-at", "rejectedAt");
+          }
+          if (oldVersion < 2) {
+            db.createObjectStore("leads", { keyPath: "key" });
+            // Legacy queues keep their original owner. Unknown ownership is never guessed.
+            void (async () => {
+              const saved = await tx.objectStore("config").get("device");
+              if (!saved || !("token" in saved)) return;
+              const scope = scannerScope(saved);
+              for (const name of ["pendingScans", "pendingAnnotations", "rejectedItems"] as const) {
+                let cursor = await tx.objectStore(name).openCursor();
+                while (cursor) {
+                  await cursor.update({ ...cursor.value, scope });
+                  cursor = await cursor.continue();
+                }
+              }
+              const pack = await tx.objectStore("packs").get("current");
+              if (pack) await tx.objectStore("packs").put({ ...pack, key: scope });
+            })().catch(() => tx.abort());
+          }
+        },
+      }).then((db) => {
+        if (blocked) {
+          db.close();
+          return;
+        }
+        connection = db;
+        resolve(db);
+      }, reject);
+    }).catch((error: unknown) => {
+      databasePromise = null;
+      throw error;
     });
   }
   return databasePromise;
@@ -82,38 +139,65 @@ export async function getScannerCredential(): Promise<ScannerCredential | null> 
 }
 
 export async function saveScannerCredential(credential: ScannerCredential): Promise<void> {
-  await (await database()).put("config", credential, "device");
+  const tx = (await database()).transaction("config", "readwrite");
+  await tx.store.put(credential, "device");
+  await tx.store.put(credential, `credential:${scannerScope(credential)}`);
+  await tx.done;
+  changed();
 }
 
 export async function clearScannerCredential(): Promise<void> {
-  const db = await database();
-  const tx = db.transaction(
-    ["config", "packs", "pendingScans", "pendingAnnotations", "rejectedItems"],
-    "readwrite",
-  );
-  await Promise.all([
-    tx.objectStore("config").clear(),
-    tx.objectStore("packs").clear(),
-    tx.objectStore("pendingScans").clear(),
-    tx.objectStore("pendingAnnotations").clear(),
-    tx.objectStore("rejectedItems").clear(),
-    tx.done,
-  ]);
+  // Disconnecting is not deletion. A matching renewed link reopens the original queue.
+  await (await database()).delete("config", "device");
+  changed();
 }
+
+async function owner(credential?: ScannerCredential): Promise<ScannerCredential> {
+  const saved = credential ?? (await getScannerCredential());
+  if (!saved)
+    throw new Error("Open your scanner link to continue. Your saved work has not been removed.");
+  return saved;
+}
+export async function readScannerValue<T>(
+  key: string,
+  credential?: ScannerCredential,
+): Promise<T | null> {
+  const scope = scannerScope(await owner(credential));
+  const value = await (await database()).get("config", `${scope}:${key}`);
+  if (!value || !("value" in value)) return null;
+  try {
+    return JSON.parse(value.value) as T;
+  } catch {
+    return null;
+  }
+}
+export async function writeScannerValue(
+  key: string,
+  value: unknown,
+  credential?: ScannerCredential,
+): Promise<void> {
+  const scope = scannerScope(await owner(credential));
+  await (await database()).put("config", { key, value: JSON.stringify(value) }, `${scope}:${key}`);
+}
+export const cachedScannerBootstrap = () => readScannerValue<ScannerBootstrap>("bootstrap");
 
 export async function storeOfflinePack(
   pack: ScannerOfflinePackDownload,
+  credential?: ScannerCredential,
 ): Promise<StoredOfflinePack> {
   const stored: StoredOfflinePack = {
     ...pack,
-    key: "current",
+    key: scannerScope(await owner(credential)),
   };
   await (await database()).put("packs", stored);
   return stored;
 }
 
-export async function getOfflinePack(): Promise<StoredOfflinePack | null> {
-  return (await (await database()).get("packs", "current")) ?? null;
+export async function getOfflinePack(
+  credential?: ScannerCredential,
+): Promise<StoredOfflinePack | null> {
+  const saved = credential ?? (await getScannerCredential());
+  return saved ? ((await (await database()).get("packs", scannerScope(saved))) ?? null) : null;
 }
 
 export function normaliseScannedValue(value: string): string | null {
@@ -169,10 +253,11 @@ export async function decryptPackAttendee(code: string): Promise<LeadPackAttende
 }
 
 export async function queueScan(
-  input: Omit<PendingScan, "id" | "capturedAt">,
+  input: Omit<PendingScan, "id" | "capturedAt" | "scope">,
 ): Promise<PendingScan> {
   const scan: PendingScan = {
     ...input,
+    scope: scannerScope(await owner()),
     id: crypto.randomUUID(),
     capturedAt: new Date().toISOString(),
   };
@@ -180,6 +265,7 @@ export async function queueScan(
   const tx = db.transaction("pendingScans", "readwrite");
   await tx.store.add(scan);
   await tx.done;
+  changed();
   return scan;
 }
 
@@ -192,6 +278,7 @@ export async function queueAnnotation(input: {
   const rating = input.rating ?? null;
   if (!note && rating === null) return null;
   const annotation: PendingAnnotation = {
+    scope: scannerScope(await owner()),
     id: crypto.randomUUID(),
     scanId: input.scanId,
     note,
@@ -202,10 +289,11 @@ export async function queueAnnotation(input: {
   const tx = db.transaction("pendingAnnotations", "readwrite");
   await tx.store.add(annotation);
   await tx.done;
+  changed();
   return annotation;
 }
 
-export async function pendingScannerItems(): Promise<{
+export async function pendingScannerItems(credential?: ScannerCredential): Promise<{
   scans: PendingScan[];
   annotations: PendingAnnotation[];
 }> {
@@ -214,46 +302,69 @@ export async function pendingScannerItems(): Promise<{
     db.getAllFromIndex("pendingScans", "by-captured-at"),
     db.getAllFromIndex("pendingAnnotations", "by-created-at"),
   ]);
-  return { scans, annotations };
+  const saved = credential ?? (await getScannerCredential());
+  if (!saved) return { scans: [], annotations: [] };
+  const scope = scannerScope(saved);
+  return {
+    scans: scans.filter((item) => item.scope === scope),
+    annotations: annotations.filter((item) => item.scope === scope),
+  };
 }
 
 export async function pendingScannerCount(): Promise<number> {
-  const db = await database();
-  const [scans, annotations] = await Promise.all([
-    db.count("pendingScans"),
-    db.count("pendingAnnotations"),
-  ]);
-  return scans + annotations;
+  const pending = await pendingScannerItems();
+  return pending.scans.length + pending.annotations.length;
 }
 
 export async function applySyncResults(input: {
+  credential?: ScannerCredential;
+  leads?: SponsorLead[];
+  sentAnnotations?: PendingAnnotation[];
   scanResults: Array<{ id: string; status: string; reason?: string }>;
   annotationResults: Array<{ id: string; status: string; reason?: string }>;
 }): Promise<void> {
   const db = await database();
-  const tx = db.transaction(["pendingScans", "pendingAnnotations", "rejectedItems"], "readwrite");
+  const credential = await owner(input.credential),
+    scope = scannerScope(credential);
+  const tx = db.transaction(
+    ["pendingScans", "pendingAnnotations", "rejectedItems", "leads"],
+    "readwrite",
+  );
+  // Cache and acknowledgement commit together, so accepted scans cannot disappear.
+  for (const lead of input.leads ?? []) {
+    if (lead.sponsorId === credential.sponsorId)
+      await tx.objectStore("leads").put({ key: `${scope}:${lead.id}`, scope, lead });
+  }
   for (const result of input.scanResults) {
     if (!["accepted", "duplicate", "rejected"].includes(result.status)) continue;
     const payload = await tx.objectStore("pendingScans").get(result.id);
-    if (!payload) continue;
+    if (!payload || payload.scope !== scope) continue;
     if (result.status === "rejected") {
       await tx.objectStore("rejectedItems").put({
         id: `scan:${result.id}`,
+        scope,
         kind: "scan",
         reason: result.reason ?? "The server rejected this scan",
         rejectedAt: new Date().toISOString(),
         payload,
       });
     }
-    await tx.objectStore("pendingScans").delete(result.id);
+    const known = (input.leads ?? []).some((lead) =>
+      lead.scans.some((scan) => scan.id === payload.id),
+    );
+    if (result.status === "rejected" || known || payload.code === "FFFFFFFFFFFF")
+      await tx.objectStore("pendingScans").delete(result.id);
   }
   for (const result of input.annotationResults) {
     if (!["accepted", "duplicate", "rejected"].includes(result.status)) continue;
     const payload = await tx.objectStore("pendingAnnotations").get(result.id);
-    if (!payload) continue;
+    if (!payload || payload.scope !== scope) continue;
+    const sent = input.sentAnnotations?.find((item) => item.id === result.id);
+    if (sent && sent.createdAt !== payload.createdAt) continue;
     if (result.status === "rejected") {
       await tx.objectStore("rejectedItems").put({
         id: `annotation:${result.id}`,
+        scope,
         kind: "annotation",
         reason: result.reason ?? "The server rejected this rating or note",
         rejectedAt: new Date().toISOString(),
@@ -263,10 +374,72 @@ export async function applySyncResults(input: {
     await tx.objectStore("pendingAnnotations").delete(result.id);
   }
   await tx.done;
+  changed();
 }
 
 export async function rejectedScannerItems(): Promise<RejectedSyncItem[]> {
-  return (await database()).getAllFromIndex("rejectedItems", "by-rejected-at");
+  const saved = await getScannerCredential();
+  if (!saved) return [];
+  return (await (await database()).getAllFromIndex("rejectedItems", "by-rejected-at")).filter(
+    (item) => item.scope === scannerScope(saved),
+  );
+}
+
+export async function cachedScannerLeads(credential?: ScannerCredential): Promise<SponsorLead[]> {
+  const saved = credential ?? (await getScannerCredential());
+  if (!saved) return [];
+  return (await (await database()).getAll("leads"))
+    .filter((item) => item.scope === scannerScope(saved))
+    .map((item) => item.lead);
+}
+export async function cacheScannerLeads(
+  leads: SponsorLead[],
+  credential: ScannerCredential,
+): Promise<void> {
+  await applySyncResults({ credential, leads, scanResults: [], annotationResults: [] });
+}
+export async function saveLeadDraft(
+  scanId: string,
+  note: string,
+  rating: number | null,
+  credential: ScannerCredential,
+): Promise<PendingAnnotation> {
+  const key = `${scannerScope(credential)}:note:${scanId}`;
+  const tx = (await database()).transaction(["config", "pendingAnnotations"], "readwrite");
+  const previous = await tx.objectStore("config").get(key);
+  const draft =
+    previous && "value" in previous ? (JSON.parse(previous.value) as PendingAnnotation) : null;
+  const annotation: PendingAnnotation = {
+    id: draft?.id ?? crypto.randomUUID(),
+    scope: scannerScope(credential),
+    scanId,
+    note: note.slice(0, 4000),
+    rating,
+    createdAt: new Date(
+      Math.max(Date.now(), (Date.parse(draft?.createdAt ?? "") || 0) + 1),
+    ).toISOString(),
+  };
+  await tx.objectStore("config").put({ key, value: JSON.stringify(annotation) }, key);
+  await tx.objectStore("pendingAnnotations").put(annotation);
+  await tx.done;
+  changed();
+  return annotation;
+}
+export const getLeadDraft = (scanId: string, credential?: ScannerCredential) =>
+  readScannerValue<PendingAnnotation>(`note:${scanId}`, credential);
+export async function retryRejectedScans(): Promise<void> {
+  const items = await rejectedScannerItems();
+  const tx = (await database()).transaction(
+    ["rejectedItems", "pendingScans", "pendingAnnotations"],
+    "readwrite",
+  );
+  for (const item of items) {
+    if (item.kind === "scan") await tx.objectStore("pendingScans").put(item.payload as PendingScan);
+    else await tx.objectStore("pendingAnnotations").put(item.payload as PendingAnnotation);
+    await tx.objectStore("rejectedItems").delete(item.id);
+  }
+  await tx.done;
+  changed();
 }
 
 export async function verifyOfflineStorage(): Promise<boolean> {
@@ -309,26 +482,26 @@ export async function armOfflineReloadTest(): Promise<void> {
     stage: "armed",
     armedAt: new Date().toISOString(),
   };
-  await (await database()).put("config", marker, marker.key);
+  await writeScannerValue(marker.key, marker);
 }
 
 export async function observeOfflineReloadTest(
   isOffline: boolean,
 ): Promise<"none" | "armed" | "observed"> {
-  const db = await database();
-  const value = await db.get("config", "offline-readiness");
-  if (!value || !("stage" in value)) return "none";
+  if (!(await getScannerCredential())) return "none";
+  const value = await readScannerValue<OfflineReadinessMarker>("offline-readiness");
+  if (!value) return "none";
   if (value.stage === "armed" && isOffline) {
-    await db.put(
-      "config",
-      { ...value, stage: "observed", observedAt: new Date().toISOString() },
-      "offline-readiness",
-    );
+    await writeScannerValue("offline-readiness", {
+      ...value,
+      stage: "observed",
+      observedAt: new Date().toISOString(),
+    });
     return "observed";
   }
   return value.stage;
 }
 
 export async function clearOfflineReloadTest(): Promise<void> {
-  await (await database()).delete("config", "offline-readiness");
+  await writeScannerValue("offline-readiness", null);
 }

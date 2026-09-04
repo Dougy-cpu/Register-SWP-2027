@@ -23,8 +23,24 @@ export async function sponsorFetch(path: string, init: RequestInit = {}): Promis
 }
 
 export async function sponsorJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await sponsorFetch(path, init);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? "The request could not be completed");
-  return body as T;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await sponsorFetch(path, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error ?? "The request could not be completed");
+    return body as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError")
+      throw new Error(
+        "The connection is slow. Your changes remain on this device; please try again.",
+        { cause: error },
+      );
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }

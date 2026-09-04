@@ -95,7 +95,7 @@ export default function SponsorPortal() {
     if (
       signingOut ||
       !window.confirm(
-        "Sign out of your sponsor workspace? Save any unfinished edits first. Local session drafts will be cleared.",
+        "Sign out of your sponsor workspace? Session drafts stay on this device for next time. If a draft has not finished syncing, reopen this workspace on the same device to recover it.",
       )
     )
       return;
@@ -394,7 +394,10 @@ export default function SponsorPortal() {
               <QrCode className="h-4 w-4" />
               Scan badges
             </Link>
-            <Link href="/sponsor/leads" className="inline-flex min-h-11 items-center text-primary">
+            <Link
+              href="/sponsor/leads?organiser=1"
+              className="inline-flex min-h-11 items-center text-primary"
+            >
               View leads
             </Link>
           </footer>

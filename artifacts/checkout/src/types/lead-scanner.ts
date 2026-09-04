@@ -67,18 +67,20 @@ export interface LeadPackAttendee {
 }
 
 export interface StoredOfflinePack extends ScannerOfflinePackDownload {
-  key: "current";
+  key: string;
 }
 
 export interface PendingScan {
+  scope?: string;
   id: string;
   code: string;
   source: ScanSource;
   capturedAt: string;
-  attendee: LeadPackAttendee;
+  attendee: LeadPackAttendee | null;
 }
 
 export interface PendingAnnotation {
+  scope?: string;
   id: string;
   scanId: string;
   note: string | null;
@@ -87,6 +89,7 @@ export interface PendingAnnotation {
 }
 
 export interface RejectedSyncItem {
+  scope?: string;
   id: string;
   kind: "scan" | "annotation";
   reason: string;
@@ -110,6 +113,7 @@ export interface SponsorLeadNote {
 }
 
 export interface SponsorLead {
+  localStatus?: "pending" | "checking" | "rejected";
   id: string;
   sponsorId: number;
   sponsorCompany: string;

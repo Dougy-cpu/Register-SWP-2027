@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import AdminLayout from "@/components/layout/AdminLayout";
+import { SponsorRequests } from "./sponsor-requests";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -327,7 +328,11 @@ export default function AdminSponsorDetail() {
     try {
       await adminJson(`/api/admin/sponsors/${sponsorId}/sessions/${session.id}/review`, {
         method: "PATCH",
-        body: JSON.stringify({ status, feedback: feedback || null }),
+        body: JSON.stringify({
+          status,
+          feedback: feedback || null,
+          expectedRevision: session.currentRevision,
+        }),
       });
       flash(status === "approved" ? "Session approved" : "Changes requested");
       await load();
@@ -570,14 +575,25 @@ export default function AdminSponsorDetail() {
           </Card>
         </div>
 
-        <Tabs defaultValue="overview">
+        <Tabs
+          defaultValue={new URLSearchParams(window.location.search).get("section") || "overview"}
+        >
           <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="people">People</TabsTrigger>
+            <TabsTrigger value="requests">
+              Requests
+              {workspace.passRequests?.filter((request) => request.status === "open").length
+                ? ` (${workspace.passRequests.filter((request) => request.status === "open").length})`
+                : ""}
+            </TabsTrigger>
             <TabsTrigger value="sessions">Sessions</TabsTrigger>
             <TabsTrigger value="assets">Assets</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
+          <TabsContent value="requests" className="space-y-6 mt-6">
+            <SponsorRequests workspace={workspace} onRefresh={load} />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             <div className="grid xl:grid-cols-2 gap-6">
