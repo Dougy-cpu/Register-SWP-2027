@@ -81,7 +81,14 @@ function scannerErrorMessage(caught: unknown): string {
 }
 
 function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
-  return Boolean(pack && (!pack.expiresAt || Date.now() <= new Date(pack.expiresAt).getTime()));
+  return Boolean(
+    pack &&
+    pack.format === 1 &&
+    typeof pack.version === "string" &&
+    typeof pack.keyContext === "string" &&
+    Array.isArray(pack.records) &&
+    (!pack.expiresAt || Date.now() <= new Date(pack.expiresAt).getTime()),
+  );
 }
 
 export default function SponsorScanner() {
@@ -173,6 +180,14 @@ export default function SponsorScanner() {
     setError("");
     try {
       const downloaded = await downloadOfflinePack();
+      if (
+        downloaded?.format !== 1 ||
+        typeof downloaded.version !== "string" ||
+        typeof downloaded.keyContext !== "string" ||
+        !Array.isArray(downloaded.records)
+      ) {
+        throw new TypeError("Network request failed");
+      }
       const stored = await storeOfflinePack(downloaded);
       setPack(stored);
       const storageOk = await verifyOfflineStorage();
