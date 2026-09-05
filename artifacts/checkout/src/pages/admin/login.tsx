@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAdminLogin } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import logoUrl from "@assets/logo.webp";
+import logoUrl from "@assets/swp-summit-logo.png";
 
 export default function AdminLogin() {
   const [, setLocation] = useLocation();
@@ -29,7 +29,7 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center bg-muted/50 p-4">
       <div className="w-full max-w-md bg-white p-8 border border-border shadow-xl">
         <div className="flex justify-center mb-8">
-          <img src={logoUrl} alt="Logo" className="h-10" />
+          <img src={logoUrl} alt="SWP Summit" className="h-20 w-20 object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-center mb-6">Admin Panel</h1>
 
