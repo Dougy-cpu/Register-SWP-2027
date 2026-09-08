@@ -22,6 +22,12 @@ import { reissueBookingInvoice, applyReissueInvoiceResultTx } from "../lib/invoi
 import { claimBookingConfirmation, runConfirmationSideEffects } from "../lib/booking-confirmation";
 import { defaultOrderRef } from "../lib/order-reference";
 import { getStripe } from "../lib/stripe-client";
+import {
+  STRIPE_REGISTRATION_APP,
+  checkoutSessionBookingId,
+  validateCheckoutSessionOwnership,
+  validateCompletedCheckoutSession,
+} from "../lib/stripe-checkout-validation";
 
 const DECLINE_CODE_LABELS: Record<string, string> = {
   authentication_required: "Strong customer authentication required - please retry your payment",
@@ -245,7 +251,8 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
-        bookingId: String(bookingId),
+        bookingId: String(booking.id),
+        registrationApp: STRIPE_REGISTRATION_APP,
       },
       customer_email: booking.billingEmail || undefined,
     });
@@ -297,9 +304,11 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    const bookingId = parseInt(session.metadata?.bookingId || "0", 10);
+    const bookingId = checkoutSessionBookingId(session);
 
-    if (bookingId) {
+    if (!bookingId) {
+      logger.warn({ sessionId: session.id }, "Stripe checkout event has an invalid booking ID");
+    } else {
       const [existing] = await db
         .select()
         .from(bookingsTable)
@@ -311,6 +320,23 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
         return;
       }
 
+      const validation = validateCompletedCheckoutSession(session, existing);
+      if (!validation.ok) {
+        logger.warn(
+          { bookingId, sessionId: session.id, reason: validation.reason },
+          "Ignoring Stripe checkout event that does not match this booking",
+        );
+        res.json({ received: true });
+        return;
+      }
+
+      if (validation.legacyMetadata) {
+        logger.info(
+          { bookingId, sessionId: session.id },
+          "Accepting legacy checkout session after exact Session ID validation",
+        );
+      }
+
       const orderRef = existing.orderReference || defaultOrderRef(bookingId);
 
       // Atomic claim: only the first webhook delivery (or the racing
@@ -318,7 +344,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
       // duplicate events get back null and skip straight to side-effect retry.
       const claimed = await claimBookingConfirmation(bookingId, "paid", {
         currentStep: 5,
-        stripePaymentIntentId: session.payment_intent as string,
+        stripePaymentIntentId: validation.paymentIntentId,
         orderReference: orderRef,
         paymentMethod: "card",
       });
@@ -411,13 +437,25 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
   // the customer can retry, and email them to let them know.
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
-    const bookingId = parseInt(session.metadata?.bookingId || "0", 10);
+    const bookingId = checkoutSessionBookingId(session);
 
     if (bookingId) {
       const [booking] = await db
         .select()
         .from(bookingsTable)
         .where(eq(bookingsTable.id, bookingId));
+
+      if (booking) {
+        const validation = validateCheckoutSessionOwnership(session, booking);
+        if (!validation.ok) {
+          logger.warn(
+            { bookingId, sessionId: session.id, reason: validation.reason },
+            "Ignoring expired Stripe checkout event that does not match this booking",
+          );
+          res.json({ received: true });
+          return;
+        }
+      }
 
       if (booking && booking.status === "pending_payment") {
         await db
