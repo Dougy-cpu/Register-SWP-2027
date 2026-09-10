@@ -13,7 +13,6 @@ import {
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
-  WifiOff,
   X,
 } from "lucide-react";
 import logoUrl from "@assets/swp-summit-logo.png";
@@ -26,6 +25,17 @@ import { useBadgeCamera } from "@/hooks/use-badge-camera";
 import { useBadgePhoto } from "@/hooks/use-badge-photo";
 import { BadgeCameraView } from "@/components/badge-camera-view";
 import { PhoneScannerLink } from "@/components/phone-scanner-link";
+import { LeadNotes } from "@/components/scanner-lead-notes";
+import { ScannerRecoveryTools } from "@/components/scanner-recovery-tools";
+import { ScannerSaveStatus } from "@/components/scanner-save-status";
+import { useScannerSummary } from "@/hooks/use-scanner-summary";
+import { useScannerAwake } from "@/hooks/use-scanner-awake";
+import { mergeScannerLeads } from "@/lib/scanner-leads";
+import { applyScannerUpdate, checkScannerUpdate, scannerUpdateState } from "@/lib/scanner-updates";
+import { scannerRetryDue } from "@/lib/scanner-connection";
+import { SCANNER_RELEASE } from "@/lib/scanner-release";
+import { ScannerStorageError } from "@/lib/scanner-storage-guard";
+import { prepareScannerDecoder } from "@/lib/scanner-decoder";
 import { isScannerPhone } from "@/lib/scanner-device";
 import {
   activateScanner,
@@ -36,7 +46,6 @@ import {
   updateReadiness,
   recoverScanner,
   importScannerLink,
-  lookupScannerBadge,
 } from "@/lib/scanner-api";
 import {
   armOfflineReloadTest,
@@ -59,6 +68,8 @@ import {
   cachedScannerLeads,
   pendingScannerItems,
   retryRejectedScans,
+  prepareScannerStorage,
+  offlineReadinessAcknowledged,
 } from "@/lib/scanner-storage";
 import type {
   PendingAnnotation,
@@ -142,11 +153,16 @@ function PhoneSponsorScanner() {
     async () => undefined,
   );
   const [credential, setCredential] = useState<ScannerCredential | null>(null);
+  const summary = useScannerSummary(credential);
+  const [lastSaved, setLastSaved] = useState<PendingScan | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
+  const [release, setRelease] = useState(scannerUpdateState);
+  const [updating, setUpdating] = useState(false);
   const [operatorName, setOperatorName] = useState("");
   const [bootstrap, setBootstrap] = useState<ScannerBootstrap | null>(null);
   const [pack, setPack] = useState<StoredOfflinePack | null>(null);
   const [initialising, setInitialising] = useState(true);
-  const [online, setOnline] = useState(navigator.onLine);
   const [activating, setActivating] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -171,6 +187,7 @@ function PhoneSponsorScanner() {
   );
   const photo = useBadgePhoto((value) => handleDecodedRef.current(value, "image"), setError);
   const { stop: stopOwnedCamera, isSessionActive, session: cameraSession } = camera;
+  useScannerAwake(camera.phase === "active");
   const stopCamera = useCallback(() => {
     scanEpoch.current++;
     stopOwnedCamera();
@@ -184,6 +201,35 @@ function PhoneSponsorScanner() {
     setPendingCount(pending);
     setRecoveryItems(rejected);
   }, []);
+
+  useEffect(() => {
+    if (!credential) return;
+    let active = true;
+    try {
+      prepareScannerDecoder();
+    } catch {
+      /* Camera/photo controls report decoder failures. */
+    }
+    void verifyOfflineStorage()
+      .then((ok) => {
+        if (active) setStorageReady(ok);
+        if (!ok)
+          throw new Error(
+            "Phone storage could not save the check. Keep this page open and try again.",
+          );
+        void prepareScannerStorage().catch(() => undefined);
+      })
+      .catch((caught) => {
+        if (active) setError(scannerErrorMessage(caught));
+      });
+    const update = () => setRelease(scannerUpdateState());
+    window.addEventListener("swp:scanner-update", update);
+    void checkScannerUpdate();
+    return () => {
+      active = false;
+      window.removeEventListener("swp:scanner-update", update);
+    };
+  }, [credential]);
 
   const refreshBootstrap = useCallback(async () => {
     let state: ScannerBootstrap;
@@ -207,13 +253,9 @@ function PhoneSponsorScanner() {
 
   const syncNow = useCallback(
     async (quiet = false) => {
-      if (!navigator.onLine) {
-        if (!quiet) setNotice("No connection. Your leads remain saved on this phone.");
-        await refreshCounts();
-        return;
-      }
+      if (quiet && !scannerRetryDue()) return;
       try {
-        const result = await syncPendingScannerItems();
+        const result = await syncPendingScannerItems({ force: !quiet });
         await refreshCounts();
         if (result.rejected > 0) {
           setError(
@@ -221,7 +263,9 @@ function PhoneSponsorScanner() {
           );
         } else if (!quiet) {
           setNotice(
-            result.remaining ? "Your saved leads will finish syncing automatically." : "All saved.",
+            result.remaining
+              ? "Saved on this phone. We'll keep trying to back up waiting items."
+              : "All waiting items backed up.",
           );
         }
         await refreshBootstrap().catch(() => undefined);
@@ -252,12 +296,13 @@ function PhoneSponsorScanner() {
       const stored = await storeOfflinePack(downloaded, downloadingFor);
       setPack(stored);
       const storageOk = await verifyOfflineStorage();
+      setStorageReady(storageOk);
       await updateReadiness({
         packVersion: stored.version,
         storageTested: storageOk,
       });
       await refreshBootstrap();
-      setNotice("Scanner ready.");
+      setNotice("");
     } catch (caught) {
       const savedPack = await getOfflinePack().catch(() => null);
       if (offlinePackIsUsable(savedPack)) {
@@ -275,7 +320,9 @@ function PhoneSponsorScanner() {
   const finaliseObservedOfflineTest = useCallback(async () => {
     const stage = await observeOfflineReloadTest(!navigator.onLine);
     setOfflineTestStage(stage);
-    if (stage !== "observed" || !navigator.onLine) return false;
+    if (stage !== "observed") return false;
+    await syncPendingScannerItems({ force: true });
+    if (!(await offlineReadinessAcknowledged())) return false;
     await updateReadiness({ storageTested: true, offlineTested: true });
     await clearOfflineReloadTest();
     setOfflineTestStage("none");
@@ -284,10 +331,35 @@ function PhoneSponsorScanner() {
   }, []);
 
   useEffect(() => {
-    if (credential && bootstrap?.device?.outOfDate && navigator.onLine) {
-      void downloadAndStorePack();
-    }
-  }, [bootstrap?.device?.outOfDate, credential, downloadAndStorePack]);
+    if (!credential || accessError) return;
+    const prepare = () => {
+      const version = bootstrap?.device?.currentPackVersion;
+      if (
+        document.visibilityState === "visible" &&
+        scannerRetryDue() &&
+        (!offlinePackIsUsable(pack) ||
+          (version && pack?.version !== version) ||
+          bootstrap?.device?.outOfDate)
+      )
+        void downloadAndStorePack();
+    };
+    prepare();
+    const interval = window.setInterval(prepare, 30000);
+    window.addEventListener("online", prepare);
+    document.addEventListener("visibilitychange", prepare);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("online", prepare);
+      document.removeEventListener("visibilitychange", prepare);
+    };
+  }, [
+    accessError,
+    bootstrap?.device?.currentPackVersion,
+    bootstrap?.device?.outOfDate,
+    credential,
+    downloadAndStorePack,
+    pack,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,8 +367,13 @@ function PhoneSponsorScanner() {
       let localPack: StoredOfflinePack | null = null;
       try {
         const linkToken = new URLSearchParams(window.location.hash.slice(1)).get("activate");
-        if (linkToken) window.history.replaceState(null, "", window.location.pathname);
-        const saved = linkToken ? await importScannerLink(linkToken) : await getScannerCredential();
+        const existing = await getScannerCredential();
+        const saved =
+          linkToken && existing?.token !== linkToken
+            ? await importScannerLink(linkToken)
+            : existing;
+        if (linkToken)
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
         if (cancelled) return;
         setCredential(saved);
         localPack = await getOfflinePack();
@@ -351,27 +428,23 @@ function PhoneSponsorScanner() {
 
   useEffect(() => {
     const handleOnline = () => {
-      setOnline(true);
       void (async () => {
         await finaliseObservedOfflineTest().catch(() => undefined);
         await syncNow(true);
       })();
     };
-    const handleOffline = () => setOnline(false);
     const handleVisibility = () => {
-      if (document.visibilityState === "visible" && navigator.onLine) void syncNow(true);
+      if (document.visibilityState === "visible") void syncNow(true);
     };
     const handleUpdate = () => setUpdateWaiting(true);
     window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("swp:update-ready", handleUpdate);
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) void syncNow(true);
+      if (document.visibilityState === "visible") void syncNow(true);
     }, 15_000);
     return () => {
       window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("swp:update-ready", handleUpdate);
       window.clearInterval(interval);
@@ -478,19 +551,11 @@ function PhoneSponsorScanner() {
               : "The organiser must configure the event end time before scanning can begin",
           );
         }
-        let attendee = await decryptPackAttendee(code, credential);
-        if (!current()) return;
-        if (!attendee) {
-          if (navigator.onLine) {
-            try {
-              attendee = await lookupScannerBadge(code, credential);
-            } catch (caught) {
-              if (caught instanceof ScannerApiError && [400, 401, 403, 404].includes(caught.status))
-                throw caught;
-              // A slow/offline lookup is recoverable; the server will check the original scan later.
-            }
-          }
-        }
+        const attendee = await decryptPackAttendee(code, credential).catch((caught) => {
+          if (caught instanceof ScannerStorageError) throw caught;
+          // A damaged pack entry must not lose a valid captured badge reference.
+          return null;
+        });
         if (!current()) return;
         const [pending, confirmed] = await Promise.all([
           pendingScannerItems(credential),
@@ -505,15 +570,17 @@ function PhoneSponsorScanner() {
           showScanConfirmation("Already added");
           return;
         }
-        // Pin ownership through asynchronous lookup/storage. A changed scanner
+        // Pin ownership through local decoding/storage. A changed scanner
         // link must never move an in-flight scan into another sponsor's queue.
-        await queueScan({ code, source, attendee }, credential);
+        const saved = await queueScan({ code, source, attendee }, credential);
         if (!current()) return;
+        setLastSaved(saved);
+        setShowNotes(false);
         recentScansRef.current.set(code, Date.now());
-        showScanConfirmation(attendee ? "Added to leads" : "Saved for checking");
+        showScanConfirmation(attendee ? "Saved on this phone" : "Saved for checking");
         navigator.vibrate?.(50);
-        await refreshCounts();
-        if (navigator.onLine) void syncNow(true);
+        void refreshCounts().catch(() => undefined);
+        void syncNow(true);
       } catch (caught) {
         if (current()) {
           lastDecodeRef.current = { code: "", at: 0 };
@@ -685,6 +752,9 @@ function PhoneSponsorScanner() {
             <p className="text-sm text-muted-foreground mt-3">
               Enter your name once. We’ll take care of setup and saving.
             </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Connect to the internet for this first setup. After that, you can scan without Wi-Fi.
+            </p>
           </div>
           {error && <ErrorBanner message={error} onClose={() => setError("")} />}
           <Label htmlFor="operator-name">Your name</Label>
@@ -718,6 +788,11 @@ function PhoneSponsorScanner() {
   const diagnosticsEnabled =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("diagnostics") === "1";
+  const lastLead =
+    lastSaved && credential
+      ? (summary.leads.find((lead) => lead.scans.some((scan) => scan.id === lastSaved.id)) ??
+        mergeScannerLeads([], [lastSaved], [], [], credential)[0])
+      : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -725,10 +800,10 @@ function PhoneSponsorScanner() {
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <button
             onClick={() => navigate("/sponsor/leads")}
-            className="flex items-center gap-3 text-left"
+            className="flex min-w-0 items-center gap-3 text-left"
           >
             <ArrowLeft className="h-5 w-5" />
-            <div>
+            <div className="min-w-0">
               <p className="font-semibold leading-tight">Scan · Leads</p>
               <p className="text-xs text-slate-400 truncate max-w-44 sm:max-w-none">
                 {credential.sponsorCompany} · {credential.operatorName}
@@ -738,27 +813,27 @@ function PhoneSponsorScanner() {
           <Button variant="secondary" onClick={() => navigate("/sponsor/leads")}>
             Leads
           </Button>
-          {(rejectedCount > 0 || !online) && (
-            <div
-              className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
-                rejectedCount
-                  ? "bg-rose-500/20 text-rose-200 border border-rose-400/40"
-                  : "bg-white/10 text-slate-200 border border-white/15"
-              }`}
-              aria-live="polite"
-            >
-              {rejectedCount ? (
-                <TriangleAlert className="h-3.5 w-3.5" />
-              ) : (
-                <WifiOff className="h-3.5 w-3.5" />
-              )}
-              {rejectedCount ? "Help needed" : "Working offline"}
-            </div>
-          )}
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+        <ScannerSaveStatus summary={summary} dark />
+        {!storageReady && !error && (
+          <p role="status" className="text-sm text-slate-200">
+            Preparing saving on this phone…
+          </p>
+        )}
+        {storageReady && (
+          <p className="text-sm text-slate-200">
+            {offlineUsable && release.offlineReady
+              ? "Ready to scan, even without Wi-Fi."
+              : offlineUsable
+                ? "Ready to scan. Keep this page open while offline setup finishes."
+                : preparing
+                  ? "Ready to scan. Downloading badge details in the background…"
+                  : "Ready to scan. Badge details will be checked when connected."}
+          </p>
+        )}
         {accessError && (
           <div role="alert" className="rounded-xl bg-amber-50 text-amber-950 p-4 space-y-3">
             <p>
@@ -879,6 +954,28 @@ function PhoneSponsorScanner() {
           disabled={Boolean(accessError) || (!offlineUsable && preparing)}
         />
 
+        {lastLead && credential && (
+          <Card className="overflow-hidden bg-white text-slate-950">
+            <div className="p-4">
+              <p className="text-sm text-slate-600">Last badge saved</p>
+              <h2 className="mt-1 text-lg font-bold">{lastLead.name}</h2>
+              {lastLead.company && <p className="text-sm text-slate-600">{lastLead.company}</p>}
+              <Button
+                className="mt-3 min-h-11"
+                variant="outline"
+                onClick={() => {
+                  stopCamera();
+                  setShowNotes((value) => !value);
+                }}
+                aria-expanded={showNotes}
+              >
+                {showNotes ? "Close notes" : "Add a note or rating"}
+              </Button>
+            </div>
+            {showNotes && <LeadNotes key={lastSaved?.id} lead={lastLead} credential={credential} />}
+          </Card>
+        )}
+
         <div>
           <input
             ref={imageInputRef}
@@ -934,18 +1031,77 @@ function PhoneSponsorScanner() {
             <div>
               <h2 className="font-bold">Scanner help</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                If a badge will not scan, refresh the scanner and try again.
+                If the camera stops, restart it or use Scan a badge photo. Your saved leads stay on
+                this phone.
               </p>
             </div>
             <Button
               variant="outline"
               className="w-full"
               onClick={() => void downloadAndStorePack()}
-              disabled={preparing || !navigator.onLine}
+              disabled={preparing}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${preparing ? "animate-spin" : ""}`} />
-              Refresh scanner
+              Refresh badge details
             </Button>
+            <Button variant="outline" className="w-full min-h-11" onClick={() => void syncNow()}>
+              Back up waiting items now
+            </Button>
+            <ScannerRecoveryTools credential={credential} />
+            <details className="border-t border-slate-200 text-sm pt-2">
+              <summary className="cursor-pointer min-h-11 py-3 font-semibold">
+                App information
+              </summary>
+              <p>Scanner version {SCANNER_RELEASE}</p>
+              <p className="mt-1">
+                {release.checked
+                  ? release.latest === release.running
+                    ? "You have the current version."
+                    : "A newer version is available."
+                  : "The version will be checked when connected."}
+              </p>
+              <p className="mt-1">
+                {offlineUsable
+                  ? "Badge details saved for offline use."
+                  : "Badge details will download when connected."}
+              </p>
+              <Button
+                variant="outline"
+                className="mt-3 min-h-11"
+                onClick={() => void checkScannerUpdate()}
+              >
+                Check for updates
+              </Button>
+              {(release.waiting || (release.latest && release.latest !== release.running)) && (
+                <>
+                  <p className="mt-3">
+                    Update between scanning sessions. Close other scanner tabs and let waiting work
+                    back up first.
+                  </p>
+                  <Button
+                    className="mt-2 min-h-11"
+                    disabled={
+                      updating ||
+                      camera.phase === "active" ||
+                      camera.phase === "starting" ||
+                      photo.busy ||
+                      showNotes ||
+                      summary.pendingScans + summary.pendingNotes + summary.rejected > 0
+                    }
+                    onClick={() => {
+                      setUpdating(true);
+                      stopCamera();
+                      void applyScannerUpdate().catch((caught) => {
+                        setError(scannerErrorMessage(caught));
+                        setUpdating(false);
+                      });
+                    }}
+                  >
+                    {updating ? "Updating…" : "Update scanner"}
+                  </Button>
+                </>
+              )}
+            </details>
 
             <div className="pt-1 border-t border-slate-200 flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">

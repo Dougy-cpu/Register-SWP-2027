@@ -15,7 +15,9 @@ import {
   writeScannerValue,
   saveScannerCredential,
   cacheScannerLeads,
+  readScannerValue,
 } from "./scanner-storage";
+import { recordScannerContact, scannerRetryDue } from "./scanner-connection";
 
 export class ScannerApiError extends Error {
   constructor(
@@ -39,16 +41,21 @@ export async function scannerFetch(
   const credential = explicit ?? (await getScannerCredential());
   if (!credential)
     throw new ScannerApiError("Open your scanner link to get started", 401, "invalid_device");
-  return fetch(path, {
-    ...init,
-    signal: init.signal ?? boundedSignal(),
-    credentials: "omit",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${credential.token}`,
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  });
+  try {
+    return await fetch(path, {
+      ...init,
+      signal: init.signal ?? boundedSignal(),
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${credential.token}`,
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+  } catch (error) {
+    recordScannerContact(false);
+    throw error;
+  }
 }
 export async function scannerJson<T>(
   path: string,
@@ -56,7 +63,20 @@ export async function scannerJson<T>(
   credential?: ScannerCredential,
 ): Promise<T> {
   const response = await scannerFetch(path, init, credential);
-  const body = await response.json();
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    recordScannerContact(false);
+    throw new TypeError(
+      "Network response could not be read. Your saved work remains on this phone.",
+    );
+  }
+  if (!body || typeof body !== "object") {
+    recordScannerContact(false);
+    throw new TypeError("Network response was incomplete. Your saved work remains on this phone.");
+  }
+  recordScannerContact(response.status < 500 && response.status !== 429);
   if (!response.ok) {
     const error = new ScannerApiError(
       body.error ?? "We couldn't connect. Your saved work is safe.",
@@ -138,36 +158,75 @@ function syncPayload(scans: PendingScan[], annotations: PendingAnnotation[]) {
   };
 }
 const activeSync = new Map<string, Promise<{ remaining: number; rejected: number }>>();
-export async function syncPendingScannerItems(): Promise<{ remaining: number; rejected: number }> {
+export async function syncPendingScannerItems(
+  options: { force?: boolean } = {},
+): Promise<{ remaining: number; rejected: number }> {
   const credential = await getScannerCredential();
   if (!credential) return { remaining: 0, rejected: 0 };
   const scope = scannerScope(credential),
     syncKey = `${scope}:${credential.token}`;
   const running = activeSync.get(syncKey);
   if (running) return running;
-  const promise = (async () => {
+  const remaining = async () => {
+    const pending = await pendingScannerItems(credential);
+    return { remaining: pending.scans.length + pending.annotations.length, rejected: 0 };
+  };
+  if (!scannerRetryDue(options.force)) return remaining();
+  const work = async () => {
     let rejected = 0;
     for (let batch = 0; batch < 20; batch++) {
       const active = await getScannerCredential();
       if (!active || scannerScope(active) !== scope || active.token !== credential.token) break;
-      const pending = await pendingScannerItems(credential),
-        scans = pending.scans.slice(0, 100);
+      const pending = await pendingScannerItems(credential);
+      const readiness = await readScannerValue<{ stage: string; scanId?: string }>(
+        "offline-readiness",
+        credential,
+      );
+      const scans = pending.scans
+        .filter((scan) => !(readiness?.stage === "armed" && readiness.scanId === scan.id))
+        .slice(0, 100);
       const waiting = new Set(pending.scans.map((scan) => scan.id)),
         sending = new Set(scans.map((scan) => scan.id));
       const annotations = pending.annotations
         .filter((item) => !waiting.has(item.scanId) || sending.has(item.scanId))
         .slice(0, 100);
-      if (!scans.length && !annotations.length) return { remaining: 0, rejected };
+      if (!scans.length && !annotations.length) return { ...(await remaining()), rejected };
       const result = await scannerJson<SyncResponse>(
         "/api/scanner/sync",
         { method: "POST", body: JSON.stringify(syncPayload(scans, annotations)) },
         credential,
       );
+      if (
+        !Array.isArray(result.scans) ||
+        !Array.isArray(result.annotations) ||
+        [...result.scans, ...result.annotations].some(
+          (item) =>
+            !item ||
+            typeof item.id !== "string" ||
+            !["accepted", "duplicate", "rejected", "deferred"].includes(item.status),
+        ) ||
+        result.scans.some((item) => !scans.some((sent) => sent.id === item.id)) ||
+        result.annotations.some((item) => !annotations.some((sent) => sent.id === item.id)) ||
+        new Set(result.scans.map((item) => item.id)).size !== result.scans.length ||
+        new Set(result.annotations.map((item) => item.id)).size !== result.annotations.length
+      ) {
+        recordScannerContact(false);
+        throw new Error("The server did not confirm this upload. Your saved work will be retried.");
+      }
       // Compatibility with an older deployment during a rolling update.
       const leads =
         result.leads ??
         (await scannerJson<{ leads: SponsorLead[] }>("/api/scanner/leads", undefined, credential))
           .leads;
+      if (
+        !Array.isArray(leads) ||
+        leads.some((lead) => !lead || !Array.isArray(lead.scans) || !Array.isArray(lead.notes))
+      ) {
+        recordScannerContact(false);
+        throw new Error(
+          "The server returned an incomplete lead copy. Your saved work will be retried.",
+        );
+      }
       await applySyncResults({
         credential,
         leads,
@@ -183,7 +242,15 @@ export async function syncPendingScannerItems(): Promise<{ remaining: number; re
     }
     const pending = await pendingScannerItems(credential);
     return { remaining: pending.scans.length + pending.annotations.length, rejected };
-  })().finally(() => activeSync.delete(syncKey));
+  };
+  const promise = (async () =>
+    navigator.locks?.request
+      ? await navigator.locks.request(
+          `swp-scanner-sync:${scope}`,
+          { mode: "exclusive", ifAvailable: true },
+          (lock) => (lock ? work() : remaining()),
+        )
+      : await work())().finally(() => activeSync.delete(syncKey));
   activeSync.set(syncKey, promise);
   return promise;
 }

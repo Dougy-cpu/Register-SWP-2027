@@ -215,6 +215,81 @@ document.querySelector("button")!.addEventListener(
         "an in-flight scan remains with its original sponsor",
       );
 
+      const concurrent = await Promise.all([
+        storage.queueScan({ code: "ABCDEFAB1234", source: "camera", attendee }, credential),
+        storage.queueScan({ code: "ABCDEFAB1234", source: "image", attendee }, credential),
+      ]);
+      assert(
+        concurrent[0].id === concurrent[1].id,
+        "concurrent captures of the same badge share one durable receipt",
+      );
+      const backupApi = await import("@/lib/scanner-backup");
+      const exported = await backupApi.createScannerBackup(credential);
+      assert(
+        !JSON.stringify(exported).includes(credential.token) &&
+          !JSON.stringify(exported).includes("keyContext"),
+        "recovery file excludes credentials and the offline attendee pack",
+      );
+      const rescuedId = crypto.randomUUID();
+      const rescuedNoteId = crypto.randomUUID();
+      const rescuedAt = new Date().toISOString();
+      const file = JSON.stringify({
+        format: "swp-scanner-recovery-v1",
+        createdAt: rescuedAt,
+        owner: {
+          deviceId: credential.id,
+          sponsorId: credential.sponsorId,
+          operatorName: credential.operatorName,
+        },
+        scans: [
+          {
+            id: rescuedId,
+            scope: storage.scannerScope(credential),
+            code: "FEEDBA123456",
+            source: "image",
+            capturedAt: rescuedAt,
+            attendee,
+          },
+        ],
+        annotations: [
+          {
+            id: rescuedNoteId,
+            scanId: rescuedId,
+            scope: storage.scannerScope(credential),
+            note: "Earlier saved note",
+            rating: 2,
+            createdAt: rescuedAt,
+          },
+        ],
+        rejected: [],
+        drafts: [{ scanId: rescuedId, note: "Last-keystroke rescue", rating: 5 }],
+      });
+      await storage.restoreScannerBackup(file, credential);
+      assert(
+        (await storage.pendingScannerItems()).scans.some((item) => item.id === rescuedId),
+        "offline restore retains the original capture ID",
+      );
+      assert(
+        (await storage.getLeadDraft(rescuedId, credential))?.note === "Last-keystroke rescue",
+        "offline restore includes the last-keystroke fallback",
+      );
+      await storage.saveLeadDraft(rescuedId, "Newer work on this phone", 4, credential);
+      await storage.restoreScannerBackup(file, credential);
+      assert(
+        (await storage.getLeadDraft(rescuedId, credential))?.note === "Newer work on this phone",
+        "an older recovery file cannot overwrite newer notes",
+      );
+      assert(
+        (await storage.pendingScannerItems()).scans.filter((item) => item.id === rescuedId)
+          .length === 1,
+        "repeated restore does not duplicate a saved capture",
+      );
+      const foreignRestore = await storage.restoreScannerBackup(file, other).then(
+        () => false,
+        () => true,
+      );
+      assert(foreignRestore, "recovery rejects a different sponsor or device");
+
       const api = await import("@/lib/scanner-api");
       const originalFetch = window.fetch;
       const beforeFailure = (await storage.pendingScannerItems()).scans.map((item) => item.id);
@@ -264,7 +339,7 @@ document.querySelector("button")!.addEventListener(
             { status: 200, headers: { "Content-Type": "application/json" } },
           );
         };
-        const synced = await api.syncPendingScannerItems();
+        const synced = await api.syncPendingScannerItems({ force: true });
         assert(
           synced.remaining === 0 && requests >= 2,
           "reconnection drains the durable queue after acknowledgement",

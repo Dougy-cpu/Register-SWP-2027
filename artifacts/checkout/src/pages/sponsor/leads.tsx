@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LeadAnnotationFields } from "@/components/lead-annotation-fields";
+import { LeadNotes } from "@/components/scanner-lead-notes";
+import { ScannerRecoveryTools } from "@/components/scanner-recovery-tools";
+import { ScannerSaveStatus } from "@/components/scanner-save-status";
+import { useScannerSummary } from "@/hooks/use-scanner-summary";
 import {
   activateScanner,
   scannerFetch,
@@ -18,10 +21,7 @@ import {
   getScannerCredential,
   pendingScannerItems,
   rejectedScannerItems,
-  getLeadDraft,
-  saveLeadDraft,
   saveScannerCredential,
-  scannerScope,
 } from "@/lib/scanner-storage";
 import { mergeScannerLeads } from "@/lib/scanner-leads";
 import { sponsorFetch, sponsorJson } from "@/lib/sponsor-api";
@@ -38,139 +38,12 @@ const date = (value: string | null) =>
     : "";
 const leadKey = (lead: SponsorLead) => (lead.attendeeId ? `attendee:${lead.attendeeId}` : lead.id);
 
-function LeadNotes({ lead, credential }: { lead: SponsorLead; credential: ScannerCredential }) {
-  const [scanId, setScanId] = useState(
-    () =>
-      [...lead.scans].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))[0]?.id ?? lead.id,
-  );
-  const key = `${scannerScope(credential)}:note-fallback:${scanId}`;
-  const [draft, setDraft] = useState({ note: "", rating: null as number | null });
-  const [status, setStatus] = useState("Notes save automatically");
-  const [problem, setProblem] = useState("");
-  const edited = useRef(false),
-    writes = useRef(Promise.resolve()),
-    timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef(draft);
-  useEffect(() => {
-    let active = true;
-    let fallback: { note: string; rating: number | null } | null = null;
-    try {
-      fallback = JSON.parse(localStorage.getItem(key) ?? "null");
-      if (!edited.current && fallback && typeof fallback.note === "string") {
-        setDraft(fallback);
-        latest.current = fallback;
-      }
-    } catch {
-      /* IndexedDB is the primary local store. */
-    }
-    void Promise.all(lead.scans.map((scan) => getLeadDraft(scan.id, credential)))
-      .then((savedDrafts) => {
-        const saved = savedDrafts
-          .filter((item) => item !== null)
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-        if (active && !edited.current && fallback) {
-          if (!saved || saved.note !== fallback.note || saved.rating !== fallback.rating)
-            void saveLeadDraft(scanId, fallback.note, fallback.rating, credential)
-              .then(() => syncPendingScannerItems())
-              .catch(() => setStatus("Saved on this phone · reconnecting"));
-        } else if (active && !edited.current && saved) {
-          setScanId(saved.scanId);
-          const value = { note: saved.note ?? "", rating: saved.rating };
-          setDraft(value);
-          latest.current = value;
-        }
-      })
-      .catch(() =>
-        setProblem("This browser could not open saved notes. Keep this page open and try again."),
-      );
-    return () => {
-      active = false;
-    };
-  }, [key, scanId, credential, lead.scans]);
-  const persist = (value: typeof draft) => {
-    edited.current = true;
-    latest.current = value;
-    setDraft(value);
-    setStatus("Saving on this phone…");
-    setProblem("");
-    // The synchronous fallback protects the very last keystroke on a sudden close.
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      /* The durable queue below reports failure. */
-    }
-    writes.current = writes.current
-      .catch(() => undefined)
-      .then(async () => {
-        await saveLeadDraft(scanId, value.note, value.rating, credential);
-        setStatus("Saved on this phone");
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-          if (navigator.onLine)
-            void syncPendingScannerItems()
-              .then((result) =>
-                setStatus(result.remaining ? "Saved on this phone · reconnecting" : "All saved"),
-              )
-              .catch(() => setStatus("Saved on this phone · reconnecting"));
-        }, 800);
-      })
-      .catch(() => {
-        setProblem("Your note has not reached phone storage. Keep this page open and try again.");
-        setStatus("Not saved yet");
-      });
-  };
-  useEffect(() => {
-    if (!problem) return;
-    const protect = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", protect);
-    return () => window.removeEventListener("beforeunload", protect);
-  }, [problem]);
-  return (
-    <div className="space-y-4 border-t p-5 bg-slate-50">
-      <p className="text-sm font-semibold">Your notes · {credential.operatorName}</p>
-      <LeadAnnotationFields id={scanId} value={draft} onChange={persist} />
-      <p role="status" className="text-xs text-muted-foreground">
-        {status}
-      </p>
-      {problem && (
-        <div role="alert" className="text-sm text-rose-800">
-          {problem}
-          <Button variant="outline" onClick={() => persist(latest.current)}>
-            Try again
-          </Button>
-        </div>
-      )}
-      <details className="text-sm">
-        <summary className="cursor-pointer min-h-11 py-3">Team notes and scan history</summary>
-        {lead.notes
-          .filter((note) => note.note || note.rating)
-          .map((item) => (
-            <div key={item.id} className="bg-white p-3 border rounded-lg mb-2">
-              <p className="font-medium">
-                {item.operatorName} · {date(item.createdAt)}
-                {item.rating ? ` · ${item.rating}/5` : ""}
-              </p>
-              <p className="whitespace-pre-wrap mt-1">{item.note}</p>
-            </div>
-          ))}
-        {lead.scans.map((scan) => (
-          <p key={scan.id} className="text-muted-foreground py-1">
-            Scanned by {scan.operatorName} · {date(scan.capturedAt)}
-          </p>
-        ))}
-      </details>
-    </div>
-  );
-}
-
 export default function SponsorLeads() {
   const [, navigate] = useLocation();
   const organiser = new URLSearchParams(window.location.search).get("organiser") === "1";
   const [leads, setLeads] = useState<SponsorLead[]>([]),
     [credential, setCredential] = useState<ScannerCredential | null>(null);
+  const summary = useScannerSummary(credential);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [search, setSearch] = useState("");
@@ -203,7 +76,7 @@ export default function SponsorLeads() {
     setLoading(false);
   }, [organiser]);
   const refresh = useCallback(async () => {
-    if (syncing.current || !navigator.onLine) return;
+    if (syncing.current) return;
     syncing.current = true;
     try {
       const saved = await getScannerCredential();
@@ -225,16 +98,14 @@ export default function SponsorLeads() {
       }
       if (saved) {
         await loadLocal();
-        // Loading confirmed rows is independent of uploading the local queue.
-        await refreshScannerLeads(saved);
+        // An unavailable lead download must never prevent queued work uploading.
+        const results = await Promise.allSettled([
+          refreshScannerLeads(saved),
+          syncPendingScannerItems(),
+        ]);
         await loadLocal();
+        for (const result of results) if (result.status === "rejected") throw result.reason;
         setError("");
-        void syncPendingScannerItems()
-          .then(loadLocal)
-          .catch((caught) => {
-            if (caught instanceof ScannerApiError && caught.status === 401)
-              setError("Your saved leads are available. Open Scan to reconnect this phone.");
-          });
       }
     } catch (caught) {
       if (!hasLocal.current || (caught instanceof ScannerApiError && caught.status === 401))
@@ -256,15 +127,21 @@ export default function SponsorLeads() {
       void loadLocal().catch(() => undefined);
     };
     const online = () => {
-      void refresh();
+      if (document.visibilityState === "visible") void refresh();
     };
     const interval = window.setInterval(online, 15000);
     window.addEventListener("swp:scanner-data", local);
     window.addEventListener("online", online);
+    document.addEventListener("visibilitychange", online);
+    const channel =
+      typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("swp-scanner-data") : null;
+    if (channel) channel.onmessage = local;
     return () => {
       clearInterval(interval);
       window.removeEventListener("swp:scanner-data", local);
       window.removeEventListener("online", online);
+      document.removeEventListener("visibilitychange", online);
+      channel?.close();
     };
   }, [loadLocal, refresh]);
   const filtered = useMemo(
@@ -333,6 +210,7 @@ export default function SponsorLeads() {
         </div>
       </header>
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
+        {credential && <ScannerSaveStatus summary={summary} />}
         {error && (
           <Card className="p-4 border-amber-300 bg-amber-50">
             <p role="alert">{error}</p>
@@ -449,6 +327,36 @@ export default function SponsorLeads() {
             <Button className="mt-4" onClick={() => navigate("/sponsor/scanner")}>
               Scan a badge
             </Button>
+          </Card>
+        )}
+        {credential && (
+          <Card className="p-4 space-y-3">
+            <details>
+              <summary className="cursor-pointer min-h-11 py-3 font-semibold">
+                Finished scanning?
+              </summary>
+              <p className="text-sm">
+                {summary.pendingScans + summary.pendingNotes + summary.rejected > 0 ||
+                summary.error ||
+                !summary.loaded
+                  ? "Keep this phone's saved work until the status above shows everything is backed up. You can download an offline recovery file if the connection has not returned."
+                  : "All saved leads and notes are backed up. You can download your confirmed leads above."}
+              </p>
+              <Button
+                className="mt-3 min-h-11"
+                variant="outline"
+                onClick={() =>
+                  void syncPendingScannerItems({ force: true })
+                    .then(refresh)
+                    .catch(() =>
+                      setError("Saved work is still on this phone. Reconnect and try again."),
+                    )
+                }
+              >
+                Back up waiting items now
+              </Button>
+            </details>
+            <ScannerRecoveryTools credential={credential} />
           </Card>
         )}
       </main>

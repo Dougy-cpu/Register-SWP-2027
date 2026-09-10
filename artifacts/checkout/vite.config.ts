@@ -5,6 +5,7 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
 import { crawlerResponsesMiddleware } from "./src/crawler-responses";
+import { SCANNER_RELEASE } from "./src/lib/scanner-release";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -16,6 +17,23 @@ const basePath = process.env.BASE_PATH ?? "/";
 export default defineConfig({
   base: basePath,
   plugins: [
+    {
+      name: "scanner-release",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "scanner-version.json",
+          source: JSON.stringify({ version: SCANNER_RELEASE }),
+        });
+      },
+      configureServer(server) {
+        server.middlewares.use("/scanner-version.json", (_req, res) => {
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Cache-Control", "no-store");
+          res.end(JSON.stringify({ version: SCANNER_RELEASE }));
+        });
+      },
+    },
     {
       name: "checkout-crawler-responses",
       configureServer(server) {

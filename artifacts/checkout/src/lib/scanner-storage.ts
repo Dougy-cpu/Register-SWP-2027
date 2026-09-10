@@ -11,12 +11,21 @@ import type {
   ScannerBootstrap,
 } from "@/types/lead-scanner";
 import { normaliseBadgeCode } from "@/lib/scanner-code";
+import { startStorageTransaction, storageOperation } from "./scanner-storage-guard";
+import { SCANNER_RELEASE } from "./scanner-release";
+import { parseScannerBackup, type ScannerBackup } from "./scanner-backup";
+
+const pageSession = crypto.randomUUID();
 
 interface OfflineReadinessMarker {
   key: "offline-readiness";
   stage: "armed" | "observed";
   armedAt: string;
   observedAt?: string;
+  scanId?: string;
+  pageSession?: string;
+  release?: string;
+  packVersion?: string;
 }
 
 interface ScannerDatabase extends DBSchema {
@@ -51,11 +60,17 @@ export const scannerScope = (credential: Pick<ScannerCredential, "id" | "sponsor
   `swp-2027:${credential.sponsorId}:${credential.id}`;
 function changed() {
   window.dispatchEvent(new Event("swp:scanner-data"));
+  if (typeof BroadcastChannel !== "undefined") {
+    const channel = new BroadcastChannel("swp-scanner-data");
+    channel.postMessage("changed");
+    channel.close();
+  }
 }
 
 function database(): Promise<IDBPDatabase<ScannerDatabase>> {
   if (!databasePromise) {
-    databasePromise = new Promise<IDBPDatabase<ScannerDatabase>>((resolve, reject) => {
+    let expired = false;
+    const opening = new Promise<IDBPDatabase<ScannerDatabase>>((resolve, reject) => {
       let blocked = false;
       let connection: IDBPDatabase<ScannerDatabase> | null = null;
       void openDB<ScannerDatabase>("swp-sponsor-scanner", 2, {
@@ -106,19 +121,33 @@ function database(): Promise<IDBPDatabase<ScannerDatabase>> {
           }
         },
       }).then((db) => {
-        if (blocked) {
+        if (blocked || expired) {
           db.close();
           return;
         }
         connection = db;
         resolve(db);
       }, reject);
+    });
+    databasePromise = storageOperation(opening, () => {
+      expired = true;
     }).catch((error: unknown) => {
       databasePromise = null;
       throw error;
     });
   }
   return databasePromise;
+}
+
+function boundStorageOperation<T>(operation: Promise<T>): Promise<T> {
+  return storageOperation(operation, () => {
+    const previous = databasePromise;
+    databasePromise = null;
+    void previous?.then(
+      (db) => db.close(),
+      () => undefined,
+    );
+  });
 }
 
 function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> {
@@ -134,20 +163,20 @@ function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-export async function getScannerCredential(): Promise<ScannerCredential | null> {
+async function getScannerCredentialOperation(): Promise<ScannerCredential | null> {
   const value = await (await database()).get("config", "device");
   return value && "token" in value ? value : null;
 }
 
-export async function saveScannerCredential(credential: ScannerCredential): Promise<void> {
-  const tx = (await database()).transaction("config", "readwrite");
+async function saveScannerCredentialOperation(credential: ScannerCredential): Promise<void> {
+  const tx = startStorageTransaction((await database()).transaction("config", "readwrite"));
   await tx.store.put(credential, "device");
   await tx.store.put(credential, `credential:${scannerScope(credential)}`);
   await tx.done;
   changed();
 }
 
-export async function clearScannerCredential(): Promise<void> {
+async function clearScannerCredentialOperation(): Promise<void> {
   // Disconnecting is not deletion. A matching renewed link reopens the original queue.
   await (await database()).delete("config", "device");
   changed();
@@ -164,7 +193,7 @@ export async function readScannerValue<T>(
   credential?: ScannerCredential,
 ): Promise<T | null> {
   const scope = scannerScope(await owner(credential));
-  const value = await (await database()).get("config", `${scope}:${key}`);
+  const value = await boundStorageOperation((await database()).get("config", `${scope}:${key}`));
   if (!value || !("value" in value)) return null;
   try {
     return JSON.parse(value.value) as T;
@@ -178,11 +207,13 @@ export async function writeScannerValue(
   credential?: ScannerCredential,
 ): Promise<void> {
   const scope = scannerScope(await owner(credential));
-  await (await database()).put("config", { key, value: JSON.stringify(value) }, `${scope}:${key}`);
+  await boundStorageOperation(
+    (await database()).put("config", { key, value: JSON.stringify(value) }, `${scope}:${key}`),
+  );
 }
 export const cachedScannerBootstrap = () => readScannerValue<ScannerBootstrap>("bootstrap");
 
-export async function storeOfflinePack(
+async function storeOfflinePackOperation(
   pack: ScannerOfflinePackDownload,
   credential?: ScannerCredential,
 ): Promise<StoredOfflinePack> {
@@ -194,7 +225,7 @@ export async function storeOfflinePack(
   return stored;
 }
 
-export async function getOfflinePack(
+async function getOfflinePackOperation(
   credential?: ScannerCredential,
 ): Promise<StoredOfflinePack | null> {
   const saved = credential ?? (await getScannerCredential());
@@ -220,7 +251,7 @@ function bytesBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-export async function decryptPackAttendee(
+async function decryptPackAttendeeOperation(
   code: string,
   credential?: ScannerCredential,
 ): Promise<LeadPackAttendee | null> {
@@ -255,7 +286,7 @@ export async function decryptPackAttendee(
   return JSON.parse(new TextDecoder().decode(plaintext)) as LeadPackAttendee;
 }
 
-export async function queueScan(
+async function queueScanOperation(
   input: Omit<PendingScan, "id" | "capturedAt" | "scope">,
   credential?: ScannerCredential,
 ): Promise<PendingScan> {
@@ -266,14 +297,24 @@ export async function queueScan(
     capturedAt: new Date().toISOString(),
   };
   const db = await database();
-  const tx = db.transaction("pendingScans", "readwrite");
-  await tx.store.add(scan);
+  const tx = startStorageTransaction(db.transaction(["pendingScans", "config"], "readwrite"));
+  const key = `${scan.scope}:capture:${scan.code}`;
+  const previous = await tx.objectStore("config").get(key);
+  if (previous && "value" in previous) {
+    const receipt = JSON.parse(previous.value) as PendingScan;
+    if (receipt.scope === scan.scope && receipt.code === scan.code) {
+      await tx.done;
+      return receipt;
+    }
+  }
+  await tx.objectStore("pendingScans").add(scan);
+  await tx.objectStore("config").put({ key, value: JSON.stringify(scan) }, key);
   await tx.done;
   changed();
   return scan;
 }
 
-export async function queueAnnotation(input: {
+async function queueAnnotationOperation(input: {
   scanId: string;
   note?: string | null;
   rating?: number | null;
@@ -290,14 +331,14 @@ export async function queueAnnotation(input: {
     createdAt: new Date().toISOString(),
   };
   const db = await database();
-  const tx = db.transaction("pendingAnnotations", "readwrite");
+  const tx = startStorageTransaction(db.transaction("pendingAnnotations", "readwrite"));
   await tx.store.add(annotation);
   await tx.done;
   changed();
   return annotation;
 }
 
-export async function pendingScannerItems(credential?: ScannerCredential): Promise<{
+async function pendingScannerItemsOperation(credential?: ScannerCredential): Promise<{
   scans: PendingScan[];
   annotations: PendingAnnotation[];
 }> {
@@ -315,12 +356,12 @@ export async function pendingScannerItems(credential?: ScannerCredential): Promi
   };
 }
 
-export async function pendingScannerCount(): Promise<number> {
+async function pendingScannerCountOperation(): Promise<number> {
   const pending = await pendingScannerItems();
   return pending.scans.length + pending.annotations.length;
 }
 
-export async function applySyncResults(input: {
+async function applySyncResultsOperation(input: {
   credential?: ScannerCredential;
   leads?: SponsorLead[];
   sentAnnotations?: PendingAnnotation[];
@@ -330,9 +371,11 @@ export async function applySyncResults(input: {
   const db = await database();
   const credential = await owner(input.credential),
     scope = scannerScope(credential);
-  const tx = db.transaction(
-    ["pendingScans", "pendingAnnotations", "rejectedItems", "leads"],
-    "readwrite",
+  const tx = startStorageTransaction(
+    db.transaction(
+      ["pendingScans", "pendingAnnotations", "rejectedItems", "leads", "config"],
+      "readwrite",
+    ),
   );
   // Cache and acknowledgement commit together, so accepted scans cannot disappear.
   for (const lead of input.leads ?? []) {
@@ -356,6 +399,12 @@ export async function applySyncResults(input: {
     const known = (input.leads ?? []).some((lead) =>
       lead.scans.some((scan) => scan.id === payload.id),
     );
+    if (payload.code === "FFFFFFFFFFFF" && ["accepted", "duplicate"].includes(result.status)) {
+      const key = `${scope}:readiness-ack:${payload.id}`;
+      await tx.objectStore("config").put({ key, value: JSON.stringify(true) }, key);
+      // Readiness probes may be repeated; real capture receipts remain durable.
+      await tx.objectStore("config").delete(`${scope}:capture:${payload.code}`);
+    }
     if (result.status === "rejected" || known || payload.code === "FFFFFFFFFFFF")
       await tx.objectStore("pendingScans").delete(result.id);
   }
@@ -381,35 +430,39 @@ export async function applySyncResults(input: {
   changed();
 }
 
-export async function rejectedScannerItems(): Promise<RejectedSyncItem[]> {
-  const saved = await getScannerCredential();
+async function rejectedScannerItemsOperation(
+  credential?: ScannerCredential,
+): Promise<RejectedSyncItem[]> {
+  const saved = credential ?? (await getScannerCredential());
   if (!saved) return [];
   return (await (await database()).getAllFromIndex("rejectedItems", "by-rejected-at")).filter(
     (item) => item.scope === scannerScope(saved),
   );
 }
 
-export async function cachedScannerLeads(credential?: ScannerCredential): Promise<SponsorLead[]> {
+async function cachedScannerLeadsOperation(credential?: ScannerCredential): Promise<SponsorLead[]> {
   const saved = credential ?? (await getScannerCredential());
   if (!saved) return [];
   return (await (await database()).getAll("leads"))
     .filter((item) => item.scope === scannerScope(saved))
     .map((item) => item.lead);
 }
-export async function cacheScannerLeads(
+async function cacheScannerLeadsOperation(
   leads: SponsorLead[],
   credential: ScannerCredential,
 ): Promise<void> {
   await applySyncResults({ credential, leads, scanResults: [], annotationResults: [] });
 }
-export async function saveLeadDraft(
+async function saveLeadDraftOperation(
   scanId: string,
   note: string,
   rating: number | null,
   credential: ScannerCredential,
 ): Promise<PendingAnnotation> {
   const key = `${scannerScope(credential)}:note:${scanId}`;
-  const tx = (await database()).transaction(["config", "pendingAnnotations"], "readwrite");
+  const tx = startStorageTransaction(
+    (await database()).transaction(["config", "pendingAnnotations"], "readwrite"),
+  );
   const previous = await tx.objectStore("config").get(key);
   const draft =
     previous && "value" in previous ? (JSON.parse(previous.value) as PendingAnnotation) : null;
@@ -431,11 +484,13 @@ export async function saveLeadDraft(
 }
 export const getLeadDraft = (scanId: string, credential?: ScannerCredential) =>
   readScannerValue<PendingAnnotation>(`note:${scanId}`, credential);
-export async function retryRejectedScans(): Promise<void> {
+async function retryRejectedScansOperation(): Promise<void> {
   const items = await rejectedScannerItems();
-  const tx = (await database()).transaction(
-    ["rejectedItems", "pendingScans", "pendingAnnotations"],
-    "readwrite",
+  const tx = startStorageTransaction(
+    (await database()).transaction(
+      ["rejectedItems", "pendingScans", "pendingAnnotations"],
+      "readwrite",
+    ),
   );
   for (const item of items) {
     if (item.kind === "scan") await tx.objectStore("pendingScans").put(item.payload as PendingScan);
@@ -446,7 +501,7 @@ export async function retryRejectedScans(): Promise<void> {
   changed();
 }
 
-export async function verifyOfflineStorage(): Promise<boolean> {
+async function verifyOfflineStorageOperation(): Promise<boolean> {
   const db = await database();
   const key = `test:${crypto.randomUUID()}`;
   const value = { key, value: new Date().toISOString() };
@@ -456,7 +511,7 @@ export async function verifyOfflineStorage(): Promise<boolean> {
   return Boolean(read && "value" in read && read.value === value.value);
 }
 
-export async function verifyOfflineQueue(): Promise<boolean> {
+async function verifyOfflineQueueOperation(): Promise<boolean> {
   const db = await database();
   const id = crypto.randomUUID();
   const sample: PendingScan = {
@@ -480,22 +535,64 @@ export async function verifyOfflineQueue(): Promise<boolean> {
   return read?.id === id;
 }
 
-export async function armOfflineReloadTest(): Promise<void> {
+async function armOfflineReloadTestOperation(): Promise<void> {
+  const credential = await owner();
+  const scope = scannerScope(credential);
+  const pack = await getOfflinePack(credential);
+  const scan: PendingScan = {
+    id: crypto.randomUUID(),
+    code: "FFFFFFFFFFFF",
+    source: "manual",
+    capturedAt: new Date().toISOString(),
+    attendee: null,
+    scope,
+  };
   const marker: OfflineReadinessMarker = {
     key: "offline-readiness",
     stage: "armed",
     armedAt: new Date().toISOString(),
+    scanId: scan.id,
+    pageSession,
+    release: SCANNER_RELEASE,
+    packVersion: pack?.version,
   };
-  await writeScannerValue(marker.key, marker);
+  const tx = startStorageTransaction(
+    (await database()).transaction(["config", "pendingScans"], "readwrite"),
+  );
+  const key = `${scope}:offline-readiness`;
+  const previous = await tx.objectStore("config").get(key);
+  if (previous && "value" in previous) {
+    const old = JSON.parse(previous.value) as OfflineReadinessMarker;
+    if (old.scanId) {
+      const oldScan = await tx.objectStore("pendingScans").get(old.scanId);
+      if (oldScan?.scope === scope && oldScan.code === "FFFFFFFFFFFF")
+        await tx.objectStore("pendingScans").delete(old.scanId);
+    }
+  }
+  await tx.objectStore("pendingScans").add(scan);
+  await tx.objectStore("config").put({ key, value: JSON.stringify(marker) }, key);
+  await tx.done;
+  changed();
 }
 
-export async function observeOfflineReloadTest(
+async function observeOfflineReloadTestOperation(
   isOffline: boolean,
 ): Promise<"none" | "armed" | "observed"> {
   if (!(await getScannerCredential())) return "none";
   const value = await readScannerValue<OfflineReadinessMarker>("offline-readiness");
   if (!value) return "none";
-  if (value.stage === "armed" && isOffline) {
+  if (
+    value.stage === "armed" &&
+    isOffline &&
+    value.pageSession !== pageSession &&
+    value.release === SCANNER_RELEASE
+  ) {
+    const credential = await owner();
+    const record = value.scanId ? await (await database()).get("pendingScans", value.scanId) : null;
+    if (!record || record.scope !== scannerScope(credential) || record.code !== "FFFFFFFFFFFF")
+      throw new Error(
+        "The offline test record was not found. Your organiser can repeat the check.",
+      );
     await writeScannerValue("offline-readiness", {
       ...value,
       stage: "observed",
@@ -506,6 +603,230 @@ export async function observeOfflineReloadTest(
   return value.stage;
 }
 
-export async function clearOfflineReloadTest(): Promise<void> {
+async function clearOfflineReloadTestOperation(): Promise<void> {
   await writeScannerValue("offline-readiness", null);
 }
+
+export async function offlineReadinessAcknowledged(): Promise<boolean> {
+  const marker = await readScannerValue<OfflineReadinessMarker>("offline-readiness");
+  return Boolean(
+    marker?.stage === "observed" &&
+    marker.release === SCANNER_RELEASE &&
+    marker.scanId &&
+    (await readScannerValue<boolean>(`readiness-ack:${marker.scanId}`)),
+  );
+}
+
+export async function prepareScannerStorage(): Promise<{
+  persistent: boolean;
+  availableBytes: number | null;
+}> {
+  if (!(await verifyOfflineStorage()))
+    throw new Error("Phone storage could not save the check. Keep this page open and try again.");
+  let persistent = false;
+  let availableBytes: number | null = null;
+  try {
+    if (navigator.storage?.persisted)
+      persistent = await storageOperation(navigator.storage.persisted());
+    if (!persistent && navigator.storage?.persist)
+      persistent = await storageOperation(navigator.storage.persist());
+    const estimate = navigator.storage?.estimate
+      ? await storageOperation(navigator.storage.estimate())
+      : null;
+    if (estimate?.quota !== undefined && estimate.usage !== undefined)
+      availableBytes = Math.max(0, estimate.quota - estimate.usage);
+  } catch {
+    /* Persistence is best effort. Actual local writes remain authoritative. */
+  }
+  const result = { persistent, availableBytes };
+  await writeScannerValue("storage-health", result);
+  return result;
+}
+
+export async function scannerHasUnsettledWork(): Promise<boolean> {
+  return storageOperation(
+    (async () => {
+      const db = await database();
+      const counts = await Promise.all([
+        db.count("pendingScans"),
+        db.count("pendingAnnotations"),
+        db.count("rejectedItems"),
+      ]);
+      return counts.some((count) => count > 0);
+    })(),
+  );
+}
+
+export async function restoreScannerBackup(
+  contents: string,
+  credential: ScannerCredential,
+): Promise<number> {
+  const backup: ScannerBackup = parseScannerBackup(contents, credential);
+  return storageOperation(
+    (async () => {
+      const active = await owner();
+      if (scannerScope(active) !== scannerScope(credential))
+        throw new Error("The scanner changed. Open the original scanner link before restoring.");
+      const scope = scannerScope(credential);
+      const tx = startStorageTransaction(
+        (await database()).transaction(
+          ["pendingScans", "pendingAnnotations", "rejectedItems", "config"],
+          "readwrite",
+        ),
+      );
+      let restored = 0;
+      const originalDrafts = new Set<string>();
+      for (const draft of backup.drafts) {
+        const key = `${scope}:note:${draft.scanId}`;
+        if (await tx.objectStore("config").get(key)) originalDrafts.add(key);
+      }
+      for (const scan of backup.scans) {
+        if (
+          !(await tx.objectStore("pendingScans").get(scan.id)) &&
+          !(await tx.objectStore("rejectedItems").get(`scan:${scan.id}`))
+        ) {
+          await tx.objectStore("pendingScans").add(scan);
+          restored++;
+        }
+        const key = `${scope}:capture:${scan.code}`;
+        if (!(await tx.objectStore("config").get(key)))
+          await tx.objectStore("config").put({ key, value: JSON.stringify(scan) }, key);
+      }
+      for (const item of backup.annotations) {
+        const existing = await tx.objectStore("pendingAnnotations").get(item.id);
+        if (!existing && !(await tx.objectStore("rejectedItems").get(`annotation:${item.id}`))) {
+          await tx.objectStore("pendingAnnotations").add(item);
+          restored++;
+        }
+        const key = `${scope}:note:${item.scanId}`;
+        if (!(await tx.objectStore("config").get(key)))
+          await tx.objectStore("config").put({ key, value: JSON.stringify(item) }, key);
+      }
+      for (const item of backup.rejected) {
+        const pendingStore = item.kind === "scan" ? "pendingScans" : "pendingAnnotations";
+        if (
+          !(await tx.objectStore("rejectedItems").get(item.id)) &&
+          !(await tx.objectStore(pendingStore).get(item.payload.id))
+        ) {
+          await tx.objectStore("rejectedItems").add(item);
+          restored++;
+        }
+      }
+      for (const draft of backup.drafts) {
+        const key = `${scope}:note:${draft.scanId}`;
+        // Existing notes always win; an older rescue file cannot overwrite them.
+        if (originalDrafts.has(key)) continue;
+        const previous = await tx.objectStore("config").get(key);
+        const restoredDraft =
+          previous && "value" in previous
+            ? (JSON.parse(previous.value) as PendingAnnotation)
+            : null;
+        if (restoredDraft?.note === draft.note && restoredDraft?.rating === draft.rating) continue;
+        const item: PendingAnnotation = {
+          id: restoredDraft?.id ?? crypto.randomUUID(),
+          scope,
+          scanId: draft.scanId,
+          note: draft.note,
+          rating: draft.rating,
+          createdAt: new Date(
+            Math.max(
+              Date.parse(backup.createdAt),
+              (Date.parse(restoredDraft?.createdAt ?? "") || 0) + 1,
+            ),
+          ).toISOString(),
+        };
+        await tx.objectStore("pendingAnnotations").put(item);
+        await tx.objectStore("config").put({ key, value: JSON.stringify(item) }, key);
+        restored++;
+      }
+      await tx.done;
+      changed();
+      return restored;
+    })(),
+  );
+}
+
+// Bound callers as well as transactions, including browsers that stop delivering IDB events.
+export const getScannerCredential = (
+  ...args: Parameters<typeof getScannerCredentialOperation>
+): ReturnType<typeof getScannerCredentialOperation> =>
+  boundStorageOperation(getScannerCredentialOperation(...args));
+export const saveScannerCredential = (
+  ...args: Parameters<typeof saveScannerCredentialOperation>
+): ReturnType<typeof saveScannerCredentialOperation> =>
+  boundStorageOperation(saveScannerCredentialOperation(...args));
+export const clearScannerCredential = (
+  ...args: Parameters<typeof clearScannerCredentialOperation>
+): ReturnType<typeof clearScannerCredentialOperation> =>
+  boundStorageOperation(clearScannerCredentialOperation(...args));
+export const storeOfflinePack = (
+  ...args: Parameters<typeof storeOfflinePackOperation>
+): ReturnType<typeof storeOfflinePackOperation> =>
+  boundStorageOperation(storeOfflinePackOperation(...args));
+export const getOfflinePack = (
+  ...args: Parameters<typeof getOfflinePackOperation>
+): ReturnType<typeof getOfflinePackOperation> =>
+  boundStorageOperation(getOfflinePackOperation(...args));
+export const decryptPackAttendee = (
+  ...args: Parameters<typeof decryptPackAttendeeOperation>
+): ReturnType<typeof decryptPackAttendeeOperation> =>
+  boundStorageOperation(decryptPackAttendeeOperation(...args));
+export const queueScan = (
+  ...args: Parameters<typeof queueScanOperation>
+): ReturnType<typeof queueScanOperation> => boundStorageOperation(queueScanOperation(...args));
+export const queueAnnotation = (
+  ...args: Parameters<typeof queueAnnotationOperation>
+): ReturnType<typeof queueAnnotationOperation> =>
+  boundStorageOperation(queueAnnotationOperation(...args));
+export const pendingScannerItems = (
+  ...args: Parameters<typeof pendingScannerItemsOperation>
+): ReturnType<typeof pendingScannerItemsOperation> =>
+  boundStorageOperation(pendingScannerItemsOperation(...args));
+export const pendingScannerCount = (
+  ...args: Parameters<typeof pendingScannerCountOperation>
+): ReturnType<typeof pendingScannerCountOperation> =>
+  boundStorageOperation(pendingScannerCountOperation(...args));
+export const applySyncResults = (
+  ...args: Parameters<typeof applySyncResultsOperation>
+): ReturnType<typeof applySyncResultsOperation> =>
+  boundStorageOperation(applySyncResultsOperation(...args));
+export const rejectedScannerItems = (
+  ...args: Parameters<typeof rejectedScannerItemsOperation>
+): ReturnType<typeof rejectedScannerItemsOperation> =>
+  boundStorageOperation(rejectedScannerItemsOperation(...args));
+export const cachedScannerLeads = (
+  ...args: Parameters<typeof cachedScannerLeadsOperation>
+): ReturnType<typeof cachedScannerLeadsOperation> =>
+  boundStorageOperation(cachedScannerLeadsOperation(...args));
+export const cacheScannerLeads = (
+  ...args: Parameters<typeof cacheScannerLeadsOperation>
+): ReturnType<typeof cacheScannerLeadsOperation> =>
+  boundStorageOperation(cacheScannerLeadsOperation(...args));
+export const saveLeadDraft = (
+  ...args: Parameters<typeof saveLeadDraftOperation>
+): ReturnType<typeof saveLeadDraftOperation> =>
+  boundStorageOperation(saveLeadDraftOperation(...args));
+export const retryRejectedScans = (
+  ...args: Parameters<typeof retryRejectedScansOperation>
+): ReturnType<typeof retryRejectedScansOperation> =>
+  boundStorageOperation(retryRejectedScansOperation(...args));
+export const verifyOfflineStorage = (
+  ...args: Parameters<typeof verifyOfflineStorageOperation>
+): ReturnType<typeof verifyOfflineStorageOperation> =>
+  boundStorageOperation(verifyOfflineStorageOperation(...args));
+export const verifyOfflineQueue = (
+  ...args: Parameters<typeof verifyOfflineQueueOperation>
+): ReturnType<typeof verifyOfflineQueueOperation> =>
+  boundStorageOperation(verifyOfflineQueueOperation(...args));
+export const armOfflineReloadTest = (
+  ...args: Parameters<typeof armOfflineReloadTestOperation>
+): ReturnType<typeof armOfflineReloadTestOperation> =>
+  boundStorageOperation(armOfflineReloadTestOperation(...args));
+export const observeOfflineReloadTest = (
+  ...args: Parameters<typeof observeOfflineReloadTestOperation>
+): ReturnType<typeof observeOfflineReloadTestOperation> =>
+  boundStorageOperation(observeOfflineReloadTestOperation(...args));
+export const clearOfflineReloadTest = (
+  ...args: Parameters<typeof clearOfflineReloadTestOperation>
+): ReturnType<typeof clearOfflineReloadTestOperation> =>
+  boundStorageOperation(clearOfflineReloadTestOperation(...args));

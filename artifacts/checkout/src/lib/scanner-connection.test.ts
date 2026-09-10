@@ -1,0 +1,20 @@
+import { afterEach, expect, it, vi } from "vitest";
+afterEach(() => vi.useRealTimers());
+it("backs off failed requests, permits explicit retry and resets after actual server contact", async () => {
+  vi.resetModules();
+  vi.useFakeTimers();
+  const connection = await import("./scanner-connection");
+  expect(connection.scannerConnection()).toBe("unknown");
+  connection.recordScannerContact(false);
+  expect(connection.scannerConnection()).toBe("unavailable");
+  expect(connection.scannerRetryDue()).toBe(false);
+  expect(connection.scannerRetryDue(true)).toBe(true);
+  await vi.advanceTimersByTimeAsync(3100);
+  expect(connection.scannerRetryDue()).toBe(true);
+  connection.recordScannerContact(false);
+  await vi.advanceTimersByTimeAsync(3100);
+  expect(connection.scannerRetryDue()).toBe(false);
+  connection.recordScannerContact(true);
+  expect(connection.scannerConnection()).toBe("connected");
+  expect(connection.scannerRetryDue()).toBe(true);
+});
