@@ -1,5 +1,6 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -35,6 +36,38 @@ const queryClient = new QueryClient({
   },
 });
 
+export function isSponsorRoute(pathname: string): boolean {
+  return /^\/sponsor(?:\/|$)/.test(pathname);
+}
+
+export function syncSponsorManifestLink(pathname: string): void {
+  const selector = 'link[data-swp-sponsor-manifest="true"]';
+  const existing = document.head.querySelector<HTMLLinkElement>(selector);
+
+  if (!isSponsorRoute(pathname)) {
+    existing?.remove();
+    return;
+  }
+
+  if (existing) return;
+
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = "/manifest.webmanifest";
+  link.dataset.swpSponsorManifest = "true";
+  document.head.appendChild(link);
+}
+
+function SponsorManifestLink() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    syncSponsorManifestLink(location);
+  }, [location]);
+
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
@@ -69,6 +102,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <SponsorManifestLink />
           <Router />
         </WouterRouter>
         <Toaster />

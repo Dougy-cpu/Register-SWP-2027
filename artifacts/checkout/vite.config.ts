@@ -22,20 +22,7 @@ export default defineConfig({
       scope: "/sponsor/",
       registerType: "prompt",
       injectRegister: false,
-      manifest: {
-        name: "SWP Summit Sponsor Scanner",
-        short_name: "SWP Scanner",
-        description: "Reliable sponsor badge scanning for SWP Summit 2027",
-        theme_color: "#004eb9",
-        background_color: "#f0f6ff",
-        display: "standalone",
-        start_url: "/sponsor/scanner",
-        scope: "/sponsor/",
-        icons: [
-          { src: "/favicon.png", sizes: "any", type: "image/png", purpose: "any" },
-          { src: "/favicon.png", sizes: "any", type: "image/png", purpose: "maskable" },
-        ],
-      },
+      manifest: false,
       workbox: {
         cleanupOutdatedCaches: true,
         clientsClaim: false,
