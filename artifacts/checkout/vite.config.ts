@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
+import { crawlerResponsesMiddleware } from "./src/crawler-responses";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -15,6 +16,15 @@ const basePath = process.env.BASE_PATH ?? "/";
 export default defineConfig({
   base: basePath,
   plugins: [
+    {
+      name: "checkout-crawler-responses",
+      configureServer(server) {
+        server.middlewares.use(crawlerResponsesMiddleware);
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use(crawlerResponsesMiddleware);
+      },
+    },
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
