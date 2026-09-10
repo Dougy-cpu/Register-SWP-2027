@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isSponsorRoute, syncSponsorManifestLink } from "./App";
 
-const checkoutRoot = resolve(process.cwd());
+const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const entryHtml = readFileSync(resolve(checkoutRoot, "index.html"), "utf8");
 const manifest = JSON.parse(
   readFileSync(resolve(checkoutRoot, "public/manifest.webmanifest"), "utf8"),
