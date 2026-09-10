@@ -10,6 +10,7 @@ import router from "./routes";
 import { getOptionalEnv, isProductionEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import { adminLoginThrottle } from "./middleware/admin-login-throttle";
+import { registerCrawlerResponses } from "./crawler-responses";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -185,6 +186,13 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 // API routes
 // ---------------------------------------------------------------------------
 app.use("/api", router);
+
+// ---------------------------------------------------------------------------
+// Crawler responses
+// ---------------------------------------------------------------------------
+// These exact routes must be handled before the SPA fallback below. Otherwise
+// missing crawler files would receive the checkout application's index.html.
+registerCrawlerResponses(app);
 
 // ---------------------------------------------------------------------------
 // Static frontend (production only)
