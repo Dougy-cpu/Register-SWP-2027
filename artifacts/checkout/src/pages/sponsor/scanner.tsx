@@ -840,7 +840,7 @@ export default function SponsorScanner() {
         <section className="relative overflow-hidden rounded-2xl bg-black border border-white/15 min-h-[52vh]">
           <video
             ref={videoRef}
-            className={`absolute inset-0 w-full h-full object-cover ${cameraActive ? "block" : "hidden"}`}
+            className="absolute inset-0 w-full h-full object-cover"
             muted
             playsInline
           />

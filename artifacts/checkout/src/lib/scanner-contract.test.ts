@@ -43,6 +43,10 @@ describe("application-wide badge scanner contract", () => {
       expect(source).toContain('import { BADGE_SCANNER_OPTIONS } from "@/lib/scanner-camera"');
       expect(source).toContain("BADGE_SCANNER_OPTIONS,");
       expect(source).not.toContain("maxScansPerSecond:");
+      // qr-scanner permanently collapses a video that is display:none when its
+      // constructor runs. Keep the video rendered behind the inactive overlay
+      // so an authorised mobile camera stream is actually visible.
+      expect(source).not.toContain('cameraActive ? "block" : "hidden"');
     }
   });
 

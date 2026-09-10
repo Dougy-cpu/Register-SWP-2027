@@ -239,7 +239,7 @@ export default function ScannerTest() {
           <section className="relative min-h-[52vh] overflow-hidden rounded-2xl border border-white/15 bg-black">
             <video
               ref={videoRef}
-              className={`absolute inset-0 h-full w-full object-cover ${cameraActive ? "block" : "hidden"}`}
+              className="absolute inset-0 h-full w-full object-cover"
               muted
               playsInline
             />
