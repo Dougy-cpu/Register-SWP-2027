@@ -15,7 +15,8 @@ import {
 } from "@workspace/db";
 
 export const SCANNER_TEST_CODE = "FFFFFFFFFFFF";
-export const BADGE_CODE_PATTERN = /^[0-9A-F]{12}$/;
+export const BADGE_CODE_LENGTH = 12;
+export const BADGE_CODE_PATTERN = new RegExp(`^[0-9A-F]{${BADGE_CODE_LENGTH}}$`);
 export const LEAD_PACK_FORMAT = 1;
 export const MAX_SYNC_BATCH = 100;
 const ACTIVE_BOOKING_STATUSES = ["paid", "invoiced"] as const;
@@ -32,7 +33,9 @@ export function normaliseBadgeCode(value: unknown): string | null {
 export function generateBadgeCode(): string {
   let code = SCANNER_TEST_CODE;
   while (code === SCANNER_TEST_CODE || !/^[A-F]/.test(code)) {
-    code = randomBytes(6).toString("hex").toUpperCase();
+    code = randomBytes(BADGE_CODE_LENGTH / 2)
+      .toString("hex")
+      .toUpperCase();
   }
   return code;
 }

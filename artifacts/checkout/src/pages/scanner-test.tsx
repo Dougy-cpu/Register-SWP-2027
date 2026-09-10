@@ -15,6 +15,7 @@ import logoUrl from "@assets/swp-summit-logo.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BADGE_SCANNER_OPTIONS } from "@/lib/scanner-camera";
 import {
   findScannerTestBadge,
   SCANNER_TEST_BADGES_PATH,
@@ -108,13 +109,7 @@ export default function ScannerTest() {
         qrScannerRef.current = new QrScanner(
           videoRef.current,
           (scan) => handleDecodedRef.current(scan.data, "camera"),
-          {
-            preferredCamera: "environment",
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            maxScansPerSecond: 10,
-            returnDetailedScanResult: true,
-          },
+          BADGE_SCANNER_OPTIONS,
         );
       }
       await qrScannerRef.current.start();

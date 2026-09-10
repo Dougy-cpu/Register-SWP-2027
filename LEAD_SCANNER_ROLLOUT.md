@@ -8,7 +8,7 @@ The badge artwork contains exactly:
 2. Company
 3. QR code
 
-The QR payload is the exact 12-character uppercase hexadecimal value from the `QR Code` column in the badge CSV. Do not print that value as text on the badge. The value is only an attendee reference and contains no personal information.
+The QR payload is the exact 12-character uppercase hexadecimal value from the `QR Code` column in the badge CSV. This is the single application-wide badge format: it is enforced when codes are created or rotated, stored in the database, accepted by the API and scanner, exported for badge production and exercised by the public test kit. Do not print that value as text on the badge. The value is only an attendee reference and contains no personal information.
 
 In the QR converter, use:
 
@@ -16,7 +16,7 @@ In the QR converter, use:
 - QR error correction level Q, so the 12-character payload stays in the simpler 21 by 21
   Version 1 format
 - a four-module quiet zone
-- a printed QR size of at least 40 mm square for fast recognition at distance
+- a printed QR size of at least 50 mm square for fast recognition at distance
 - no logo, colour, gradient or decorative overlay inside the QR
 
 Download `swp-2027-badge-data.csv` from **Admin > Lead Scanner > Export badge CSV**. It contains exactly:
@@ -70,7 +70,9 @@ cannot appear in attendee, sponsor, lead, admin, CSV or Excel reports and export
 
 Each test badge encodes only a 12-character uppercase reference in a 21 by 21 Version 1 QR. The
 screen and print layouts keep the QR large, black on white and surrounded by a four-module quiet
-zone so the test reflects the intended quick, longer-distance event-day scan.
+zone so the test reflects the intended quick, longer-distance event-day scan. Both the public test
+and authenticated sponsor scanner use the same rear-camera configuration, a larger high-resolution
+scan region and up to 20 scan attempts per second.
 
 Use the public kit to check browser camera permission, rear-camera selection, QR recognition,
 torch availability and photograph upload on representative devices. It does not replace the full

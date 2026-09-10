@@ -145,7 +145,8 @@ export default function AdminLeadScanner() {
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               The badge CSV contains first name, last name, job title, company and the hidden QR
-              code for your converter.
+              code for your converter. Every real and test badge uses the same exact 12-character
+              uppercase format.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

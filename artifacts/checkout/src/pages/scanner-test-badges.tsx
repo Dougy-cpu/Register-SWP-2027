@@ -70,7 +70,8 @@ export default function ScannerTestBadges() {
               <p className="mt-2 max-w-3xl text-sm text-slate-700">
                 Open the scanner test on each phone or tablet. Keep this badge page visible on a
                 second screen, or print it. Every identity below is fictional and every scan stays
-                on the test screen only.
+                on the test screen only. The QR codes use the same compact 12-character format as
+                the real event badges.
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <code className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-primary">
@@ -86,7 +87,7 @@ export default function ScannerTestBadges() {
               <ScannerTestQr
                 matrix={SCANNER_TEST_LINK_MATRIX}
                 label="Open the SWP lead scanner device test"
-                className="mx-auto h-40 w-40"
+                className="mx-auto h-48 w-48"
               />
               <p className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-slate-600">
                 <Smartphone className="h-3.5 w-3.5" /> Scan to open on a phone
@@ -136,7 +137,7 @@ export default function ScannerTestBadges() {
                 <ScannerTestQr
                   matrix={badge.matrix}
                   label={`Test badge for ${badge.name}`}
-                  className="mx-auto h-48 w-48"
+                  className="mx-auto h-56 w-56 print:h-[50mm] print:w-[50mm]"
                 />
               </div>
             </article>

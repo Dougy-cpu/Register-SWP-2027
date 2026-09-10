@@ -28,6 +28,7 @@ import {
   getScannerWindow,
   listLeadRows,
   MAX_SYNC_BATCH,
+  normaliseBadgeCode,
   SCANNER_TEST_CODE,
   scannerDeviceRateLimitKey,
   syncScannerBatch,
@@ -383,8 +384,8 @@ router.use("/scanner", (_req, res, next) => {
 });
 
 router.post("/scanner/lookup", async (req, res): Promise<void> => {
-  const code = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
-  if (!/^[0-9A-F]{12}$/.test(code)) {
+  const code = normaliseBadgeCode(req.body?.code);
+  if (!code) {
     res.status(400).json({ error: "This is not an SWP badge" });
     return;
   }

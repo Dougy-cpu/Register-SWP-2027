@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BADGE_SCANNER_OPTIONS } from "@/lib/scanner-camera";
 import {
   activateScanner,
   downloadOfflinePack,
@@ -470,13 +471,7 @@ export default function SponsorScanner() {
         qrScannerRef.current = new QrScanner(
           videoRef.current,
           (result) => void handleDecodedRef.current(result.data, "camera"),
-          {
-            preferredCamera: "environment",
-            highlightScanRegion: true,
-            highlightCodeOutline: true,
-            maxScansPerSecond: 10,
-            returnDetailedScanResult: true,
-          },
+          BADGE_SCANNER_OPTIONS,
         );
       }
       await qrScannerRef.current.start();
@@ -916,7 +911,7 @@ export default function SponsorScanner() {
                 </div>
               </div>
               <div className="pointer-events-none absolute inset-0 grid place-items-center">
-                <div className="w-[72%] max-w-sm aspect-square rounded-3xl border-[3px] border-white shadow-[0_0_0_999px_rgba(0,0,0,0.24)]" />
+                <div className="aspect-square w-[78%] max-w-md rounded-3xl border-[3px] border-white shadow-[0_0_0_999px_rgba(0,0,0,0.24)]" />
               </div>
               <p className="absolute inset-x-0 bottom-5 text-center text-sm font-medium text-white drop-shadow">
                 Hold steady over the QR

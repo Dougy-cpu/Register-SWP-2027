@@ -1,3 +1,5 @@
+import { normaliseBadgeCode } from "@/lib/scanner-code";
+
 export const SCANNER_TEST_PATH = "/scanner-test";
 export const SCANNER_TEST_BADGES_PATH = "/scanner-test/badges";
 export const SCANNER_TEST_URL = "https://register.swpsummit.com/scanner-test";
@@ -185,9 +187,7 @@ export const SCANNER_TEST_BADGES: readonly ScannerTestBadge[] = [
 ] as const;
 
 export function normaliseScannerTestValue(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const code = value.trim().toUpperCase();
-  return /^[0-9A-F]{12}$/.test(code) ? code : null;
+  return normaliseBadgeCode(value);
 }
 
 export function findScannerTestBadge(value: unknown): ScannerTestBadge | null {
