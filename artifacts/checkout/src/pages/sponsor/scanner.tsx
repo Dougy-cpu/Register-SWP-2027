@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import QrScanner from "qr-scanner";
 import {
   ArrowLeft,
   Camera,
-  CameraOff,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -12,7 +10,6 @@ import {
   CloudUpload,
   Download,
   Image as ImageIcon,
-  Lightbulb,
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
@@ -25,7 +22,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BADGE_SCANNER_OPTIONS } from "@/lib/scanner-camera";
+import { useBadgeCamera } from "@/hooks/use-badge-camera";
+import { useBadgePhoto } from "@/hooks/use-badge-photo";
+import { BadgeCameraView } from "@/components/badge-camera-view";
+import { PhoneScannerLink } from "@/components/phone-scanner-link";
+import { isScannerPhone } from "@/lib/scanner-device";
 import {
   activateScanner,
   downloadOfflinePack,
@@ -107,10 +108,31 @@ function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
 }
 
 export default function SponsorScanner() {
+  if (isScannerPhone()) return <PhoneSponsorScanner />;
+  const hasLink = new URLSearchParams(window.location.hash.slice(1)).has("activate");
+  return (
+    <main className="min-h-screen bg-slate-50 p-6">
+      <Card className="mx-auto max-w-xl space-y-4 p-6">
+        <h1 className="text-2xl font-bold">Scan badges on your phone</h1>
+        {hasLink ? (
+          <PhoneScannerLink url={window.location.href} />
+        ) : (
+          <p>Open your personal scanner link from Team &amp; passes in your phone browser.</p>
+        )}
+        <p className="text-sm text-muted-foreground">
+          Keep your scanner link private. It belongs to your named team member.
+        </p>
+        <Button asChild variant="outline">
+          <a href="/sponsor">Back to sponsor workspace</a>
+        </Button>
+      </Card>
+    </main>
+  );
+}
+
+function PhoneSponsorScanner() {
   const [, navigate] = useLocation();
-  const videoRef = useRef<HTMLVideoElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const qrScannerRef = useRef<QrScanner | null>(null);
   const processingRef = useRef(false);
   const lastDecodeRef = useRef({ code: "", at: 0 });
   const recentScansRef = useRef(new Map<string, number>());
@@ -124,11 +146,9 @@ export default function SponsorScanner() {
   const [bootstrap, setBootstrap] = useState<ScannerBootstrap | null>(null);
   const [pack, setPack] = useState<StoredOfflinePack | null>(null);
   const [initialising, setInitialising] = useState(true);
+  const [online, setOnline] = useState(navigator.onLine);
   const [activating, setActivating] = useState(false);
   const [preparing, setPreparing] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [flashAvailable, setFlashAvailable] = useState(false);
-  const [flashOn, setFlashOn] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [recoveryItems, setRecoveryItems] = useState<RejectedSyncItem[]>([]);
   const [scanConfirmationKey, setScanConfirmationKey] = useState(0);
@@ -139,6 +159,25 @@ export default function SponsorScanner() {
   const [notice, setNotice] = useState("");
   const [updateWaiting, setUpdateWaiting] = useState(false);
   const [offlineTestStage, setOfflineTestStage] = useState<"none" | "armed" | "observed">("none");
+
+  const scanEpoch = useRef(0);
+  const camera = useBadgeCamera(
+    (value) => void handleDecodedRef.current(value, "camera"),
+    () => {
+      void updateReadiness({ cameraTested: true })
+        .then(refreshBootstrap)
+        .catch(() => undefined);
+    },
+  );
+  const photo = useBadgePhoto((value) => handleDecodedRef.current(value, "image"), setError);
+  const { stop: stopOwnedCamera, isSessionActive, session: cameraSession } = camera;
+  const stopCamera = useCallback(() => {
+    scanEpoch.current++;
+    stopOwnedCamera();
+  }, [stopOwnedCamera]);
+  useEffect(() => {
+    if (camera.phase === "paused" || camera.phase === "error") scanEpoch.current++;
+  }, [camera.phase]);
 
   const refreshCounts = useCallback(async () => {
     const [pending, rejected] = await Promise.all([pendingScannerCount(), rejectedScannerItems()]);
@@ -304,25 +343,27 @@ export default function SponsorScanner() {
     const revoked = (event: Event) => {
       const caught = (event as CustomEvent<ScannerApiError>).detail;
       setAccessError(caught.code ?? "invalid_device");
-      qrScannerRef.current?.stop();
-      setCameraActive(false);
+      stopCamera();
     };
     window.addEventListener("swp:scanner-access", revoked);
     return () => window.removeEventListener("swp:scanner-access", revoked);
-  }, []);
+  }, [stopCamera]);
 
   useEffect(() => {
     const handleOnline = () => {
+      setOnline(true);
       void (async () => {
         await finaliseObservedOfflineTest().catch(() => undefined);
         await syncNow(true);
       })();
     };
+    const handleOffline = () => setOnline(false);
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && navigator.onLine) void syncNow(true);
     };
     const handleUpdate = () => setUpdateWaiting(true);
     window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("swp:update-ready", handleUpdate);
     const interval = window.setInterval(() => {
@@ -330,6 +371,7 @@ export default function SponsorScanner() {
     }, 15_000);
     return () => {
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("swp:update-ready", handleUpdate);
       window.clearInterval(interval);
@@ -338,8 +380,7 @@ export default function SponsorScanner() {
 
   useEffect(
     () => () => {
-      qrScannerRef.current?.destroy();
-      qrScannerRef.current = null;
+      scanEpoch.current++;
       if (scanToastTimerRef.current !== null) {
         window.clearTimeout(scanToastTimerRef.current);
         scanToastTimerRef.current = null;
@@ -377,12 +418,28 @@ export default function SponsorScanner() {
 
   const handleDecoded = useCallback(
     async (rawValue: string, source: ScanSource) => {
-      if (processingRef.current) return;
+      if (processingRef.current) {
+        // A camera will supply another frame. A photo is a one-shot decode, so
+        // make a rejected overlapping attempt visible instead of losing it.
+        if (source === "image") {
+          setScanConfirmationKey(0);
+          setError(
+            "A previous badge is still being checked or saved. Wait a moment, then try this photo again.",
+          );
+        }
+        return;
+      }
+      const epoch = scanEpoch.current;
+      let cameraCompletedTestQr = false;
+      const current = () =>
+        epoch === scanEpoch.current &&
+        (source !== "camera" || cameraCompletedTestQr || isSessionActive(cameraSession));
       processingRef.current = true;
       setError("");
       try {
         const code = normaliseScannedValue(rawValue);
         if (!code) throw new Error("That QR is not an SWP attendee badge");
+        if (!credential) throw new Error("Open your personal scanner link to continue.");
         if (accessError)
           throw new Error("Reconnect this scanner before scanning. Your existing leads are safe.");
         const now = Date.now();
@@ -390,6 +447,7 @@ export default function SponsorScanner() {
           lastDecodeRef.current.code === code && now - lastDecodeRef.current.at < 1_500;
         lastDecodeRef.current = { code, at: now };
         if (sameFrame) return;
+        setScanConfirmationKey(0);
         const recentScanAt = recentScansRef.current.get(code);
         if (recentScanAt && now - recentScanAt < 10_000) {
           showScanConfirmation("Already added");
@@ -400,14 +458,14 @@ export default function SponsorScanner() {
         }
         if (bootstrap && code === bootstrap.testQrValue) {
           if (source === "camera") {
-            qrScannerRef.current?.stop();
-            setCameraActive(false);
-            setFlashOn(false);
+            cameraCompletedTestQr = true;
+            stopOwnedCamera();
           }
           await updateReadiness({
             qrTested: true,
             ...(source === "camera" ? { cameraTested: true } : {}),
           });
+          if (!current()) return;
           setNotice("Test badge recognised. QR scanning is ready.");
           recentScansRef.current.set(code, now);
           await refreshBootstrap();
@@ -420,11 +478,12 @@ export default function SponsorScanner() {
               : "The organiser must configure the event end time before scanning can begin",
           );
         }
-        let attendee = await decryptPackAttendee(code);
+        let attendee = await decryptPackAttendee(code, credential);
+        if (!current()) return;
         if (!attendee) {
           if (navigator.onLine) {
             try {
-              attendee = await lookupScannerBadge(code);
+              attendee = await lookupScannerBadge(code, credential);
             } catch (caught) {
               if (caught instanceof ScannerApiError && [400, 401, 403, 404].includes(caught.status))
                 throw caught;
@@ -432,10 +491,12 @@ export default function SponsorScanner() {
             }
           }
         }
+        if (!current()) return;
         const [pending, confirmed] = await Promise.all([
-          pendingScannerItems(),
-          cachedScannerLeads(),
+          pendingScannerItems(credential),
+          cachedScannerLeads(credential),
         ]);
+        if (!current()) return;
         const alreadyAdded =
           pending.scans.some((scan) => scan.code === code) ||
           Boolean(attendee && confirmed.some((lead) => lead.attendeeId === attendee.attendeeId));
@@ -444,83 +505,49 @@ export default function SponsorScanner() {
           showScanConfirmation("Already added");
           return;
         }
-        await queueScan({ code, source, attendee });
+        // Pin ownership through asynchronous lookup/storage. A changed scanner
+        // link must never move an in-flight scan into another sponsor's queue.
+        await queueScan({ code, source, attendee }, credential);
+        if (!current()) return;
         recentScansRef.current.set(code, Date.now());
         showScanConfirmation(attendee ? "Added to leads" : "Saved for checking");
         navigator.vibrate?.(50);
         await refreshCounts();
         if (navigator.onLine) void syncNow(true);
       } catch (caught) {
-        setError(scannerErrorMessage(caught));
+        if (current()) {
+          lastDecodeRef.current = { code: "", at: 0 };
+          setScanConfirmationKey(0);
+          setError(scannerErrorMessage(caught));
+        }
       } finally {
         processingRef.current = false;
       }
     },
-    [accessError, bootstrap, refreshBootstrap, refreshCounts, showScanConfirmation, syncNow],
+    [
+      accessError,
+      bootstrap,
+      credential,
+      stopOwnedCamera,
+      isSessionActive,
+      cameraSession,
+      refreshBootstrap,
+      refreshCounts,
+      showScanConfirmation,
+      syncNow,
+    ],
   );
 
   useEffect(() => {
     handleDecodedRef.current = handleDecoded;
   }, [handleDecoded]);
 
-  const startCamera = useCallback(async () => {
-    if (!videoRef.current) return;
+  const startCamera = () => {
+    photo.cancel();
+    scanEpoch.current++;
+    lastDecodeRef.current = { code: "", at: 0 };
     setError("");
-    try {
-      if (!qrScannerRef.current) {
-        qrScannerRef.current = new QrScanner(
-          videoRef.current,
-          (result) => void handleDecodedRef.current(result.data, "camera"),
-          BADGE_SCANNER_OPTIONS,
-        );
-      }
-      await qrScannerRef.current.start();
-      setCameraActive(true);
-      setFlashAvailable(await qrScannerRef.current.hasFlash());
-      void (async () => {
-        await updateReadiness({ cameraTested: true });
-        await refreshBootstrap();
-      })().catch(() => undefined);
-    } catch (caught) {
-      setCameraActive(false);
-      setError(
-        caught instanceof Error && /permission|notallowed/i.test(caught.message)
-          ? "Camera access is needed to scan a badge. Allow it when your phone asks, or upload a photo instead."
-          : scannerErrorMessage(caught),
-      );
-    }
-  }, [refreshBootstrap]);
-
-  const stopCamera = () => {
-    qrScannerRef.current?.stop();
-    setCameraActive(false);
-    setFlashOn(false);
-  };
-
-  const toggleFlash = async () => {
-    if (!qrScannerRef.current) return;
-    try {
-      await qrScannerRef.current.toggleFlash();
-      setFlashOn(await qrScannerRef.current.isFlashOn());
-    } catch {
-      setError("The torch is not available on this phone");
-    }
-  };
-
-  const scanImage = async (file?: File) => {
-    if (!file) return;
-    setError("");
-    try {
-      const result = await QrScanner.scanImage(file, {
-        returnDetailedScanResult: true,
-        alsoTryWithoutScanRegion: true,
-      });
-      await handleDecoded(result.data, "image");
-    } catch {
-      setError("No readable attendee QR was found in that photograph");
-    } finally {
-      if (imageInputRef.current) imageInputRef.current.value = "";
-    }
+    camera.start();
   };
 
   const runOfflineTest = async () => {
@@ -711,7 +738,7 @@ export default function SponsorScanner() {
           <Button variant="secondary" onClick={() => navigate("/sponsor/leads")}>
             Leads
           </Button>
-          {(rejectedCount > 0 || !navigator.onLine) && (
+          {(rejectedCount > 0 || !online) && (
             <div
               className={`rounded-full px-3 py-2 text-xs font-semibold flex items-center gap-2 ${
                 rejectedCount
@@ -837,88 +864,20 @@ export default function SponsorScanner() {
           </div>
         )}
 
-        <section className="relative overflow-hidden rounded-2xl bg-black border border-white/15 min-h-[52vh]">
-          <video
-            ref={videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            muted
-            playsInline
-          />
-          {!cameraActive && (
-            <div className="absolute inset-0 grid place-items-center text-center p-8 bg-gradient-to-b from-slate-900 to-black">
-              <div>
-                <div className="h-20 w-20 mx-auto rounded-full bg-blue-500/15 border border-blue-400/30 grid place-items-center">
-                  <Camera className="h-9 w-9 text-blue-300" />
-                </div>
-                <p
-                  role="heading"
-                  aria-level={1}
-                  className="text-white text-2xl font-bold mt-5 tracking-tight"
-                >
-                  Scan an attendee
-                </p>
-                <p className="text-slate-400 text-sm mt-2 max-w-xs">
-                  Point this phone at the QR code on their badge. Everything saves automatically,
-                  even if the signal drops.
-                </p>
-                <Button
-                  className="mt-6 h-14 px-8 text-base"
-                  onClick={() => void startCamera()}
-                  disabled={Boolean(accessError) || (!offlineUsable && preparing)}
-                >
-                  {preparing ? (
-                    <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
-                  ) : (
-                    <Camera className="h-5 w-5 mr-2" />
-                  )}
-                  {preparing && !offlineUsable ? "Getting ready…" : "Start scanning"}
-                </Button>
-              </div>
-            </div>
-          )}
-          {cameraActive && (
-            <>
-              <div className="absolute inset-x-0 top-0 p-4 flex justify-between bg-gradient-to-b from-black/75 to-transparent">
-                <div>
-                  {!navigator.onLine && (
-                    <Badge className="bg-black/60 text-white border border-white/20">
-                      <WifiOff className="h-3 w-3 mr-1" />
-                      Still working offline
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  {flashAvailable && (
-                    <Button
-                      size="icon"
-                      variant="secondary"
-                      onClick={() => void toggleFlash()}
-                      aria-label="Toggle torch"
-                    >
-                      <Lightbulb
-                        className={`h-5 w-5 ${flashOn ? "fill-amber-300 text-amber-500" : ""}`}
-                      />
-                    </Button>
-                  )}
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    onClick={stopCamera}
-                    aria-label="Stop camera"
-                  >
-                    <CameraOff className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
-              <div className="pointer-events-none absolute inset-0 grid place-items-center">
-                <div className="aspect-square w-[78%] max-w-md rounded-3xl border-[3px] border-white shadow-[0_0_0_999px_rgba(0,0,0,0.24)]" />
-              </div>
-              <p className="absolute inset-x-0 bottom-5 text-center text-sm font-medium text-white drop-shadow">
-                Hold steady over the QR
-              </p>
-            </>
-          )}
-        </section>
+        <BadgeCameraView
+          camera={{
+            ...camera,
+            stop: stopCamera,
+            selectCamera: (selected) => {
+              photo.cancel();
+              scanEpoch.current++;
+              camera.selectCamera(selected);
+            },
+          }}
+          startLabel="Start scanning"
+          onStart={startCamera}
+          disabled={Boolean(accessError) || (!offlineUsable && preparing)}
+        />
 
         <div>
           <input
@@ -927,16 +886,37 @@ export default function SponsorScanner() {
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={(event) => void scanImage(event.target.files?.[0])}
+            aria-label="Badge photo"
+            onChange={(event) => {
+              void photo.scan(event.target.files?.[0]);
+              event.target.value = "";
+            }}
           />
           <Button
             variant="secondary"
             className="h-12 w-full"
-            onClick={() => imageInputRef.current?.click()}
-            disabled={Boolean(accessError)}
+            onClick={() => {
+              stopCamera();
+              setError("");
+              imageInputRef.current?.click();
+            }}
+            disabled={Boolean(accessError) || photo.busy}
           >
-            <ImageIcon className="h-4 w-4 mr-2" /> Upload photos
+            <ImageIcon className="h-4 w-4 mr-2" />
+            {photo.busy ? "Reading and saving photo…" : "Scan a badge photo"}
           </Button>
+          {photo.busy && (
+            <Button
+              variant="secondary"
+              className="mt-2 h-12 w-full"
+              onClick={() => {
+                scanEpoch.current++;
+                photo.cancel();
+              }}
+            >
+              Cancel photo
+            </Button>
+          )}
         </div>
 
         <div className="text-center">

@@ -85,12 +85,19 @@ export async function getScannerBootstrap(): Promise<ScannerBootstrap> {
 export function downloadOfflinePack(): Promise<ScannerOfflinePackDownload> {
   return scannerJson<ScannerOfflinePackDownload>("/api/scanner/offline-pack");
 }
-export async function lookupScannerBadge(code: string): Promise<LeadPackAttendee> {
-  return scannerJson("/api/scanner/lookup", {
-    method: "POST",
-    signal: boundedSignal(2500),
-    body: JSON.stringify({ code }),
-  });
+export async function lookupScannerBadge(
+  code: string,
+  credential?: ScannerCredential,
+): Promise<LeadPackAttendee> {
+  return scannerJson(
+    "/api/scanner/lookup",
+    {
+      method: "POST",
+      signal: boundedSignal(2500),
+      body: JSON.stringify({ code }),
+    },
+    credential,
+  );
 }
 export async function updateReadiness(
   values: Partial<{

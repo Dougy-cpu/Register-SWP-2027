@@ -1,5 +1,7 @@
 // Local preview only. This module is not imported by the application entry point.
 import type { PendingScan, ScannerCredential, SponsorLead } from "@/types/lead-scanner";
+if (!import.meta.env.DEV || !["localhost", "127.0.0.1"].includes(location.hostname))
+  throw new Error("This storage audit is local development only.");
 const output = document.querySelector("pre")!;
 const assert = (condition: unknown, label: string) => {
   if (!condition) throw new Error(label);
@@ -198,8 +200,122 @@ document.querySelector("button")!.addEventListener(
         queued.every((item) => item.scope === storage.scannerScope(credential)),
         "all visible queued items have the active sponsor and phone scope",
       );
-      output.textContent += "\nDONE · All checks use sample data on this local preview origin.\n";
+      await storage.saveScannerCredential(other);
+      const pinned = await storage.queueScan(
+        { code: "AABBCCDDEEFF", source: "camera", attendee },
+        credential,
+      );
+      assert(
+        !(await storage.pendingScannerItems()).scans.some((item) => item.id === pinned.id),
+        "an in-flight scan cannot move to a newly selected sponsor",
+      );
+      await storage.saveScannerCredential(credential);
+      assert(
+        (await storage.pendingScannerItems()).scans.some((item) => item.id === pinned.id),
+        "an in-flight scan remains with its original sponsor",
+      );
+
+      const api = await import("@/lib/scanner-api");
+      const originalFetch = window.fetch;
+      const beforeFailure = (await storage.pendingScannerItems()).scans.map((item) => item.id);
+      let requests = 0;
+      const sentIds: string[] = [];
+      try {
+        window.fetch = async () => {
+          requests++;
+          throw new TypeError("Network request failed");
+        };
+        await api.syncPendingScannerItems().catch(() => undefined);
+        assert(
+          JSON.stringify((await storage.pendingScannerItems()).scans.map((item) => item.id)) ===
+            JSON.stringify(beforeFailure),
+          "failed network sync retains every queued scan with its original ID",
+        );
+        window.fetch = async (url, init) => {
+          assert(
+            String(url) === "/api/scanner/sync",
+            "sync uses only the expected mocked endpoint",
+          );
+          requests++;
+          const payload = JSON.parse(String(init?.body)) as {
+            scans: PendingScan[];
+            annotations: Array<{ id: string }>;
+          };
+          sentIds.push(...payload.scans.map((item) => item.id));
+          const leads = payload.scans.map((item) => ({
+            ...lead,
+            id: `confirmed:${item.id}`,
+            scans: [
+              {
+                id: item.id,
+                source: item.source,
+                operatorName: credential.operatorName,
+                capturedAt: item.capturedAt,
+              },
+            ],
+          }));
+          return new Response(
+            JSON.stringify({
+              leads,
+              scans: payload.scans.map((item) => ({ id: item.id, status: "accepted" })),
+              annotations: payload.annotations.map((item) => ({ id: item.id, status: "accepted" })),
+              syncedAt: new Date().toISOString(),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        };
+        const synced = await api.syncPendingScannerItems();
+        assert(
+          synced.remaining === 0 && requests >= 2,
+          "reconnection drains the durable queue after acknowledgement",
+        );
+        assert(
+          beforeFailure.every((id) => sentIds.includes(id)),
+          "original IDs were used for sync",
+        );
+      } finally {
+        window.fetch = originalFetch;
+      }
+      const reopen = await storage.queueScan(
+        { code: "BADA55000001", source: "camera", attendee },
+        credential,
+      );
+      await storage.saveLeadDraft(reopen.id, "Survives a real browser reload", 4, credential);
+      await storage.writeScannerValue("audit-reopen", { id: reopen.id }, credential);
+      output.textContent +=
+        "\nDONE · All checks use sample data on this local preview origin. Reload this page, then Verify saved state after reload.\n";
     })().catch((error) => {
       output.textContent += `FAIL ${error instanceof Error ? error.stack : String(error)}`;
+    }),
+);
+
+document.getElementById("reopen-check")?.addEventListener(
+  "click",
+  () =>
+    void (async () => {
+      output.textContent = "";
+      const storage = await import("@/lib/scanner-storage");
+      const saved = await storage.getScannerCredential();
+      assert(saved?.id === credential.id, "scanner credential survived a real browser reload");
+      const marker = await storage.readScannerValue<{ id: string }>("audit-reopen", credential);
+      assert(
+        marker &&
+          (await storage.pendingScannerItems(credential)).scans.some(
+            (scan) => scan.id === marker.id,
+          ),
+        "unsynced scan survived a real browser reload",
+      );
+      const draft = marker ? await storage.getLeadDraft(marker.id, credential) : null;
+      assert(
+        draft?.rating === 4 && draft.note === "Survives a real browser reload",
+        "rating and latest note survived a real browser reload",
+      );
+      assert(
+        (await storage.cachedScannerLeads(credential)).length > 0,
+        "confirmed leads survived a real browser reload",
+      );
+      output.textContent += "REOPEN CHECK PASSED\n";
+    })().catch((error) => {
+      output.textContent += `FAIL ${String(error)}`;
     }),
 );

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import SponsorScanner from "./scanner";
+import { cameraMock, installCameraMock, latestCamera } from "@/test/badge-camera-mock";
 const fake = vi.hoisted(() => ({
   decode: null as null | ((value: { data: string }) => void),
   bootstrap: vi.fn(),
@@ -8,6 +9,7 @@ const fake = vi.hoisted(() => ({
   queue: vi.fn(),
   stop: vi.fn(),
   sync: vi.fn(),
+  readiness: vi.fn(),
 }));
 const credential = {
   id: "phone1",
@@ -43,7 +45,7 @@ vi.mock("@/lib/scanner-api", () => ({
   getScannerBootstrap: (...args: unknown[]) => fake.bootstrap(...args),
   lookupScannerBadge: (...args: unknown[]) => fake.lookup(...args),
   syncPendingScannerItems: (...args: unknown[]) => fake.sync(...args),
-  updateReadiness: vi.fn(async () => undefined),
+  updateReadiness: (...args: unknown[]) => fake.readiness(...args),
   downloadOfflinePack: vi.fn(),
   activateScanner: vi.fn(),
   recoverScanner: vi.fn(),
@@ -71,23 +73,18 @@ vi.mock("@/lib/scanner-storage", () => ({
   verifyOfflineStorage: vi.fn(),
   retryRejectedScans: vi.fn(),
 }));
-vi.mock("qr-scanner", () => ({
-  default: class {
-    constructor(_video: unknown, callback: (value: { data: string }) => void) {
-      fake.decode = callback;
-    }
-    start = async () => undefined;
-    stop = fake.stop;
-    destroy = vi.fn();
-    hasFlash = async () => false;
-  },
+vi.mock("qr-scanner", async () => ({
+  default: (await import("@/test/badge-camera-mock")).MockQrScanner,
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  installCameraMock();
   fake.decode = null;
   fake.bootstrap.mockResolvedValue(state);
+  fake.lookup.mockReset().mockResolvedValue(null);
   fake.queue.mockResolvedValue({ id: "scan1" });
   fake.sync.mockResolvedValue({ remaining: 2, rejected: 0 });
+  fake.readiness.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
 });
 afterEach(() => {
@@ -95,6 +92,102 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("fast scanner failure paths", () => {
+  it("allows cancelling a photo while its badge lookup is pending", async () => {
+    let resolveLookup!: (value: unknown) => void;
+    fake.lookup.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+    cameraMock.photo.mockResolvedValue({ data: "ABCDABCDABCD" });
+    const { container } = render(<SponsorScanner />);
+    await screen.findByRole("button", { name: "Start scanning" });
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(["QR"], "badge.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(fake.lookup).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Cancel photo" }));
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(["QR"], "retry.png", { type: "image/png" })] },
+    });
+    await screen.findByText(
+      "A previous badge is still being checked or saved. Wait a moment, then try this photo again.",
+    );
+    await act(async () => resolveLookup({ attendeeId: 2, name: "Jamie", company: "Sample" }));
+    expect(fake.queue).not.toHaveBeenCalled();
+    expect(screen.queryByText("Added to leads")).toBeNull();
+  });
+  it("shows a readiness error even after the real test QR intentionally stops the camera", async () => {
+    render(<SponsorScanner />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
+    await screen.findByText("Camera ready");
+    await waitFor(() => expect(fake.readiness).toHaveBeenCalled());
+    fake.readiness.mockRejectedValueOnce(new Error("Readiness could not be saved. Try again."));
+    await act(async () => latestCamera().decode({ data: state.testQrValue }));
+    await screen.findByText("Readiness could not be saved. Try again.");
+    expect(fake.queue).not.toHaveBeenCalled();
+  });
+  it("shows success only after durable saving and allows retry after a storage failure", async () => {
+    let saved!: () => void;
+    fake.lookup.mockResolvedValue({ attendeeId: 2, name: "Jamie", company: "Sample" });
+    fake.queue.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          saved = resolve;
+        }),
+    );
+    render(<SponsorScanner />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
+    await screen.findByText("Camera ready");
+    act(() => latestCamera().decode({ data: "ABABABABABAB" }));
+    await waitFor(() => expect(fake.queue).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Added to leads")).toBeNull();
+    await act(async () => saved());
+    await screen.findByText("Added to leads");
+    fake.queue.mockRejectedValueOnce(new Error("Phone storage is full"));
+    await act(async () => latestCamera().decode({ data: "CDCDCDCDCDCD" }));
+    await screen.findByText("Phone storage is full");
+    expect(screen.queryByText("Added to leads")).toBeNull();
+    await act(async () => latestCamera().decode({ data: "CDCDCDCDCDCD" }));
+    await waitFor(() => expect(fake.queue).toHaveBeenCalledTimes(3));
+    expect(latestCamera().destroy).not.toHaveBeenCalled();
+  });
+  it("updates connectivity feedback without requiring another scan", async () => {
+    render(<SponsorScanner />);
+    await screen.findByRole("button", { name: "Start scanning" });
+    expect(screen.queryByText("Working offline")).toBeNull();
+    act(() => window.dispatchEvent(new Event("offline")));
+    expect(screen.getByText("Working offline")).toBeTruthy();
+    act(() => window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(screen.queryByText("Working offline")).toBeNull());
+  });
+  it("keeps desktop handoff separate without activating a scanner or opening storage", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Windows Chrome");
+    const { container } = render(<SponsorScanner />);
+    expect(screen.getByText("Scan badges on your phone")).toBeTruthy();
+    expect(container.querySelector("video")).toBeNull();
+    expect(fake.bootstrap).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Start scanning" })).toBeNull();
+  });
+  it("does not save a stale badge lookup after the operator stops the camera", async () => {
+    let resolveLookup!: (value: unknown) => void;
+    fake.lookup.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+    render(<SponsorScanner />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
+    await screen.findByText("Camera ready");
+    act(() => latestCamera().decode({ data: "ABCDABCDABCD" }));
+    await waitFor(() => expect(fake.lookup).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Stop camera" }));
+    await act(async () => resolveLookup({ attendeeId: 2, name: "Jamie", company: "Sample" }));
+    expect(fake.queue).not.toHaveBeenCalled();
+    expect(screen.queryByText("Added to leads")).toBeNull();
+  });
   it("opens cached scanning without waiting for a stalled bootstrap", async () => {
     fake.bootstrap.mockReturnValue(new Promise(() => undefined));
     render(<SponsorScanner />);
@@ -107,16 +200,16 @@ describe("fast scanner failure paths", () => {
     fake.lookup.mockResolvedValue(attendee);
     render(<SponsorScanner />);
     fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
-    await waitFor(() => expect(fake.decode).not.toBeNull());
+    await screen.findByText("Camera ready");
     await act(async () => {
-      fake.decode?.({ data: "ABCDEF123456" });
+      latestCamera().decode({ data: "ABCDEF123456" });
     });
     await screen.findByText("Added to leads");
-    expect(fake.queue).toHaveBeenCalledWith(expect.objectContaining({ attendee }));
-    expect(fake.stop).not.toHaveBeenCalled();
+    expect(fake.queue).toHaveBeenCalledWith(expect.objectContaining({ attendee }), credential);
+    expect(latestCamera().destroy).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: /note/i })).toBeNull();
     await act(async () => {
-      fake.decode?.({ data: "ABCDEF123456" });
+      latestCamera().decode({ data: "ABCDEF123456" });
     });
     expect(fake.queue).toHaveBeenCalledTimes(1);
   });
@@ -124,12 +217,15 @@ describe("fast scanner failure paths", () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
     render(<SponsorScanner />);
     fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
-    await waitFor(() => expect(fake.decode).not.toBeNull());
+    await screen.findByText("Camera ready");
     await act(async () => {
-      fake.decode?.({ data: "ABCDEF654321" });
+      latestCamera().decode({ data: "ABCDEF654321" });
     });
     await screen.findByText("Saved for checking");
-    expect(fake.queue).toHaveBeenCalledWith(expect.objectContaining({ attendee: null }));
+    expect(fake.queue).toHaveBeenCalledWith(
+      expect.objectContaining({ attendee: null }),
+      credential,
+    );
     expect(fake.lookup).not.toHaveBeenCalled();
   });
 });

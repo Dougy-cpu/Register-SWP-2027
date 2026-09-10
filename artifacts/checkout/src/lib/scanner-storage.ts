@@ -220,10 +220,13 @@ function bytesBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-export async function decryptPackAttendee(code: string): Promise<LeadPackAttendee | null> {
+export async function decryptPackAttendee(
+  code: string,
+  credential?: ScannerCredential,
+): Promise<LeadPackAttendee | null> {
   const normalisedCode = normaliseScannedValue(code);
   if (!normalisedCode) return null;
-  const pack = await getOfflinePack();
+  const pack = await getOfflinePack(credential);
   if (!pack) return null;
   if (pack.expiresAt && Date.now() > new Date(pack.expiresAt).getTime()) return null;
   const lookup = bytesBase64Url(
@@ -254,10 +257,11 @@ export async function decryptPackAttendee(code: string): Promise<LeadPackAttende
 
 export async function queueScan(
   input: Omit<PendingScan, "id" | "capturedAt" | "scope">,
+  credential?: ScannerCredential,
 ): Promise<PendingScan> {
   const scan: PendingScan = {
     ...input,
-    scope: scannerScope(await owner()),
+    scope: scannerScope(await owner(credential)),
     id: crypto.randomUUID(),
     capturedAt: new Date().toISOString(),
   };

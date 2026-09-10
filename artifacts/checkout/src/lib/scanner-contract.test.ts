@@ -40,14 +40,19 @@ describe("application-wide badge scanner contract", () => {
       readFile(resolve(process.cwd(), "artifacts/checkout/src/pages/scanner-test.tsx"), "utf8"),
     ]);
     for (const source of [realScanner, testScanner]) {
-      expect(source).toContain('import { BADGE_SCANNER_OPTIONS } from "@/lib/scanner-camera"');
-      expect(source).toContain("BADGE_SCANNER_OPTIONS,");
+      expect(source).toContain('import { useBadgeCamera } from "@/hooks/use-badge-camera"');
+      expect(source).toContain("<BadgeCameraView");
       expect(source).not.toContain("maxScansPerSecond:");
       // qr-scanner permanently collapses a video that is display:none when its
       // constructor runs. Keep the video rendered behind the inactive overlay
       // so an authorised mobile camera stream is actually visible.
       expect(source).not.toContain('cameraActive ? "block" : "hidden"');
     }
+    const lifecycle = await readFile(
+      resolve(process.cwd(), "artifacts/checkout/src/lib/badge-camera.ts"),
+      "utf8",
+    );
+    expect(lifecycle).toContain("...BADGE_SCANNER_OPTIONS,");
   });
 
   it("does not upscale low-resolution camera frames", () => {

@@ -3,11 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  crawlerResponsesMiddleware,
-  ROBOTS_TXT,
-  SITEMAP_XML,
-} from "./crawler-responses";
+import { crawlerResponsesMiddleware, ROBOTS_TXT, SITEMAP_XML } from "./crawler-responses";
 
 const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const staticRobots = readFileSync(resolve(checkoutRoot, "public/robots.txt"), "utf8");
@@ -50,7 +46,8 @@ describe("checkout crawler responses", () => {
   });
 
   it("keeps the static and middleware robots policy identical", () => {
-    expect(staticRobots).toBe(ROBOTS_TXT);
+    // Git may check these text assets out as CRLF on Windows.
+    expect(staticRobots.replaceAll("\r\n", "\n")).toBe(ROBOTS_TXT);
   });
 
   it("returns the static XML sitemap with query strings", async () => {
@@ -62,7 +59,7 @@ describe("checkout crawler responses", () => {
   });
 
   it("keeps the static and middleware sitemap XML identical", () => {
-    expect(staticSitemap).toBe(SITEMAP_XML);
+    expect(staticSitemap.replaceAll("\r\n", "\n")).toBe(SITEMAP_XML);
   });
 
   it("passes ordinary routes through to the checkout fallback", async () => {

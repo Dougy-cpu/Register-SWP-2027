@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { LeadAnnotationFields } from "@/components/lead-annotation-fields";
 import {
   activateScanner,
   scannerFetch,
@@ -131,34 +131,7 @@ function LeadNotes({ lead, credential }: { lead: SponsorLead; credential: Scanne
   return (
     <div className="space-y-4 border-t p-5 bg-slate-50">
       <p className="text-sm font-semibold">Your notes · {credential.operatorName}</p>
-      <div>
-        <Label>Rating (optional)</Label>
-        <div className="mt-2 flex gap-2" role="group" aria-label="Lead rating">
-          {[1, 2, 3, 4, 5].map((value) => (
-            <Button
-              key={value}
-              variant={draft.rating === value ? "default" : "outline"}
-              aria-pressed={draft.rating === value}
-              aria-label={`Rate ${value} out of 5`}
-              onClick={() => persist({ ...draft, rating: draft.rating === value ? null : value })}
-            >
-              {value}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <Label htmlFor={`note-${scanId}`}>Notes</Label>
-        <Textarea
-          id={`note-${scanId}`}
-          rows={4}
-          maxLength={4000}
-          className="mt-2 bg-white"
-          value={draft.note}
-          placeholder="What would you like to follow up on?"
-          onChange={(event) => persist({ ...draft, note: event.target.value })}
-        />
-      </div>
+      <LeadAnnotationFields id={scanId} value={draft} onChange={persist} />
       <p role="status" className="text-xs text-muted-foreground">
         {status}
       </p>

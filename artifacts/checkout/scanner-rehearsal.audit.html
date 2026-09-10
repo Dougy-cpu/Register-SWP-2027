@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Local scanner integration audit</title>
+  </head>
+  <body>
+    <aside style="padding: 16px; background: #f0f6ff; color: #111">
+      <strong>Local integration audit: simulated phone camera, real QR decoder</strong>
+      <p>This development-only runner never connects to a lead API or production data.</p>
+      <button id="run-audit" style="padding: 12px; border: 1px solid #004eb9">
+        Run browser rehearsal
+      </button>
+      <pre id="audit-output" style="white-space: pre-wrap"></pre>
+      <button id="show-sample">Show first test badge</button>
+      <button id="clear-sample">Clear simulated badge</button>
+    </aside>
+    <div id="root"></div>
+    <script type="module" src="/src/dev/scanner-rehearsal-audit.tsx"></script>
+  </body>
+</html>

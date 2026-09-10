@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Local scanner persistence audit</title>
+  </head>
+  <body>
+    <h1>Local scanner persistence audit</h1>
+    <p>
+      Uses synthetic data in this local origin's IndexedDB and mocked server responses. No
+      production requests.
+    </p>
+    <button>Run storage and sync audit</button>
+    <button id="reopen-check">Verify saved state after reload</button>
+    <pre style="white-space: pre-wrap"></pre>
+    <script type="module" src="/src/dev/scanner-storage-check.ts"></script>
+  </body>
+</html>
