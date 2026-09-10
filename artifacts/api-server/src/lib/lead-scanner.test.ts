@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BADGE_CODE_LENGTH,
   BADGE_CODE_PATTERN,
   badgeExportCsv,
   generateBadgeCode,
@@ -21,6 +22,7 @@ describe("lead scanner badge references", () => {
 
   it("generates converter-ready references without allocating the readiness-test value", () => {
     const references = Array.from({ length: 2_000 }, () => generateBadgeCode());
+    expect(references.every((value) => value.length === BADGE_CODE_LENGTH)).toBe(true);
     expect(references.every((value) => BADGE_CODE_PATTERN.test(value))).toBe(true);
     expect(references.every((value) => /^[A-F]/.test(value))).toBe(true);
     expect(references).not.toContain(SCANNER_TEST_CODE);

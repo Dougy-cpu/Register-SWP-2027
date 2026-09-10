@@ -10,6 +10,7 @@ import type {
   SponsorLead,
   ScannerBootstrap,
 } from "@/types/lead-scanner";
+import { normaliseBadgeCode } from "@/lib/scanner-code";
 
 interface OfflineReadinessMarker {
   key: "offline-readiness";
@@ -201,8 +202,7 @@ export async function getOfflinePack(
 }
 
 export function normaliseScannedValue(value: string): string | null {
-  const code = value.trim().toUpperCase();
-  return /^[0-9A-F]{12}$/.test(code) ? code : null;
+  return normaliseBadgeCode(value);
 }
 
 async function derivedRecordBytes(label: "lookup" | "record", context: string, code: string) {

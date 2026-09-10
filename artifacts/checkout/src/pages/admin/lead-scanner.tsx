@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Download,
+  ExternalLink,
   QrCode,
   RefreshCw,
   RotateCw,
@@ -144,7 +145,8 @@ export default function AdminLeadScanner() {
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               The badge CSV contains first name, last name, job title, company and the hidden QR
-              code for your converter.
+              code for your converter. Every real and test badge uses the same exact 12-character
+              uppercase format.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -175,6 +177,34 @@ export default function AdminLeadScanner() {
             </span>
           </div>
         )}
+
+        <Card className="border-blue-200 bg-white p-5">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2 text-primary">
+                <Smartphone className="h-5 w-5" />
+                <h2 className="font-bold">Test QR scanning on phones and tablets</h2>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                The public test kit uses four hardcoded fictional people. Test scans are not saved,
+                do not create leads and never appear in attendee, sponsor or admin reports and
+                exports.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <a href="/scanner-test" target="_blank" rel="noreferrer">
+                  Open device test <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+              <Button variant="outline" asChild>
+                <a href="/scanner-test/badges" target="_blank" rel="noreferrer">
+                  <QrCode className="h-4 w-4" /> Show test QR codes
+                </a>
+              </Button>
+            </div>
+          </div>
+        </Card>
 
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <Metric label="Unique leads" value={overview?.leadCount ?? 0} icon={Users} />
