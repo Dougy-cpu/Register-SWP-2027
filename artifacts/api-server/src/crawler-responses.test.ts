@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { registerCrawlerResponses, ROBOTS_TXT } from "./crawler-responses";
+import { registerCrawlerResponses, ROBOTS_TXT, SITEMAP_XML } from "./crawler-responses";
 
 let server: Server;
 let baseUrl: string;
@@ -46,12 +46,12 @@ describe("crawler responses", () => {
     expect(body).not.toContain("<html");
   });
 
-  it("returns a plain-text 404 for the nonexistent sitemap", async () => {
-    const response = await fetch(`${baseUrl}/sitemap.xml`);
+  it("serves the empty XML sitemap consistently with query strings", async () => {
+    const response = await fetch(`${baseUrl}/sitemap.xml?format=xml`);
 
-    expect(response.status).toBe(404);
-    expect(response.headers.get("content-type")).toMatch(/^text\/plain; charset=utf-8$/);
-    expect(await response.text()).toBe("Sitemap not found.\n");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toMatch(/^application\/xml; charset=utf-8$/);
+    expect(await response.text()).toBe(SITEMAP_XML);
   });
 
   it("does not intercept ordinary application routes", async () => {

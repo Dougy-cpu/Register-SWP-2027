@@ -1,6 +1,17 @@
 import { createServer, type Server } from "node:http";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { crawlerResponsesMiddleware, ROBOTS_TXT } from "./crawler-responses";
+import {
+  crawlerResponsesMiddleware,
+  ROBOTS_TXT,
+  SITEMAP_XML,
+} from "./crawler-responses";
+
+const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const staticRobots = readFileSync(resolve(checkoutRoot, "public/robots.txt"), "utf8");
+const staticSitemap = readFileSync(resolve(checkoutRoot, "public/sitemap.xml"), "utf8");
 
 let server: Server;
 let baseUrl: string;
@@ -38,12 +49,20 @@ describe("checkout crawler responses", () => {
     expect(await response.text()).toBe(ROBOTS_TXT);
   });
 
-  it("returns a plain-text 404 for sitemap requests with query strings", async () => {
+  it("keeps the static and middleware robots policy identical", () => {
+    expect(staticRobots).toBe(ROBOTS_TXT);
+  });
+
+  it("returns the static XML sitemap with query strings", async () => {
     const response = await fetch(`${baseUrl}/sitemap.xml?format=xml`);
 
-    expect(response.status).toBe(404);
-    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
-    expect(await response.text()).toBe("Sitemap not found.\n");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/xml; charset=utf-8");
+    expect(await response.text()).toBe(SITEMAP_XML);
+  });
+
+  it("keeps the static and middleware sitemap XML identical", () => {
+    expect(staticSitemap).toBe(SITEMAP_XML);
   });
 
   it("passes ordinary routes through to the checkout fallback", async () => {

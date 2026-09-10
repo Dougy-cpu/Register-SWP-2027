@@ -14,15 +14,21 @@ export const ROBOTS_TXT = [
   "",
 ].join("\n");
 
+export const SITEMAP_XML = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+  "",
+].join("\n");
+
 function sendRobots(_request: Request, response: Response) {
   response.type("text/plain").send(ROBOTS_TXT);
 }
 
-function sendMissingSitemap(_request: Request, response: Response) {
-  response.status(404).type("text/plain").send("Sitemap not found.\n");
+function sendSitemap(_request: Request, response: Response) {
+  response.status(200).type("application/xml").send(SITEMAP_XML);
 }
 
 export function registerCrawlerResponses(app: Express) {
   app.get("/robots.txt", sendRobots);
-  app.get("/sitemap.xml", sendMissingSitemap);
+  app.get("/sitemap.xml", sendSitemap);
 }

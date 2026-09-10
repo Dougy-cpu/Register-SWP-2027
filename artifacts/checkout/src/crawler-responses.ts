@@ -14,8 +14,14 @@ export const ROBOTS_TXT = [
   "",
 ].join("\n");
 
-const SITEMAP_NOT_FOUND = "Sitemap not found.\n";
-const TEXT_CONTENT_TYPE = "text/plain; charset=utf-8";
+export const SITEMAP_XML = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+  "",
+].join("\n");
+
+const ROBOTS_CONTENT_TYPE = "text/plain; charset=utf-8";
+const XML_CONTENT_TYPE = "application/xml; charset=utf-8";
 
 type Next = (error?: unknown) => void;
 
@@ -32,15 +38,15 @@ export function crawlerResponsesMiddleware(
 
   if (pathname === "/robots.txt") {
     response.statusCode = 200;
-    response.setHeader("Content-Type", TEXT_CONTENT_TYPE);
+    response.setHeader("Content-Type", ROBOTS_CONTENT_TYPE);
     response.end(ROBOTS_TXT);
     return;
   }
 
   if (pathname === "/sitemap.xml") {
-    response.statusCode = 404;
-    response.setHeader("Content-Type", TEXT_CONTENT_TYPE);
-    response.end(SITEMAP_NOT_FOUND);
+    response.statusCode = 200;
+    response.setHeader("Content-Type", XML_CONTENT_TYPE);
+    response.end(SITEMAP_XML);
     return;
   }
 
