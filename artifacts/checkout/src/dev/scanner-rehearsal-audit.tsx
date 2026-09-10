@@ -3,6 +3,7 @@
 // stream cleanup and React transitions are exercised together in a browser.
 import { createRoot } from "react-dom/client";
 import { SCANNER_TEST_BADGES, SCANNER_TEST_LINK_MATRIX } from "@/lib/scanner-test-data";
+import { REHEARSAL_STORAGE_KEY } from "@/lib/scanner-rehearsal";
 import "../index.css";
 
 if (!import.meta.env.DEV || !["localhost", "127.0.0.1"].includes(location.hostname))
@@ -20,11 +21,19 @@ window.fetch = (input) => {
   effects.push(`fetch ${String(input)}`);
   return Promise.reject(new Error("Unexpected network request in rehearsal"));
 };
-for (const method of ["setItem", "removeItem", "clear"] as const)
-  Storage.prototype[method] = () => {
+for (const method of ["setItem", "removeItem"] as const) {
+  const original = Storage.prototype[method];
+  Storage.prototype[method] = function (key: string, value?: string) {
+    if (this === localStorage && key === REHEARSAL_STORAGE_KEY)
+      return original.call(this, key, value!);
     effects.push(`storage ${method}`);
     throw new Error("Unexpected browser storage write");
   };
+}
+Storage.prototype.clear = () => {
+  effects.push("storage clear");
+  throw new Error("Rehearsal must not clear other browser data");
+};
 indexedDB.open = () => {
   effects.push("IndexedDB open");
   throw new Error("Unexpected IndexedDB access");
@@ -133,7 +142,8 @@ document.getElementById("run-audit")!.addEventListener(
       trigger.disabled = true;
       output.textContent = "";
       try {
-        await click("Start camera test");
+        await click("Reset rehearsal");
+        await click("Start scanning");
         await waitFor(() => see("Camera ready"), "first camera frame");
         const firstVideo = rootElement.querySelector("video")!;
         check(
@@ -144,33 +154,46 @@ document.getElementById("run-audit")!.addEventListener(
         );
         matrix = SCANNER_TEST_BADGES[0].matrix;
         await waitFor(() => see("Alex Morgan"), "decode first badge");
-        await click("4");
-        inputNote("Rehearsal note, stored only in memory");
-        await waitFor(
-          () => rootElement.querySelector("textarea")?.value.includes("Rehearsal note"),
-          "note edit",
-        );
-        check(see("Saved for this rehearsal only"), "rating and notes confirm memory-only saving");
-        matrix = null;
-        await click("Scan another test badge");
-        await waitFor(() => see("Camera ready"), "camera restart");
-        const nextVideo = rootElement.querySelector("video")!;
-        check(
-          firstVideo !== nextVideo && nextVideo.videoWidth > 0,
-          "scan another remounts and starts a new visible video",
-        );
         for (const badge of SCANNER_TEST_BADGES.slice(1)) {
           matrix = badge.matrix;
           await waitFor(() => see(badge.name), `decode ${badge.name}`);
           check(true, `real QR decoder recognises ${badge.code}`);
-          matrix = null;
-          await click("Scan another test badge");
-          await waitFor(() => see("Camera ready"), "next camera");
         }
-        matrix = SCANNER_TEST_BADGES[0].matrix;
-        await waitFor(() => see("Already recognised this rehearsal"), "duplicate badge");
         check(
-          rootElement.querySelector("textarea")?.value === "Rehearsal note, stored only in memory",
+          firstVideo === rootElement.querySelector("video") && see("Camera ready"),
+          "four badges scanned continuously without restarting the camera",
+        );
+        matrix = null;
+        await click("Leads");
+        await waitFor(() => see("Your practice leads"), "lead list");
+        check(
+          streams.every((s) => s.getTracks().every((t) => t.readyState === "ended")),
+          "opening Leads releases the camera",
+        );
+        rootElement.querySelector<HTMLButtonElement>('[aria-label="Edit Alex Morgan"]')!.click();
+        await click("4");
+        inputNote("Rehearsal note, saved in this browser");
+        await waitFor(
+          () => rootElement.querySelector("textarea")?.value.includes("Rehearsal note"),
+          "later note edit",
+        );
+        check(see("Notes save automatically"), "notes and rating can be added later from Leads");
+        await click("Scan");
+        await click("Start scanning");
+        await waitFor(() => see("Camera ready"), "camera restart");
+        const nextVideo = rootElement.querySelector("video")!;
+        check(
+          firstVideo !== nextVideo && nextVideo.videoWidth > 0,
+          "returning to Scan starts a new visible video",
+        );
+        matrix = SCANNER_TEST_BADGES[0].matrix;
+        await waitFor(() => see("Already added"), "duplicate badge");
+        matrix = null;
+        await click("Add note");
+        await waitFor(() => rootElement.querySelector("textarea"), "quick notes");
+        check(
+          rootElement.querySelector("textarea")?.value ===
+            "Rehearsal note, saved in this browser" && see("4 of 4 practice badges saved"),
           "repeat scan restores notes without a duplicate lead",
         );
         check(
@@ -181,7 +204,7 @@ document.getElementById("run-audit")!.addEventListener(
         );
         inputNote("Edited rehearsal note");
         matrix = null;
-        await click("Scan another test badge");
+        await click("Start scanning");
         await waitFor(() => see("Camera ready"), "after note edit");
         matrix = SCANNER_TEST_LINK_MATRIX;
         await waitFor(() => see("Nothing was saved"), "reject QR containing a URL");
@@ -198,7 +221,7 @@ document.getElementById("run-audit")!.addEventListener(
         await waitFor(() => see("Camera ready"), "resume");
         await click("Stop camera");
         failure = true;
-        await click("Start camera test");
+        await click("Start scanning");
         await waitFor(() => !!button("Retry camera"), "permission recovery");
         check(
           see("Camera permission"),
@@ -212,9 +235,9 @@ document.getElementById("run-audit")!.addEventListener(
         await waitFor(() => !!button("Retry camera"), "stalled track recovery");
         check(true, "stopped stream cannot remain a permanent black camera");
         await click("Reset rehearsal");
-        await waitFor(() => see("0 of 4 recognised this rehearsal"), "reset render");
-        check(see("0 of 4 recognised this rehearsal"), "reset clears rehearsal memory");
-        await click("Start camera test");
+        await waitFor(() => see("0 of 4 practice badges saved"), "reset render");
+        check(see("0 of 4 practice badges saved"), "reset clears isolated practice storage");
+        await click("Start scanning");
         await waitFor(() => see("Camera ready"), "distance camera");
         qrSize = 145;
         matrix = SCANNER_TEST_BADGES[0].matrix;
@@ -224,11 +247,30 @@ document.getElementById("run-audit")!.addEventListener(
           "compact QR decodes at 145 pixels across in a 1280-pixel frame (synthetic distance check)",
         );
         matrix = null;
+        await click("Add note");
+        await waitFor(() => rootElement.querySelector("textarea"), "note before reopen");
+        inputNote("Keep this note for the break");
+        await waitFor(
+          () => rootElement.querySelector("textarea")?.value === "Keep this note for the break",
+          "save before reopen",
+        );
         root.unmount();
         root = createRoot(rootElement);
         root.render(<App />);
-        await waitFor(() => see("0 of 4 recognised this rehearsal"), "fresh rehearsal");
-        check(true, "remount starts a fresh empty rehearsal");
+        await waitFor(() => see("1 of 4 practice badges saved"), "reopened rehearsal");
+        await click("Leads");
+        await waitFor(
+          () => rootElement.querySelector('[aria-label="Edit Alex Morgan"]'),
+          "reopened lead",
+        );
+        rootElement.querySelector<HTMLButtonElement>('[aria-label="Edit Alex Morgan"]')!.click();
+        await waitFor(
+          () => rootElement.querySelector("textarea")?.value === "Keep this note for the break",
+          "reopened notes",
+        );
+        check(true, "reopening retains practice leads and notes for the break");
+        await click("Scan");
+        await waitFor(() => rootElement.querySelector('input[type="file"]'), "photo controls");
         matrix = SCANNER_TEST_BADGES[3].matrix;
         qrSize = 290;
         frame();
@@ -247,10 +289,10 @@ document.getElementById("run-audit")!.addEventListener(
         await waitFor(() => see("Sofia Chen"), "decode badge photograph");
         check(true, "real photo decoder recognises a badge without any upload");
         await click("Reset rehearsal");
-        await waitFor(() => see("0 of 4 recognised this rehearsal"), "photo reset");
+        await waitFor(() => see("0 of 4 practice badges saved"), "photo reset");
         check(
           effects.length === 0,
-          `no network, lead API or browser storage operations (${effects.length})`,
+          `no network, lead API or real-scanner storage operations (${effects.length})`,
         );
         check(
           streams.every((s) => s.getTracks().every((t) => t.readyState === "ended")),

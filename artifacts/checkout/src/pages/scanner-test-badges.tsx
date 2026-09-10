@@ -48,9 +48,10 @@ export default function ScannerTestBadges() {
               </div>
               <p className="mt-2 max-w-3xl text-sm text-slate-700">
                 Keep this page open on your computer so your phone can scan the large badges below,
-                or print the sheet. Scanning happens on phones only. Every identity is fictional;
-                scans, ratings and notes disappear when the phone rehearsal is reset, reloaded or
-                closed.
+                or print the sheet. Scan several badges, then tap Leads on your phone to add notes
+                and ratings later, just as you will on the day. Every identity is fictional.
+                Practice leads stay in that browser until you choose Reset rehearsal or clear
+                browser data. Nothing is uploaded or included in real leads.
               </p>
             </div>
             <PhoneScannerLink url={SCANNER_TEST_URL} />
@@ -67,7 +68,7 @@ export default function ScannerTestBadges() {
           <p className="text-right text-xs font-semibold text-slate-600">
             Fictional data
             <br />
-            Not saved or reported
+            Practice only · not reported
           </p>
         </div>
 

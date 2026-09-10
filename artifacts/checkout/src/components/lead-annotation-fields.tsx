@@ -6,7 +6,7 @@ export interface LeadAnnotation {
   note: string;
   rating: number | null;
 }
-// Presentation only: the caller owns saving. Public rehearsal never imports persistence.
+// Presentation only: the caller owns saving. Rehearsal uses its own isolated store.
 export function LeadAnnotationFields({
   id,
   value,
