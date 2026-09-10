@@ -13,9 +13,10 @@ The QR payload is the exact 12-character uppercase hexadecimal value from the `Q
 In the QR converter, use:
 
 - black modules on a white background
-- high error correction
+- QR error correction level Q, so the 12-character payload stays in the simpler 21 by 21
+  Version 1 format
 - a four-module quiet zone
-- a printed QR size of at least 25 mm square
+- a printed QR size of at least 40 mm square for fast recognition at distance
 - no logo, colour, gradient or decorative overlay inside the QR
 
 Download `swp-2027-badge-data.csv` from **Admin > Lead Scanner > Export badge CSV**. It contains exactly:
@@ -53,7 +54,29 @@ NODE_ENV=production PRODUCTION_BACKUP_REFERENCE=<verified-reference> pnpm --filt
 
 The command is repeat-safe and refuses a production run without the backup reference.
 
-## Phone readiness check
+## Device testing
+
+### Public device compatibility kit
+
+Use these unlisted public pages before issuing real sponsor scanner links:
+
+- Phone or tablet scanner: `https://register.swpsummit.com/scanner-test`
+- Test QR display and printable badge sheet: `https://register.swpsummit.com/scanner-test/badges`
+
+The kit contains four fictional people hardcoded in the checkout frontend. It uses the same
+`qr-scanner` camera and photograph-decoding library and settings as the authenticated sponsor
+scanner, but it does not call an API, use IndexedDB or write to the database. Test scans therefore
+cannot appear in attendee, sponsor, lead, admin, CSV or Excel reports and exports.
+
+Each test badge encodes only a 12-character uppercase reference in a 21 by 21 Version 1 QR. The
+screen and print layouts keep the QR large, black on white and surrounded by a four-module quiet
+zone so the test reflects the intended quick, longer-distance event-day scan.
+
+Use the public kit to check browser camera permission, rear-camera selection, QR recognition,
+torch availability and photograph upload on representative devices. It does not replace the full
+authenticated phone readiness, offline close/reopen and queued server-sync checks below.
+
+## Authenticated phone readiness check
 
 Each sponsor operator opens the sponsor's existing private link, selects **Scan badge**, enters their own name and activates that phone. Before event day, every phone must show all six checks complete:
 

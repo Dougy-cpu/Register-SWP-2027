@@ -23,6 +23,8 @@ import SponsorAccess from "@/pages/sponsor/access";
 import SponsorPortal from "@/pages/sponsor/portal";
 import SponsorScanner from "@/pages/sponsor/scanner";
 import SponsorLeads from "@/pages/sponsor/leads";
+import ScannerTest from "@/pages/scanner-test";
+import ScannerTestBadges from "@/pages/scanner-test-badges";
 import ManageAttendees from "@/pages/manage/ManageAttendees";
 import EditBilling from "@/pages/manage/EditBilling";
 
@@ -57,6 +59,8 @@ function Router() {
       <Route path="/sponsor/scanner" component={SponsorScanner} />
       <Route path="/sponsor/leads" component={SponsorLeads} />
       <Route path="/sponsor" component={SponsorPortal} />
+      <Route path="/scanner-test/badges" component={ScannerTestBadges} />
+      <Route path="/scanner-test" component={ScannerTest} />
       <Route path="/manage/:token/billing" component={EditBilling} />
       <Route path="/manage/:token" component={ManageAttendees} />
       <Route component={NotFound} />
