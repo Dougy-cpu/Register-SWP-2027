@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useGetBookingBySession, customFetch } from "@workspace/api-client-react";
+import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import {
+  useGetBookingBySession,
+  getBookingBySession,
+  customFetch,
+} from "@workspace/api-client-react";
 import type { BookingWithAttendees } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
@@ -72,11 +76,45 @@ import Step3Attendees from "./Step3Attendees";
 import Step4Payment from "./Step4Payment";
 import Confirmation from "./Confirmation";
 import CheckoutLayout from "@/components/layout/CheckoutLayout";
+import { Button } from "@/components/ui/button";
 
 const STRIPE_RETURN_PARAM = "session_id";
 const COMPLETION_STEP_PARAM = "step";
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 60000;
+
+function paymentIsConfirmed(booking?: BookingWithAttendees) {
+  return booking?.status === "paid" || booking?.status === "invoiced";
+}
+
+function CheckoutStepContent({ children }: { children: ReactNode }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    // Run when the incoming step mounts, after AnimatePresence has removed
+    // the old step. Focusing earlier would target the outgoing form.
+    const heading = contentRef.current?.querySelector<HTMLElement>("h1");
+    if (heading) {
+      heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: true });
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, []);
+
+  return (
+    <motion.div
+      ref={contentRef}
+      className="[&_h1]:outline-none"
+      initial={reduceMotion ? false : { opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={reduceMotion ? undefined : { opacity: 0, x: -20 }}
+      transition={{ duration: reduceMotion ? 0 : 0.3 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export default function CheckoutFlow() {
   const [sessionToken, rotateSessionToken] = useBookingSession();
@@ -104,8 +142,7 @@ export default function CheckoutFlow() {
 
   const [pollingForPayment, setPollingForPayment] = useState(isStripeReturn);
   const [pollTimedOut, setPollTimedOut] = useState(false);
-  const pollStartRef = useRef<number | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const paymentCheckActiveRef = useRef(isStripeReturn);
 
   const { data: booking, isLoading } = useGetBookingBySession(sessionToken, {
     query: {
@@ -118,60 +155,93 @@ export default function CheckoutFlow() {
     if (!pollingForPayment || !sessionToken) return;
 
     const stripeSessionId = new URLSearchParams(window.location.search).get(STRIPE_RETURN_PARAM);
+    const queryKey = ["booking", sessionToken];
+    const controller = new AbortController();
+    let active = true;
+    let confirmationAttempted = false;
+    let nextPoll: ReturnType<typeof setTimeout> | undefined;
 
-    pollStartRef.current = Date.now();
-
-    const tryConfirmCardPayment = async () => {
-      if (
-        stripeSessionId &&
-        booking?.id &&
-        booking.status !== "paid" &&
-        booking.status !== "invoiced"
-      ) {
-        try {
-          await customFetch("/api/stripe/confirm-card-payment", {
-            method: "POST",
-            body: JSON.stringify({ bookingId: booking.id, sessionId: stripeSessionId }),
-          });
-          await queryClient.invalidateQueries({ queryKey: ["booking", sessionToken] });
-        } catch {
-          // Confirm call failed — webhook will still fulfil the booking, so polling continues
-        }
-      }
+    const finish = (timedOut: boolean) => {
+      if (!active) return;
+      active = false;
+      controller.abort();
+      clearTimeout(deadline);
+      clearTimeout(nextPoll);
+      paymentCheckActiveRef.current = false;
+      setPollingForPayment(false);
+      setPollTimedOut(timedOut);
     };
 
-    // Fire-and-forget: if it succeeds the booking status updates and polling stops naturally
-    tryConfirmCardPayment();
+    // An independent deadline also ends a check whose network request stalls.
+    const deadline = setTimeout(() => finish(true), POLL_TIMEOUT_MS);
 
-    pollIntervalRef.current = setInterval(async () => {
-      const elapsed = Date.now() - (pollStartRef.current ?? 0);
-      if (elapsed >= POLL_TIMEOUT_MS) {
-        clearInterval(pollIntervalRef.current!);
-        setPollingForPayment(false);
-        setPollTimedOut(true);
-        return;
+    const checkPayment = async () => {
+      try {
+        const current = queryClient.getQueryData<BookingWithAttendees>(queryKey);
+        if (paymentIsConfirmed(current)) {
+          finish(false);
+          return;
+        }
+        if (!confirmationAttempted && stripeSessionId && current?.id) {
+          confirmationAttempted = true;
+          try {
+            await customFetch("/api/stripe/confirm-card-payment", {
+              method: "POST",
+              headers: { "x-booking-session": sessionToken },
+              body: JSON.stringify({ bookingId: current.id, sessionId: stripeSessionId }),
+              signal: controller.signal,
+            });
+          } catch {
+            // A failed check does not tell us whether payment succeeded.
+            // The webhook may still update the booking, so read its status.
+          }
+        }
+        if (!active) return;
+        const latest = await getBookingBySession(sessionToken, { signal: controller.signal });
+        if (!active) return;
+        // A background refresh may have confirmed payment while this older
+        // response was in flight. Never replace that result with pending data.
+        if (paymentIsConfirmed(queryClient.getQueryData<BookingWithAttendees>(queryKey))) {
+          finish(false);
+          return;
+        }
+        queryClient.setQueryData(queryKey, latest);
+        if (paymentIsConfirmed(latest)) {
+          finish(false);
+          return;
+        }
+      } catch {
+        // Keep retrying within this bounded check, including after a short
+        // connection failure. Never create another checkout or payment.
       }
+      if (active) nextPoll = setTimeout(checkPayment, POLL_INTERVAL_MS);
+    };
 
-      await queryClient.invalidateQueries({ queryKey: ["booking", sessionToken] });
-      const cached = queryClient.getQueryData<typeof booking>(["booking", sessionToken]);
-      if (cached?.status === "paid" || cached?.status === "invoiced") {
-        clearInterval(pollIntervalRef.current!);
-        setPollingForPayment(false);
-      }
-    }, POLL_INTERVAL_MS);
+    void checkPayment();
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      active = false;
+      controller.abort();
+      clearTimeout(deadline);
+      clearTimeout(nextPoll);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollingForPayment, sessionToken, booking?.id]);
+  }, [pollingForPayment, sessionToken, queryClient]);
 
   useEffect(() => {
-    if (pollingForPayment && (booking?.status === "paid" || booking?.status === "invoiced")) {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (paymentIsConfirmed(booking)) {
+      paymentCheckActiveRef.current = false;
       setPollingForPayment(false);
+      setPollTimedOut(false);
     }
-  }, [booking?.status, pollingForPayment]);
+  }, [booking]);
+
+  const retryPaymentCheck = () => {
+    // Lock synchronously so repeated clicks cannot start overlapping checks.
+    if (paymentCheckActiveRef.current) return;
+    paymentCheckActiveRef.current = true;
+    setPollTimedOut(false);
+    setPollingForPayment(true);
+  };
 
   // Restoration is gated on the resolved booking still being non-final.
   // If the persisted token resolves to a paid/invoiced booking AND the user
@@ -215,12 +285,19 @@ export default function CheckoutFlow() {
   // so we render the latest server step. Also clamp stale history entries
   // that point past the booking's actual progress.
   useEffect(() => {
+    // During refresh, the fallback server step is not the saved progress.
+    // The first render also precedes session initialization, when the query
+    // is disabled rather than loading. Keep its existing history entry intact.
+    if (!sessionToken || isLoading) return;
     if (viewBackStep !== null && viewBackStep > serverStep) {
       setViewBackStep(null);
     }
-  }, [serverStep, viewBackStep]);
+  }, [serverStep, viewBackStep, sessionToken, isLoading]);
 
-  const currentStep = optimisticStep ?? viewBackStep ?? serverStep;
+  const currentStep =
+    isStripeReturn && paymentIsConfirmed(booking)
+      ? 5
+      : (optimisticStep ?? viewBackStep ?? serverStep);
 
   // Mirror currentStep into the browser history stack so the back button
   // walks the user through the checkout instead of leaving the site.
@@ -306,7 +383,7 @@ export default function CheckoutFlow() {
     }
   };
 
-  if (isLoading && !booking) {
+  if (isLoading && !booking && !pollingForPayment && !pollTimedOut) {
     return (
       <CheckoutLayout>
         <div className="flex justify-center py-20">
@@ -319,31 +396,56 @@ export default function CheckoutFlow() {
   if (pollingForPayment) {
     return (
       <CheckoutLayout currentStep={5}>
-        <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <div>
-            <p className="text-2xl font-bold mb-2">Confirming your payment&hellip;</p>
-            <p className="text-muted-foreground">
-              Please wait while we finalise your registration.
-            </p>
+        <CheckoutStepContent key="payment-checking">
+          <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+            <div
+              aria-hidden="true"
+              className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary"
+            ></div>
+            <div>
+              <h1 className="text-2xl font-bold mb-2">Checking your payment&hellip;</h1>
+              <p className="text-muted-foreground">
+                Please wait while we check your booking. This will not take another payment.
+              </p>
+            </div>
           </div>
-        </div>
+        </CheckoutStepContent>
       </CheckoutLayout>
     );
   }
 
-  if (pollTimedOut && booking?.status !== "paid") {
+  if (pollTimedOut && !paymentIsConfirmed(booking)) {
+    const reference = booking?.orderReference || (booking?.id ? `Booking ${booking.id}` : null);
+    const supportSubject = `SWP Summit 2027 payment query${reference ? ` - ${reference}` : ""}`;
     return (
       <CheckoutLayout currentStep={4}>
-        <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
-          <p className="text-2xl font-bold mb-2">
-            Payment confirmation is taking longer than expected.
-          </p>
-          <p className="text-muted-foreground">
-            If you completed payment, your registration will be confirmed shortly and you'll receive
-            a confirmation email. You can safely close this page.
-          </p>
-        </div>
+        <CheckoutStepContent key="payment-delayed">
+          <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+            <h1 className="text-2xl font-bold mb-2">
+              Payment confirmation is taking longer than expected.
+            </h1>
+            <p className="max-w-2xl text-muted-foreground">
+              We have not been able to confirm the result yet. You can check again below or contact
+              us for help. If your card has been charged, please do not make another payment.
+            </p>
+            <Button onClick={retryPaymentCheck} className="swp-primary-btn" size="lg">
+              Check payment status
+            </Button>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              {reference && <p className="font-semibold text-foreground">Reference: {reference}</p>}
+              <p>
+                Need help?{" "}
+                <a
+                  href={`mailto:douglas@peoplestrategyhub.com?subject=${encodeURIComponent(supportSubject)}`}
+                  className="font-semibold text-primary underline underline-offset-2"
+                >
+                  Contact the event team
+                </a>
+                {!reference && " and include the email address used for your booking"}.
+              </p>
+            </div>
+          </div>
+        </CheckoutStepContent>
       </CheckoutLayout>
     );
   }
@@ -371,7 +473,9 @@ export default function CheckoutFlow() {
           <Step3Attendees booking={effectiveBooking} onAdvance={advanceTo} />
         ) : null;
       case 4:
-        return effectiveBooking ? <Step4Payment booking={effectiveBooking} /> : null;
+        return effectiveBooking ? (
+          <Step4Payment key={effectiveBooking.id} booking={effectiveBooking} />
+        ) : null;
       case 5:
         return effectiveBooking ? <Confirmation booking={effectiveBooking} /> : null;
       default:
@@ -390,15 +494,7 @@ export default function CheckoutFlow() {
   return (
     <CheckoutLayout currentStep={currentStep}>
       <AnimatePresence mode="wait">
-        <motion.div
-          key={currentStep}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          {renderStep()}
-        </motion.div>
+        <CheckoutStepContent key={currentStep}>{renderStep()}</CheckoutStepContent>
       </AnimatePresence>
     </CheckoutLayout>
   );

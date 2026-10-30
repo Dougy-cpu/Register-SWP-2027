@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { z } from "zod";
 import {
   useUpdateBooking,
@@ -48,11 +48,24 @@ interface Step3AttendeesProps {
   onAdvance?: (step: number) => void;
 }
 
+const validationFieldOrder: (keyof AttendeeFormData)[] = [
+  "firstName",
+  "lastName",
+  "workEmail",
+  "jobTitle",
+  "company",
+  "gdprConsent",
+];
+
 export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesProps) {
   const updateBooking = useUpdateBooking();
   const createAttendee = useCreateAttendee();
   const updateAttendee = useUpdateAttendee();
   const queryClient = useQueryClient();
+  const formId = useId();
+  const fieldId = (index: number, field: keyof AttendeeFormData) =>
+    `${formId}-attendee-${index}-${field}`;
+  const [invalidFieldToFocus, setInvalidFieldToFocus] = useState<string | null>(null);
 
   const totalSeats = booking.quantity;
   const leadAttendee = booking.attendees?.find((a) => a.isLead);
@@ -113,6 +126,18 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
   const [errors, setErrors] = useState<(Partial<Record<keyof AttendeeFormData, string>> | null)[]>(
     Array(totalSeats).fill(null),
   );
+
+  useEffect(() => {
+    if (!invalidFieldToFocus) return;
+    // The accordion must mount the invalid attendee's fields before focus moves.
+    const frame = requestAnimationFrame(() => {
+      const field = document.getElementById(invalidFieldToFocus);
+      field?.focus({ preventScroll: true });
+      field?.scrollIntoView({ block: "center" });
+      setInvalidFieldToFocus(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [invalidFieldToFocus]);
 
   const autosaveIdsRef = useRef<(number | undefined)[]>(formsData.map((f) => f.id));
 
@@ -508,6 +533,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
   const handleContinue = async () => {
     setSubmitError(null);
     let allValid = true;
+    let firstInvalidField: { index: number; field: keyof AttendeeFormData } | null = null;
     const newErrors: (Partial<Record<keyof AttendeeFormData, string>> | null)[] =
       Array(totalSeats).fill(null);
 
@@ -522,13 +548,21 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
           if (!fieldErrors[field]) fieldErrors[field] = issue.message;
         }
         newErrors[i] = fieldErrors;
-        if (allValid === false && i === 0) setOpenItem("attendee-0");
-        else if (!allValid) setOpenItem(`attendee-${i}`);
+        if (!firstInvalidField) {
+          const field = validationFieldOrder.find((field) => fieldErrors[field]);
+          if (field) firstInvalidField = { index: i, field };
+        }
       }
     }
 
     setErrors(newErrors);
-    if (!allValid) return;
+    if (!allValid) {
+      if (firstInvalidField) {
+        setOpenItem(`attendee-${firstInvalidField.index}`);
+        setInvalidFieldToFocus(fieldId(firstInvalidField.index, firstInvalidField.field));
+      }
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -697,6 +731,14 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
       <Accordion type="single" value={openItem} onValueChange={setOpenItem} className="space-y-4">
         {formsData.map((data, index) => {
           const fieldErrors = errors[index];
+          const fieldProps = (field: keyof AttendeeFormData, required = false) => ({
+            id: fieldId(index, field),
+            name: `attendees[${index}].${field}`,
+            "aria-required": required || undefined,
+            "aria-invalid": !!fieldErrors?.[field],
+            "aria-describedby": fieldErrors?.[field] ? `${fieldId(index, field)}-error` : undefined,
+          });
+          const autocompleteSection = `section-attendee-${index}`;
           const isForMe = forMeFlags[index];
           const isTbc = tbcFlags[index];
           const label = isTbc
@@ -728,6 +770,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                       <button
                         type="button"
                         onClick={() => handleForMeToggle(index, !isForMe)}
+                        aria-pressed={isForMe}
                         className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
                           isForMe
                             ? "bg-primary text-white border-primary"
@@ -749,6 +792,7 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                     <button
                       type="button"
                       onClick={() => handleTbcToggle(index, !isTbc)}
+                      aria-pressed={isTbc}
                       className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
                         isTbc
                           ? "bg-amber-500 text-white border-amber-500"
@@ -770,76 +814,136 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">First Name *</label>
+                        <label
+                          htmlFor={fieldId(index, "firstName")}
+                          className="text-sm font-medium"
+                        >
+                          First Name *
+                        </label>
                         <Input
+                          {...fieldProps("firstName", true)}
+                          autoComplete={`${autocompleteSection} given-name`}
                           value={data.firstName}
                           onChange={(e) => updateFormData(index, "firstName", e.target.value)}
                           className={`h-12 bg-white ${fieldErrors?.firstName ? "border-destructive" : ""}`}
                         />
                         {fieldErrors?.firstName && (
-                          <p className="text-xs text-destructive">{fieldErrors.firstName}</p>
+                          <p
+                            id={`${fieldId(index, "firstName")}-error`}
+                            className="text-xs text-destructive"
+                          >
+                            {fieldErrors.firstName}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Last Name *</label>
+                        <label htmlFor={fieldId(index, "lastName")} className="text-sm font-medium">
+                          Last Name *
+                        </label>
                         <Input
+                          {...fieldProps("lastName", true)}
+                          autoComplete={`${autocompleteSection} family-name`}
                           value={data.lastName}
                           onChange={(e) => updateFormData(index, "lastName", e.target.value)}
                           className={`h-12 bg-white ${fieldErrors?.lastName ? "border-destructive" : ""}`}
                         />
                         {fieldErrors?.lastName && (
-                          <p className="text-xs text-destructive">{fieldErrors.lastName}</p>
+                          <p
+                            id={`${fieldId(index, "lastName")}-error`}
+                            className="text-xs text-destructive"
+                          >
+                            {fieldErrors.lastName}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Work Email *</label>
+                        <label
+                          htmlFor={fieldId(index, "workEmail")}
+                          className="text-sm font-medium"
+                        >
+                          Work Email *
+                        </label>
                         <Input
+                          {...fieldProps("workEmail", true)}
                           type="email"
+                          autoComplete={`${autocompleteSection} email`}
                           value={data.workEmail}
                           onChange={(e) => updateFormData(index, "workEmail", e.target.value)}
                           className={`h-12 bg-white ${fieldErrors?.workEmail ? "border-destructive" : ""}`}
                         />
                         {fieldErrors?.workEmail && (
-                          <p className="text-xs text-destructive">{fieldErrors.workEmail}</p>
+                          <p
+                            id={`${fieldId(index, "workEmail")}-error`}
+                            className="text-xs text-destructive"
+                          >
+                            {fieldErrors.workEmail}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Phone (optional)</label>
+                        <label htmlFor={fieldId(index, "phone")} className="text-sm font-medium">
+                          Phone (optional)
+                        </label>
                         <Input
+                          {...fieldProps("phone")}
+                          type="tel"
+                          autoComplete={`${autocompleteSection} tel`}
                           value={data.phone}
                           onChange={(e) => updateFormData(index, "phone", e.target.value)}
                           className="h-12 bg-white"
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Job Title *</label>
+                        <label htmlFor={fieldId(index, "jobTitle")} className="text-sm font-medium">
+                          Job Title *
+                        </label>
                         <Input
+                          {...fieldProps("jobTitle", true)}
+                          autoComplete={`${autocompleteSection} organization-title`}
                           value={data.jobTitle}
                           onChange={(e) => updateFormData(index, "jobTitle", e.target.value)}
                           className={`h-12 bg-white ${fieldErrors?.jobTitle ? "border-destructive" : ""}`}
                         />
                         {fieldErrors?.jobTitle && (
-                          <p className="text-xs text-destructive">{fieldErrors.jobTitle}</p>
+                          <p
+                            id={`${fieldId(index, "jobTitle")}-error`}
+                            className="text-xs text-destructive"
+                          >
+                            {fieldErrors.jobTitle}
+                          </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Company *</label>
+                        <label htmlFor={fieldId(index, "company")} className="text-sm font-medium">
+                          Company *
+                        </label>
                         <Input
+                          {...fieldProps("company", true)}
+                          autoComplete={`${autocompleteSection} organization`}
                           value={data.company}
                           onChange={(e) => updateFormData(index, "company", e.target.value)}
                           className={`h-12 bg-white ${fieldErrors?.company ? "border-destructive" : ""}`}
                         />
                         {fieldErrors?.company && (
-                          <p className="text-xs text-destructive">{fieldErrors.company}</p>
+                          <p
+                            id={`${fieldId(index, "company")}-error`}
+                            className="text-xs text-destructive"
+                          >
+                            {fieldErrors.company}
+                          </p>
                         )}
                       </div>
                     </div>
 
                     <div className="mt-6 space-y-2">
-                      <label className="text-sm font-medium">
+                      <label
+                        htmlFor={fieldId(index, "dietaryAccessibility")}
+                        className="text-sm font-medium"
+                      >
                         Dietary requirements or accessibility needs (optional)
                       </label>
                       <textarea
+                        {...fieldProps("dietaryAccessibility")}
                         value={data.dietaryAccessibility}
                         onChange={(e) =>
                           updateFormData(index, "dietaryAccessibility", e.target.value)
@@ -853,12 +957,16 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                     <div className="pt-6 mt-6 border-t border-border">
                       <div className="flex items-start space-x-3">
                         <Checkbox
+                          {...fieldProps("gdprConsent", true)}
                           checked={data.gdprConsent}
                           onCheckedChange={(val) => updateFormData(index, "gdprConsent", !!val)}
                           className="mt-1"
                         />
                         <div className="space-y-2 leading-normal">
-                          <label className="font-normal text-base cursor-pointer">
+                          <label
+                            htmlFor={fieldId(index, "gdprConsent")}
+                            className="font-normal text-base cursor-pointer"
+                          >
                             I understand how my data will be processed in accordance with{" "}
                             <a
                               href="https://peoplestrategyhub.com/your-data-gdpr"
@@ -885,7 +993,12 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
                             sponsor scanning.
                           </p>
                           {fieldErrors?.gdprConsent && (
-                            <p className="text-xs text-destructive">{fieldErrors.gdprConsent}</p>
+                            <p
+                              id={`${fieldId(index, "gdprConsent")}-error`}
+                              className="text-xs text-destructive"
+                            >
+                              {fieldErrors.gdprConsent}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -907,7 +1020,10 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
       </Accordion>
 
       {autosaveStatus === "error" && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded p-4 text-sm text-amber-800">
+        <div
+          role="alert"
+          className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded p-4 text-sm text-amber-800"
+        >
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-semibold">We couldn't save your last change</p>
@@ -927,7 +1043,10 @@ export default function Step3Attendees({ booking, onAdvance }: Step3AttendeesPro
       )}
 
       {submitError && (
-        <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3">
+        <div
+          role="alert"
+          className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3"
+        >
           {submitError}
         </div>
       )}

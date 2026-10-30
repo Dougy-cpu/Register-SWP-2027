@@ -35,6 +35,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { BookingWithAttendees } from "@/types/booking";
+import { calculateCheckoutPricing } from "@/lib/checkout-pricing";
+import {
+  BILLING_FIELDS,
+  readPaymentDraft,
+  usePaymentDraft,
+  type PaymentDraft,
+} from "@/lib/checkout-payment-draft";
 
 // Fields on the billing form that can be auto-linked to the lead attendee.
 // Editing any of them unlinks just that field; clicking the "Use lead
@@ -233,11 +240,15 @@ function InvoiceProcessStep({
 
 export default function Step4Payment({ booking }: Step4PaymentProps) {
   const queryClient = useQueryClient();
-  const updateBooking = useUpdateBooking();
+  // Checkout drafts must never inherit an admin session's invoice-reissue behaviour.
+  const updateBooking = useUpdateBooking({ request: { headers: { "x-admin-token": "" } } });
   const createStripeSession = useCreateStripeCheckoutSession();
   const createInvoice = useCreateStripeInvoice();
 
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "invoice">("card");
+  const [restoredDraft] = useState(() => readPaymentDraft(booking.id));
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "invoice">(
+    restoredDraft?.paymentMethod ?? (booking.paymentMethod === "invoice" ? "invoice" : "card"),
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [isFreeConfirming, setIsFreeConfirming] = useState(false);
@@ -267,9 +278,14 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
   // so the beforeunload handler does NOT fire a false incomplete-ping.
   const isSubmittingPaymentRef = useRef(false);
 
-  const calculatePricingMutation = useCalculatePricing();
+  const calculatePricingMutation = useCalculatePricing({
+    mutation: { mutationFn: ({ data }) => calculateCheckoutPricing(data) },
+  });
+  const pricingKey = JSON.stringify([booking.passType, booking.quantity, booking.promoCode]);
+  const pricingFor = useRef<string | null>(null);
 
-  useEffect(() => {
+  const refreshPricing = () => {
+    pricingFor.current = pricingKey;
     calculatePricingMutation.mutate({
       data: {
         passType: booking.passType,
@@ -277,8 +293,12 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
         promoCode: booking.promoCode || undefined,
       },
     });
+  };
+
+  useEffect(() => {
+    refreshPricing();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booking.passType, booking.quantity]);
+  }, [booking.passType, booking.quantity, booking.promoCode]);
 
   // Abandonment detection: fire incomplete-ping when the user leaves without paying.
   // Two triggers: (1) beforeunload via sendBeacon for tab close / navigation away,
@@ -337,7 +357,10 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
     };
   }, [booking.id, booking.status]);
 
-  const currentPricing = calculatePricingMutation.data;
+  const currentPricing =
+    pricingFor.current === pricingKey && calculatePricingMutation.isSuccess
+      ? calculatePricingMutation.data
+      : undefined;
   const bookingPassLabel = booking.passType === "single" ? "Workforce Pass" : "Business Pass";
   const bookingPassSummary = booking.quantity === 1 ? bookingPassLabel : `${bookingPassLabel}es`;
 
@@ -378,7 +401,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               : f === "billingEmail"
                 ? booking.billingEmail
                 : booking.billingPhone;
-        const savedVal = (savedRaw ?? "").toLowerCase();
+        const savedVal = (restoredDraft?.billing[f] ?? savedRaw ?? "").toLowerCase();
         const linked = leadVal !== "" && (savedVal === "" || savedVal === leadVal);
         return [f, linked];
       }),
@@ -421,14 +444,48 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
       billingPhone: booking.billingPhone || billingLead?.phone || "",
       billingVatNumber: booking.billingVatNumber || "",
       poNumber: booking.poNumber || "",
+      ...restoredDraft?.billing,
     },
   });
   const watchedPoNumber = form.watch("poNumber")?.trim();
+  const watchedBilling = form.watch();
+  const draft: PaymentDraft = {
+    paymentMethod,
+    billing: Object.fromEntries(
+      BILLING_FIELDS.map((field) => [field, watchedBilling[field] ?? ""]),
+    ) as PaymentDraft["billing"],
+  };
+  const { status: draftStatus, flush: flushDraft } = usePaymentDraft({
+    bookingId: booking.id,
+    draft,
+    restored: restoredDraft !== null,
+    enabled:
+      ["partial", "pending_payment"].includes(booking.status) && !isProcessing && !isFreeConfirming,
+    save: async (data) => {
+      const persisted = await updateBooking.mutateAsync({ id: booking.id, data });
+      await queryClient.cancelQueries({
+        queryKey: ["booking"],
+        predicate: (query) =>
+          (query.state.data as BookingWithAttendees | undefined)?.id === booking.id,
+      });
+      // Browser Back can return to this step before a refetch completes. Keep the
+      // saved billing fields current without overwriting a newer step or status.
+      const billing = Object.fromEntries(
+        [...BILLING_FIELDS, "paymentMethod" as const].map((field) => [field, persisted[field]]),
+      );
+      queryClient.setQueriesData<BookingWithAttendees>({ queryKey: ["booking"] }, (previous) =>
+        previous?.id === booking.id ? { ...previous, ...billing } : previous,
+      );
+      return persisted;
+    },
+  });
 
   const onSubmit = async (data?: z.infer<typeof invoiceSchema>) => {
+    if (!currentPricing || isProcessing) return;
     setIsProcessing(true);
     setPaymentError(null);
     try {
+      await flushDraft();
       await updateBooking.mutateAsync({
         id: booking.id,
         data: {
@@ -490,9 +547,11 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
   };
 
   const handleConfirmFree = async () => {
+    if (!currentPricing || currentPricing.total !== 0 || isFreeConfirming) return;
     setIsFreeConfirming(true);
     setPaymentError(null);
     try {
+      await flushDraft();
       await customFetch(`/api/bookings/${booking.id}/confirm-free`, { method: "POST" });
       markCompletionReturn();
       queryClient.invalidateQueries({ queryKey: ["booking"] });
@@ -522,6 +581,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
 
   const savePaymentProgress = async () => {
     setPaymentError(null);
+    await flushDraft();
     await updateBooking.mutateAsync({
       id: booking.id,
       data: {
@@ -571,22 +631,32 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           </div>
 
           {paymentError && (
-            <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-800">
+            <div
+              role="alert"
+              className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-800"
+            >
               <p className="font-semibold mb-1">Error</p>
               <p>{paymentError}</p>
             </div>
           )}
 
           <div className="space-y-3 pt-4">
-            <div className="flex justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
                 size="lg"
                 className="px-8 h-14 text-lg border-border"
                 onClick={async () => {
-                  await updateBooking.mutateAsync({ id: booking.id, data: { currentStep: 3 } });
-                  queryClient.invalidateQueries({ queryKey: ["booking"] });
+                  setPaymentError(null);
+                  try {
+                    await flushDraft();
+                    await updateBooking.mutateAsync({ id: booking.id, data: { currentStep: 3 } });
+                    queryClient.invalidateQueries({ queryKey: ["booking"] });
+                  } catch {
+                    setPaymentError("We couldn't save your progress. Please try again.");
+                  }
                 }}
+                disabled={isFreeConfirming || updateBooking.isPending}
               >
                 Back
               </Button>
@@ -687,8 +757,42 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
           </div>
         </div>
 
-        <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-5">
+        {calculatePricingMutation.isError && (
+          <div
+            role="alert"
+            className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+          >
+            <p>We couldn't update your total. Please retry before confirming your booking.</p>
+            <Button type="button" variant="outline" className="mt-2" onClick={refreshPricing}>
+              Retry total
+            </Button>
+          </div>
+        )}
+        {paymentMethod === "invoice" && (
+          <div aria-live="polite" className="text-sm text-muted-foreground">
+            {draftStatus === "error" ? (
+              <div role="alert">
+                <p>We couldn't save your billing details. Keep this page open and retry.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => {
+                    void flushDraft().catch(() => {});
+                  }}
+                >
+                  Retry saving details
+                </Button>
+              </div>
+            ) : (
+              <p role="status">
+                {draftStatus === "saving" ? "Saving billing details…" : "Billing details saved"}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="grid min-w-0 grid-cols-1 items-start gap-6 md:grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-5">
             <section className="swp-card rounded-2xl">
               <div className="border-b border-border/70 p-5">
                 <h2 className="text-xl font-bold">Choose payment method</h2>
@@ -698,7 +802,9 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
               </div>
               <div className="p-5">
                 <RadioGroup
+                  aria-label="Payment method"
                   value={paymentMethod}
+                  disabled={isProcessing}
                   onValueChange={(val: "card" | "invoice") => setPaymentMethod(val)}
                   className="grid gap-4 md:grid-cols-2"
                 >
@@ -708,13 +814,17 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/40"
                     }`}
-                    onClick={() => setPaymentMethod("card")}
+                    onClick={() => !isProcessing && setPaymentMethod("card")}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <RadioGroupItem value="card" className="mt-1" />
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <RadioGroupItem
+                          value="card"
+                          aria-label="Pay by card now"
+                          className="mt-1 shrink-0"
+                        />
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <CreditCard className="h-5 w-5 text-primary" />
                             <span className="text-lg font-bold">Pay by card now</span>
                           </div>
@@ -737,13 +847,17 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         ? "border-primary bg-primary/5"
                         : "border-border hover:border-primary/40"
                     }`}
-                    onClick={() => setPaymentMethod("invoice")}
+                    onClick={() => !isProcessing && setPaymentMethod("invoice")}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <RadioGroupItem value="invoice" className="mt-1" />
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <RadioGroupItem
+                          value="invoice"
+                          aria-label="Pay by invoice"
+                          className="mt-1 shrink-0"
+                        />
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <FileText className="h-5 w-5 text-primary" />
                             <span className="text-lg font-bold">Pay by invoice</span>
                           </div>
@@ -819,7 +933,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   {invoiceHelpContent && (
                     <div className="rounded-lg border border-border bg-white p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-3">
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
                           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                           <div>
                             <p className="font-bold">More invoice details</p>
@@ -848,321 +962,326 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   )}
 
                   <Form {...form}>
-                    <form
-                      className="space-y-4"
-                      id="invoice-form"
-                      onSubmit={form.handleSubmit(onSubmit)}
-                    >
-                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
-                        <div className="mb-4 flex items-start gap-3">
-                          <StepBadge value={1} />
-                          <div>
-                            <h3 className="font-bold">Billing contact</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Linked to lead attendee unless manually changed.
-                            </p>
+                    <fieldset disabled={isProcessing} className="min-w-0">
+                      <form
+                        className="space-y-4"
+                        id="invoice-form"
+                        onSubmit={form.handleSubmit(onSubmit)}
+                      >
+                        <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
+                          <div className="mb-4 flex items-start gap-3">
+                            <StepBadge value={1} />
+                            <div>
+                              <h3 className="font-bold">Billing contact</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Linked to lead attendee unless manually changed.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                          <FormField
-                            control={form.control}
-                            name="billingName"
-                            render={({ field }) => (
-                              <FormItem>
-                                <LinkedFieldLabel
-                                  label="Billing contact name *"
-                                  field="billingName"
-                                  linked={linkedFields.billingName}
-                                  canLink={!!getLeadValue("billingName")}
-                                  onRelink={() => relinkField("billingName")}
-                                />
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      unlinkField("billingName");
-                                    }}
-                                    className="h-12 bg-white"
+                          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <FormField
+                              control={form.control}
+                              name="billingName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <LinkedFieldLabel
+                                    label="Billing contact name *"
+                                    field="billingName"
+                                    linked={linkedFields.billingName}
+                                    canLink={!!getLeadValue("billingName")}
+                                    onRelink={() => relinkField("billingName")}
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingCompany"
-                            render={({ field }) => (
-                              <FormItem>
-                                <LinkedFieldLabel
-                                  label="Company name *"
-                                  field="billingCompany"
-                                  linked={linkedFields.billingCompany}
-                                  canLink={!!getLeadValue("billingCompany")}
-                                  onRelink={() => relinkField("billingCompany")}
-                                />
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      unlinkField("billingCompany");
-                                    }}
-                                    className="h-12 bg-white"
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      onChange={(e) => {
+                                        field.onChange(e);
+                                        unlinkField("billingName");
+                                      }}
+                                      className="h-12 bg-white"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingCompany"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <LinkedFieldLabel
+                                    label="Company name *"
+                                    field="billingCompany"
+                                    linked={linkedFields.billingCompany}
+                                    canLink={!!getLeadValue("billingCompany")}
+                                    onRelink={() => relinkField("billingCompany")}
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingEmail"
-                            render={({ field }) => (
-                              <FormItem>
-                                <LinkedFieldLabel
-                                  label="Invoice email address *"
-                                  field="billingEmail"
-                                  linked={linkedFields.billingEmail}
-                                  canLink={!!getLeadValue("billingEmail")}
-                                  onRelink={() => relinkField("billingEmail")}
-                                />
-                                <FormControl>
-                                  <Input
-                                    type="email"
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      unlinkField("billingEmail");
-                                    }}
-                                    className="h-12 bg-white"
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      onChange={(e) => {
+                                        field.onChange(e);
+                                        unlinkField("billingCompany");
+                                      }}
+                                      className="h-12 bg-white"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingEmail"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <LinkedFieldLabel
+                                    label="Invoice email address *"
+                                    field="billingEmail"
+                                    linked={linkedFields.billingEmail}
+                                    canLink={!!getLeadValue("billingEmail")}
+                                    onRelink={() => relinkField("billingEmail")}
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingPhone"
-                            render={({ field }) => (
-                              <FormItem>
-                                <LinkedFieldLabel
-                                  label="Purchaser contact number *"
-                                  field="billingPhone"
-                                  linked={linkedFields.billingPhone}
-                                  canLink={!!getLeadValue("billingPhone")}
-                                  onRelink={() => relinkField("billingPhone")}
-                                />
-                                <FormControl>
-                                  <Input
-                                    type="tel"
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      unlinkField("billingPhone");
-                                    }}
-                                    className="h-12 bg-white"
+                                  <FormControl>
+                                    <Input
+                                      type="email"
+                                      {...field}
+                                      onChange={(e) => {
+                                        field.onChange(e);
+                                        unlinkField("billingEmail");
+                                      }}
+                                      className="h-12 bg-white"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingPhone"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <LinkedFieldLabel
+                                    label="Purchaser contact number *"
+                                    field="billingPhone"
+                                    linked={linkedFields.billingPhone}
+                                    canLink={!!getLeadValue("billingPhone")}
+                                    onRelink={() => relinkField("billingPhone")}
                                   />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </section>
+                                  <FormControl>
+                                    <Input
+                                      type="tel"
+                                      {...field}
+                                      onChange={(e) => {
+                                        field.onChange(e);
+                                        unlinkField("billingPhone");
+                                      }}
+                                      className="h-12 bg-white"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </section>
 
-                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
-                        <div className="mb-4 flex items-start gap-3">
-                          <StepBadge value={2} />
-                          <div>
-                            <h3 className="font-bold">Billing address</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Address fields stay together so the form is easier to scan.
-                            </p>
+                        <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
+                          <div className="mb-4 flex items-start gap-3">
+                            <StepBadge value={2} />
+                            <div>
+                              <h3 className="font-bold">Billing address</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Address fields stay together so the form is easier to scan.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                          <FormField
-                            control={form.control}
-                            name="billingAddressLine1"
-                            render={({ field }) => (
-                              <FormItem className="md:col-span-2">
-                                <FormLabel>Address line 1 *</FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingAddressLine2"
-                            render={({ field }) => (
-                              <FormItem className="md:col-span-2">
-                                <FormLabel>
-                                  Address line 2{" "}
-                                  <span className="font-normal text-muted-foreground">
-                                    (optional)
-                                  </span>
-                                </FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingTown"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Town / City *</FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingRegion"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>
-                                  Region / County{" "}
-                                  <span className="font-normal text-muted-foreground">
-                                    (optional)
-                                  </span>
-                                </FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingPostcode"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Postcode *</FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="billingCountry"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Country *</FormLabel>
-                                <FormControl>
-                                  <Input {...field} className="h-12 bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </section>
+                          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <FormField
+                              control={form.control}
+                              name="billingAddressLine1"
+                              render={({ field }) => (
+                                <FormItem className="md:col-span-2">
+                                  <FormLabel>Address line 1 *</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingAddressLine2"
+                              render={({ field }) => (
+                                <FormItem className="md:col-span-2">
+                                  <FormLabel>
+                                    Address line 2{" "}
+                                    <span className="font-normal text-muted-foreground">
+                                      (optional)
+                                    </span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingTown"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Town / City *</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingRegion"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    Region / County{" "}
+                                    <span className="font-normal text-muted-foreground">
+                                      (optional)
+                                    </span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingPostcode"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Postcode *</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="billingCountry"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Country *</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="h-12 bg-white" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </section>
 
-                      <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
-                        <div className="mb-4 flex items-start gap-3">
-                          <StepBadge value={3} />
-                          <div>
-                            <h3 className="font-bold">Invoice references</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Add a PO now if you have one. If not, you can confirm registration and
-                              add it later before payment through the secure billing link.
-                            </p>
+                        <section className="rounded-xl border border-primary/15 bg-primary/[0.018] p-4">
+                          <div className="mb-4 flex items-start gap-3">
+                            <StepBadge value={3} />
+                            <div>
+                              <h3 className="font-bold">Invoice references</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Add a PO now if you have one. If not, you can confirm registration
+                                and add it later before payment through the secure billing link.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                          <FormField
-                            control={form.control}
-                            name="billingVatNumber"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>
-                                  VAT number{" "}
-                                  <span className="font-normal text-muted-foreground">
-                                    (optional)
-                                  </span>
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="Optional"
-                                    className="h-12 bg-white"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="poNumber"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>
-                                  PO number{" "}
-                                  <span className="font-normal text-muted-foreground">
-                                    (optional)
-                                  </span>
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="e.g. PO-12345"
-                                    className="h-12 bg-white"
-                                    maxLength={30}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                                {watchedPoNumber ? (
-                                  <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-primary">
-                                    <p className="font-bold">PO number ready for invoice.</p>
-                                    <p className="mt-1">
-                                      This PO number will appear on the invoice when you confirm
-                                      registration.
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <div className="rounded-md border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
-                                    <p className="font-bold text-foreground">
-                                      No PO number yet? That is fine.
-                                    </p>
-                                    <p className="mt-1">
-                                      You can confirm registration now and add the PO later using
-                                      the secure billing link in the invoice email. Once added, we
-                                      will automatically email a revised invoice with the PO
-                                      included.
-                                    </p>
-                                  </div>
-                                )}
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </section>
-                    </form>
+                          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <FormField
+                              control={form.control}
+                              name="billingVatNumber"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    VAT number{" "}
+                                    <span className="font-normal text-muted-foreground">
+                                      (optional)
+                                    </span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      placeholder="Optional"
+                                      className="h-12 bg-white"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="poNumber"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    PO number{" "}
+                                    <span className="font-normal text-muted-foreground">
+                                      (optional)
+                                    </span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      placeholder="e.g. PO-12345"
+                                      className="h-12 bg-white"
+                                      maxLength={30}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                  {watchedPoNumber ? (
+                                    <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-primary">
+                                      <p className="font-bold">PO number ready for invoice.</p>
+                                      <p className="mt-1">
+                                        This PO number will appear on the invoice when you confirm
+                                        registration.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="rounded-md border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed text-muted-foreground">
+                                      <p className="font-bold text-foreground">
+                                        No PO number yet? That is fine.
+                                      </p>
+                                      <p className="mt-1">
+                                        You can confirm registration now and add the PO later using
+                                        the secure billing link in the invoice email. Once added, we
+                                        will automatically email a revised invoice with the PO
+                                        included.
+                                      </p>
+                                    </div>
+                                  )}
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </section>
+                      </form>
+                    </fieldset>
                   </Form>
                 </div>
               </section>
             )}
 
             {paymentError && (
-              <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+              <div
+                role="alert"
+                className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              >
                 <p className="mb-1 font-semibold">Payment error</p>
                 <p>{paymentError}</p>
                 <p className="mt-2 text-red-700">
@@ -1176,7 +1295,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
             )}
           </div>
 
-          <aside className="swp-checkout-sticky-sidebar space-y-5 md:self-start">
+          <aside className="swp-checkout-sticky-sidebar min-w-0 space-y-5 md:self-start">
             <section className="swp-card overflow-hidden rounded-2xl">
               <div className="border-b border-border/70 p-5">
                 <h3 className="text-lg font-bold">Order summary</h3>
@@ -1243,7 +1362,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                   )}
                   <Button
                     size="lg"
-                    className="swp-primary-btn h-14 w-full min-w-0 px-6 text-base"
+                    className="swp-primary-btn min-h-14 h-auto w-full min-w-0 whitespace-normal px-6 py-3 text-base"
                     onClick={() => {
                       if (paymentMethod === "invoice") {
                         void form.handleSubmit(onSubmit)();
@@ -1251,7 +1370,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                         void onSubmit();
                       }
                     }}
-                    disabled={isProcessing}
+                    disabled={isProcessing || !currentPricing}
                   >
                     {submitLabel}
                   </Button>
@@ -1262,6 +1381,7 @@ export default function Step4Payment({ booking }: Step4PaymentProps) {
                     onClick={async () => {
                       setPaymentError(null);
                       try {
+                        await flushDraft();
                         await updateBooking.mutateAsync({
                           id: booking.id,
                           data: { currentStep: 3 },

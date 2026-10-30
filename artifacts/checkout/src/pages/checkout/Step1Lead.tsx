@@ -338,9 +338,15 @@ export default function Step1Lead({
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Emergency contact phone (optional)</FormLabel>
+                    <FormLabel>Your contact number (optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="+44 7700 900077" {...field} className="h-12 bg-white" />
+                      <Input
+                        type="tel"
+                        autoComplete="tel"
+                        placeholder="+44 7700 900077"
+                        {...field}
+                        className="h-12 bg-white"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

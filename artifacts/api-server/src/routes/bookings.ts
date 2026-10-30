@@ -40,6 +40,8 @@ function isAdminRequest(req: import("express").Request): boolean {
 }
 
 const router: IRouter = Router();
+const CHECKOUT_EDITABLE_STATUSES = ["partial", "pending_payment"] as const;
+const CHECKOUT_CLOSED_MESSAGE = "This booking is no longer editable through checkout.";
 
 async function generateOrderRef(bookingId?: number): Promise<string> {
   const [settings] = await db
@@ -425,6 +427,10 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
       res.status(403).json({ error: "Forbidden — session token mismatch" });
       return;
     }
+    if (!CHECKOUT_EDITABLE_STATUSES.some((status) => status === existing.status)) {
+      res.status(409).json({ error: CHECKOUT_CLOSED_MESSAGE });
+      return;
+    }
   }
 
   const {
@@ -506,8 +512,25 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
   const [updated] = await db
     .update(bookingsTable)
     .set(updateData)
-    .where(eq(bookingsTable.id, id))
+    .where(
+      admin
+        ? eq(bookingsTable.id, id)
+        : and(
+            eq(bookingsTable.id, id),
+            inArray(bookingsTable.status, [...CHECKOUT_EDITABLE_STATUSES]),
+          ),
+    )
     .returning();
+
+  // Payment confirmation can finish after the initial read (including while
+  // pricing is fetched). Keep the editability check in the same database write
+  // so an older autosave cannot alter a completed booking.
+  if (!updated) {
+    res.status(admin ? 404 : 409).json({
+      error: admin ? "Booking not found" : CHECKOUT_CLOSED_MESSAGE,
+    });
+    return;
+  }
 
   // If admin edited billing/PO on an invoice booking that already has a Stripe
   // invoice, re-issue it so the customer gets an updated PDF/email.

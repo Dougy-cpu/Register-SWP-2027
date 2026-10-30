@@ -485,6 +485,11 @@ export function useGetBooking<
 }
 
 /**
+ * Public booking-session updates are permitted only while the booking is
+partial or pending_payment. A booking that becomes non-editable before
+the update is saved returns 409. Authenticated admin updates and the
+separate management-token billing flow retain their existing behaviour.
+
  * @summary Update booking details (payment method, promo code, step progress)
  */
 export const getUpdateBookingUrl = (id: number) => {

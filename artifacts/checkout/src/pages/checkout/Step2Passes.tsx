@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useUpdateBooking,
-  calculatePricing,
   useListDiscountTiers,
   customFetch,
   type PricingRequestPassType,
@@ -28,6 +27,7 @@ import {
 } from "lucide-react";
 import type { BookingWithAttendees } from "@/types/booking";
 import { CompShortfallPrompt } from "./CompShortfallPrompt";
+import { calculateCheckoutPricing } from "@/lib/checkout-pricing";
 
 interface Step2PassesProps {
   booking: BookingWithAttendees;
@@ -49,9 +49,7 @@ const DEFAULT_BUSINESS_EXTRA_BENEFITS = [
   "Speaking, branding, sponsor visibility and VIP invitations are handled separately.",
 ];
 
-const WORKFORCE_PASS_PRICE = 249;
 const WORKFORCE_PASS_ORIGINAL_PRICE = 429;
-const BUSINESS_PASS_PRICE = 499;
 const BUSINESS_PASS_ORIGINAL_PRICE = 999;
 const DEFAULT_PRICING_PERIOD = "Super Early Bird";
 
@@ -267,18 +265,19 @@ interface UpsellNudgeProps {
   passType: string;
   quantity: number;
   unitLabel: string;
+  pricePerPass: number | null;
 }
 
-function UpsellNudge({ tiers, passType, quantity, unitLabel }: UpsellNudgeProps) {
+function UpsellNudge({ tiers, passType, quantity, unitLabel, pricePerPass }: UpsellNudgeProps) {
   const nextTier = getNextTier(tiers, passType, quantity);
-  if (!nextTier) return null;
+  if (!nextTier || pricePerPass === null) return null;
 
   const needed = nextTier.minQuantity - quantity;
   if (needed > 3) return null;
 
   const currentTier = getActiveTier(tiers, passType, quantity);
   const currentDiscountPct = currentTier?.discountPercent ?? 0;
-  const basePrice = passType === "business" ? BUSINESS_PASS_PRICE : WORKFORCE_PASS_PRICE;
+  const basePrice = pricePerPass;
   const upliftValue =
     (nextTier.minQuantity * basePrice * nextTier.discountPercent) / 100 -
     (quantity * basePrice * currentDiscountPct) / 100;
@@ -295,7 +294,7 @@ function UpsellNudge({ tiers, passType, quantity, unitLabel }: UpsellNudgeProps)
       <span>
         <span className="font-bold">
           Add {needed} more {unitLabel}
-          {needed > 1 ? "s" : ""}
+          {needed > 1 ? "es" : ""}
         </span>{" "}
         to reach the next group discount:{" "}
         <span className="font-bold text-primary">{nextTier.discountPercent}% off</span>
@@ -335,13 +334,24 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     business: null,
   });
 
-  const [promoInput, setPromoInput] = useState<string>("");
+  const [linkPromo] = useState(
+    () => new URLSearchParams(window.location.search).get("promo")?.trim().toUpperCase() || null,
+  );
+  const [promoInput, setPromoInput] = useState<string>(booking.promoCode ? "" : (linkPromo ?? ""));
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(
     booking.promoCode ?? null,
   );
   const [appliedViaLink, setAppliedViaLink] = useState<boolean>(false);
   const [promoError, setPromoError] = useState<string | null>(null);
-  const [promoValidating, setPromoValidating] = useState(false);
+  const promoRequestId = useRef(0);
+  const [promoCandidate, setPromoCandidate] = useState<{
+    code: string;
+    viaLink: boolean;
+    id: number;
+  } | null>(() =>
+    linkPromo && !booking.promoCode ? { code: linkPromo, viaLink: true, id: 0 } : null,
+  );
+  const promoValidating = promoCandidate !== null;
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const leadEmail = booking.attendees?.find((a) => a.isLead)?.workEmail ?? null;
@@ -361,8 +371,13 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
   // matches the latest request — this drops out-of-order responses caused by
   // rapid quantity changes (which would otherwise leave the order summary
   // showing a price for the wrong quantity).
-  const [currentPricing, setCurrentPricing] = useState<PricingBreakdown | null>(null);
+  const pricingKey = JSON.stringify([selectedPass, quantity, appliedPromoCode]);
+  const [quote, setQuote] = useState<{ key: string; data: PricingBreakdown } | null>(null);
+  // A changed selection must invalidate the old quote immediately, before the effect runs.
+  const currentPricing = quote?.key === pricingKey ? quote.data : null;
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+  const [pricingAttempt, setPricingAttempt] = useState(0);
   const pricingReqIdRef = useRef(0);
 
   useEffect(() => {
@@ -391,29 +406,32 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     const reqId = ++pricingReqIdRef.current;
     const ac = new AbortController();
     setPricingLoading(true);
+    setPricingError(null);
     const timer = setTimeout(() => {
-      calculatePricing(
+      calculateCheckoutPricing(
         { passType: selectedPass, quantity, promoCode: appliedPromoCode ?? undefined },
         { signal: ac.signal },
       )
         .then((data) => {
           // Drop the response if a newer request has been issued in the meantime
-          if (reqId === pricingReqIdRef.current) {
-            setCurrentPricing(data);
+          if (!ac.signal.aborted && reqId === pricingReqIdRef.current) {
+            setQuote({ key: pricingKey, data });
             setPricingLoading(false);
           }
         })
         .catch(() => {
-          // Aborted or transient error — next debounced call will retry.
-          // Only clear the loading flag if this was the latest request.
-          if (reqId === pricingReqIdRef.current) setPricingLoading(false);
+          if (!ac.signal.aborted && reqId === pricingReqIdRef.current) {
+            setQuote(null);
+            setPricingLoading(false);
+            setPricingError("We couldn't update your total. Please retry before continuing.");
+          }
         });
     }, 300);
     return () => {
       clearTimeout(timer);
       ac.abort();
     };
-  }, [selectedPass, quantity, appliedPromoCode]);
+  }, [selectedPass, quantity, appliedPromoCode, pricingKey, pricingAttempt]);
 
   // Complimentary codes are capped by pass count, not booking count. When
   // the requested quantity exceeds the seats remaining on the comp code, the
@@ -429,93 +447,100 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     if (compRemaining !== null && compRemaining > 0) setQuantity(compRemaining);
   };
 
-  const validatePromo = async (
-    codeToValidate: string,
-  ): Promise<{ ok: boolean; code?: string; error?: string }> => {
-    try {
-      const res = await customFetch(`/api/promo-codes/validate`, {
-        method: "POST",
-        body: JSON.stringify({
-          code: codeToValidate,
-          passType: selectedPass,
-          quantity,
-          leadEmail: leadEmail ?? undefined,
-        }),
-      });
-      const data = res as {
-        valid?: boolean;
-        error?: string;
-        code?: string;
-        remainingSeats?: number | null;
-      } | null;
-      if (data?.valid && data?.code) return { ok: true, code: data.code };
-      return {
-        ok: false,
-        error: typeof data?.error === "string" ? data.error : "Invalid promo code",
-      };
-    } catch (e: unknown) {
-      const err = e as Record<string, unknown> | null;
-      const apiMsg =
-        err?.data && typeof (err.data as Record<string, unknown>)?.error === "string"
-          ? ((err.data as Record<string, unknown>).error as string)
-          : null;
-      const fallbackMsg = typeof err?.message === "string" ? err.message : null;
-      return { ok: false, error: apiMsg || fallbackMsg || "Invalid or expired promo code" };
-    }
+  const validatePromo = useCallback(
+    async (
+      codeToValidate: string,
+      signal: AbortSignal,
+    ): Promise<{ ok: boolean; code?: string; error?: string }> => {
+      try {
+        const res = await customFetch(`/api/promo-codes/validate`, {
+          method: "POST",
+          signal,
+          body: JSON.stringify({
+            code: codeToValidate,
+            passType: selectedPass,
+            quantity,
+            leadEmail: leadEmail ?? undefined,
+          }),
+        });
+        const data = res as {
+          valid?: boolean;
+          error?: string;
+          code?: string;
+          remainingSeats?: number | null;
+        } | null;
+        if (data?.valid && data?.code) return { ok: true, code: data.code };
+        return {
+          ok: false,
+          error: typeof data?.error === "string" ? data.error : "Invalid promo code",
+        };
+      } catch (e: unknown) {
+        if (signal.aborted)
+          return { ok: false, error: "We couldn't check this code. Please try again." };
+        const err = e as Record<string, unknown> | null;
+        const apiMsg =
+          err?.data && typeof (err.data as Record<string, unknown>)?.error === "string"
+            ? ((err.data as Record<string, unknown>).error as string)
+            : null;
+        const fallbackMsg = typeof err?.message === "string" ? err.message : null;
+        return { ok: false, error: apiMsg || fallbackMsg || "Invalid or expired promo code" };
+      }
+    },
+    [selectedPass, quantity, leadEmail],
+  );
+
+  const clearLinkPromo = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("promo");
+    window.history.replaceState(window.history.state, "", url);
   };
 
-  const handleApplyPromo = async () => {
+  const handleApplyPromo = () => {
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
-    setPromoValidating(true);
+    clearLinkPromo();
     setPromoError(null);
-    const result = await validatePromo(code);
-    setPromoValidating(false);
-    if (result.ok && result.code) {
-      setAppliedPromoCode(result.code);
-      setAppliedViaLink(false);
-      setPromoInput("");
-    } else {
-      setPromoError(result.error ?? "Invalid promo code");
-    }
+    setPromoCandidate({ code, viaLink: false, id: ++promoRequestId.current });
   };
 
   const handleRemovePromo = () => {
+    ++promoRequestId.current;
+    setPromoCandidate(null);
     setAppliedPromoCode(null);
     setAppliedViaLink(false);
     setPromoInput("");
     setPromoError(null);
+    // Respect deliberate removal across quantity changes, refresh and returning to this step.
+    clearLinkPromo();
   };
 
-  // Auto-apply ?promo=CODE from URL on mount (and re-run on quantity/pass change so
-  // a refresh re-applies it, but never overrides a manually-applied code).
+  // Both link and typed codes use the same cancellable check. A stale response
+  // cannot replace a newer choice, and a linked code blocks Continue while checking.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const urlCode = new URLSearchParams(window.location.search).get("promo");
-    if (!urlCode) return;
-    const normalised = urlCode.trim().toUpperCase();
-    if (!normalised) return;
-    if (appliedPromoCode === normalised) return;
-    if (appliedPromoCode && !appliedViaLink) return; // user has applied a different code manually
+    if (!promoCandidate) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     let cancelled = false;
     (async () => {
-      const result = await validatePromo(normalised);
-      if (cancelled) return;
+      const result = await validatePromo(promoCandidate.code, controller.signal);
+      if (cancelled || promoCandidate.id !== promoRequestId.current) return;
+      clearTimeout(timeout);
+      setPromoCandidate(null);
       if (result.ok && result.code) {
         setAppliedPromoCode(result.code);
-        setAppliedViaLink(true);
+        setAppliedViaLink(promoCandidate.viaLink);
+        setPromoInput("");
         setPromoError(null);
       } else {
-        setAppliedPromoCode(null);
-        setAppliedViaLink(false);
         setPromoError(result.error ?? "Invalid promo code");
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPass, quantity, leadEmail]);
+  }, [promoCandidate, validatePromo]);
 
   const savePassSelection = async (currentStep: number) => {
     await updateBooking.mutateAsync({
@@ -523,7 +548,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
       data: {
         passType: selectedPass as "single" | "business",
         quantity,
-        promoCode: appliedPromoCode ?? undefined,
+        promoCode: appliedPromoCode,
         hearAboutUs: hearAboutUs || undefined,
         currentStep,
       } as Parameters<typeof updateBooking.mutateAsync>[0]["data"],
@@ -532,6 +557,8 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
   };
 
   const handleContinue = async () => {
+    if (!currentPricing || pricingLoading || pricingError || promoValidating || compShortfall)
+      return;
     setSaveError(null);
     try {
       await savePassSelection(3);
@@ -542,6 +569,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
   };
 
   const handleSaveAndReturn = async () => {
+    if (promoValidating) throw new Error("Please wait while we check your promo code.");
     await savePassSelection(2);
   };
 
@@ -549,35 +577,32 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
   const discountLabel = activeTier ? `${activeTier.discountPercent}% off` : null;
   const isMostPopular = isHR && quantity === 3 && !activeTier;
 
-  const hrUnitPrice = currentPricing?.pricePerHead ?? WORKFORCE_PASS_PRICE;
-  const businessUnitPrice = currentPricing?.pricePerHead ?? BUSINESS_PASS_PRICE;
-  const hrTierRows = buildWorkforceTierRows(allTiers, quantity, hrUnitPrice);
-  const businessTierRows = buildBusinessTierRows(allTiers, quantity, businessUnitPrice);
-
   const singleCfg = passConfig.single;
   const businessCfg = passConfig.business;
 
-  const singleCurrentPrice = singleCfg ? parseFloat(singleCfg.currentPrice) : WORKFORCE_PASS_PRICE;
+  const singleCurrentPrice =
+    (selectedPass === "single" ? currentPricing?.pricePerHead : null) ??
+    (singleCfg ? parseFloat(singleCfg.currentPrice) : null);
   const singleOriginalPrice = singleCfg
     ? parseFloat(singleCfg.originalPrice)
     : WORKFORCE_PASS_ORIGINAL_PRICE;
   const singlePeriodName = singleCfg?.pricingPeriodName ?? DEFAULT_PRICING_PERIOD;
   const singleDiscountPct =
-    singleOriginalPrice > singleCurrentPrice
+    singleCurrentPrice !== null && singleOriginalPrice > singleCurrentPrice
       ? Math.round(((singleOriginalPrice - singleCurrentPrice) / singleOriginalPrice) * 100)
       : null;
   const singleBenefits =
     singleCfg && singleCfg.benefits.length > 0 ? singleCfg.benefits : DEFAULT_SINGLE_BENEFITS;
 
-  const businessCurrentPrice = businessCfg
-    ? parseFloat(businessCfg.currentPrice)
-    : BUSINESS_PASS_PRICE;
+  const businessCurrentPrice =
+    (selectedPass === "business" ? currentPricing?.pricePerHead : null) ??
+    (businessCfg ? parseFloat(businessCfg.currentPrice) : null);
   const businessOriginalPrice = businessCfg
     ? parseFloat(businessCfg.originalPrice)
     : BUSINESS_PASS_ORIGINAL_PRICE;
   const businessPeriodName = businessCfg?.pricingPeriodName ?? DEFAULT_PRICING_PERIOD;
   const businessDiscountPct =
-    businessOriginalPrice > businessCurrentPrice
+    businessCurrentPrice !== null && businessOriginalPrice > businessCurrentPrice
       ? Math.round(((businessOriginalPrice - businessCurrentPrice) / businessOriginalPrice) * 100)
       : null;
   const businessBenefits =
@@ -587,6 +612,14 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
       ? businessCfg.extraBenefits
       : DEFAULT_BUSINESS_EXTRA_BENEFITS;
   const audienceLabel = isVendor ? "Commercial attendee" : "Employer-side attendee";
+  const hrTierRows =
+    singleCurrentPrice === null
+      ? []
+      : buildWorkforceTierRows(allTiers, quantity, singleCurrentPrice);
+  const businessTierRows =
+    businessCurrentPrice === null
+      ? []
+      : buildBusinessTierRows(allTiers, quantity, businessCurrentPrice);
   const passLabel = isVendor ? "Business Pass" : "Workforce Pass";
   const unitLabel = "pass";
 
@@ -619,7 +652,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           </p>
           <p className="text-lg font-bold mt-1">
             {quantity} {unitLabel}
-            {quantity !== 1 ? "s" : ""}
+            {quantity !== 1 ? "es" : ""}
           </p>
           <p className="text-sm text-muted-foreground">{passLabel}</p>
         </div>
@@ -628,7 +661,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
             Current total
           </p>
           <p className="text-lg font-bold mt-1">
-            {currentPricing ? `£${currentPricing.total.toFixed(2)}` : "Calculating"}
+            {currentPricing
+              ? `£${currentPricing.total.toFixed(2)}`
+              : pricingError
+                ? "Unavailable"
+                : "Calculating"}
           </p>
           <p className="text-sm text-muted-foreground">Including VAT</p>
         </div>
@@ -656,9 +693,11 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
                   <span className="swp-blue-header-title text-3xl font-bold">
-                    £{singleCurrentPrice.toFixed(0)}
+                    {singleCurrentPrice === null
+                      ? "Loading price…"
+                      : `£${singleCurrentPrice.toFixed(0)}`}
                   </span>
-                  {singleOriginalPrice > singleCurrentPrice && (
+                  {singleCurrentPrice !== null && singleOriginalPrice > singleCurrentPrice && (
                     <span className="swp-blue-header-muted text-sm line-through">
                       £{singleOriginalPrice.toFixed(0)}
                     </span>
@@ -769,6 +808,9 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     passType="single"
                     quantity={quantity}
                     unitLabel="pass"
+                    pricePerPass={
+                      selectedPass === "single" ? singleCurrentPrice : businessCurrentPrice
+                    }
                   />
                 </AnimatePresence>
               </div>
@@ -830,13 +872,16 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               <div className="text-right">
                 <div className="flex items-baseline gap-2 justify-end flex-wrap">
                   <span className="swp-blue-header-title text-3xl font-bold">
-                    £{businessCurrentPrice.toFixed(0)}
+                    {businessCurrentPrice === null
+                      ? "Loading price…"
+                      : `£${businessCurrentPrice.toFixed(0)}`}
                   </span>
-                  {businessOriginalPrice > businessCurrentPrice && (
-                    <span className="swp-blue-header-muted text-sm line-through">
-                      £{businessOriginalPrice.toFixed(0)}
-                    </span>
-                  )}
+                  {businessCurrentPrice !== null &&
+                    businessOriginalPrice > businessCurrentPrice && (
+                      <span className="swp-blue-header-muted text-sm line-through">
+                        £{businessOriginalPrice.toFixed(0)}
+                      </span>
+                    )}
                   {businessDiscountPct !== null && (
                     <span className="badge-shine text-xs font-bold px-3 py-1 rounded-full inline-block">
                       {businessDiscountPct}% off
@@ -932,6 +977,9 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     passType="business"
                     quantity={quantity}
                     unitLabel="pass"
+                    pricePerPass={
+                      selectedPass === "single" ? singleCurrentPrice : businessCurrentPrice
+                    }
                   />
                 </AnimatePresence>
               </div>
@@ -999,6 +1047,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                 How did you hear about the event?
               </p>
               <select
+                aria-label="How did you hear about the event?"
                 value={hearAboutUs}
                 onChange={(e) => setHearAboutUs(e.target.value)}
                 className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -1054,6 +1103,9 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                   <Input
                     className="h-10 uppercase bg-white text-sm font-mono"
                     placeholder="Enter code"
+                    aria-label="Promo code"
+                    aria-invalid={!!promoError}
+                    aria-describedby={promoError ? "promo-code-error" : undefined}
                     value={promoInput}
                     onChange={(e) => {
                       setPromoInput(e.target.value.toUpperCase());
@@ -1072,14 +1124,22 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
                     {promoValidating ? "Checking…" : "Apply"}
                   </Button>
                 </div>
-                {promoError && <p className="text-xs text-red-600 font-medium">{promoError}</p>}
+                {promoError && (
+                  <p
+                    id="promo-code-error"
+                    role="alert"
+                    className="text-xs text-red-600 font-medium"
+                  >
+                    {promoError}
+                  </p>
+                )}
               </div>
             )}
           </div>
         </div>
 
         {/* Right: price breakdown */}
-        <div className="min-w-[280px] bg-primary/[0.045] p-6 md:p-8">
+        <div className="min-w-0 md:min-w-[280px] bg-primary/[0.045] p-6 md:p-8">
           <h3 className="text-lg font-bold mb-4">Order Summary</h3>
           {currentPricing ? (
             <div className="space-y-2.5">
@@ -1146,6 +1206,23 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           )}
         </div>
       </div>
+      {pricingError && (
+        <div
+          role="alert"
+          className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3"
+        >
+          <p>{pricingError}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2"
+            onClick={() => setPricingAttempt((attempt) => attempt + 1)}
+            disabled={pricingLoading}
+          >
+            Retry total
+          </Button>
+        </div>
+      )}
       {saveError && (
         <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3">
           {saveError}
@@ -1158,16 +1235,28 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           size="lg"
           className="order-3 h-14 w-full px-8 text-lg border-border md:order-1 md:w-auto"
           onClick={async () => {
-            await updateBooking.mutateAsync({ id: booking.id, data: { currentStep: 1 } });
-            queryClient.invalidateQueries({ queryKey: ["booking"] });
+            setSaveError(null);
+            try {
+              await savePassSelection(1);
+            } catch {
+              setSaveError("We could not save your pass selection. Please try again.");
+            }
           }}
-          disabled={updateBooking.isPending}
+          disabled={updateBooking.isPending || promoValidating}
         >
           Back
         </Button>
         <SaveAndReturnButton
           onSave={handleSaveAndReturn}
-          disabled={pricingLoading || !booking.id || compShortfall || updateBooking.isPending}
+          disabled={
+            !currentPricing ||
+            pricingLoading ||
+            !!pricingError ||
+            promoValidating ||
+            !booking.id ||
+            compShortfall ||
+            updateBooking.isPending
+          }
           className="order-2 items-stretch md:order-2 md:items-center"
           buttonClassName="h-14 w-full md:w-auto md:min-w-[260px]"
         />
@@ -1175,7 +1264,15 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
           size="lg"
           className="swp-primary-btn order-1 h-14 w-full min-w-0 px-8 text-lg md:order-3"
           onClick={handleContinue}
-          disabled={pricingLoading || !booking.id || compShortfall || updateBooking.isPending}
+          disabled={
+            !currentPricing ||
+            pricingLoading ||
+            !!pricingError ||
+            promoValidating ||
+            !booking.id ||
+            compShortfall ||
+            updateBooking.isPending
+          }
         >
           Continue to Attendees
         </Button>
