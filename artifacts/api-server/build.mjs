@@ -126,9 +126,8 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   // Copy static assets (PDFs, images, etc.) to the dist directory
   const srcAssets = path.resolve(artifactDir, "src/assets");
   const distAssets = path.resolve(distDir, "assets");
-  await cp(srcAssets, distAssets, { recursive: true }).catch(() => {
-    // No assets directory — that's fine
-  });
+  // Receipt fonts and logos are required at runtime. A missing asset must fail the build.
+  await cp(srcAssets, distAssets, { recursive: true });
 }
 
 buildAll().catch((err) => {

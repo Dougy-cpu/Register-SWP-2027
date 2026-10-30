@@ -1,5 +1,6 @@
 ﻿import PDFDocument from "pdfkit";
 import { PASS_PRICES } from "./pricing";
+import { ReceiptLayout, receiptColours, type ReceiptPosition } from "./receipt-layout";
 
 interface BookingForPdf {
   id: number;
@@ -51,223 +52,268 @@ export function generatePdfReceipt(
   attendees: AttendeeForPdf[],
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50, size: "A4", compress: false });
+    const reference = booking.orderReference || `INV-${booking.id}`;
+    const doc = new PDFDocument({
+      margin: 0,
+      size: "A4",
+      bufferPages: true,
+      compress: false,
+      info: {
+        Title: `SWP Summit 2027 - VAT Receipt ${reference}`,
+        Author: "People Strategy Hub",
+        Subject: `VAT receipt ${reference}`,
+      },
+    });
     const chunks: Buffer[] = [];
-
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    const formatCurrency = (n: number) => `GBP ${n.toFixed(2)}`;
+    try {
+      const layout = new ReceiptLayout(doc);
+      const { left, right } = layout;
+      const { muted, blue, wash } = receiptColours;
+      const formatCurrency = (n: number) => `GBP ${n.toFixed(2)}`;
+      const lead = attendees.find((a) => a.isLead) || attendees[0];
+      const receiptDate =
+        booking.paymentMethod === "card" && booking.paidAt ? new Date(booking.paidAt) : new Date();
+      const dateStr = receiptDate.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
 
-    const lead = attendees.find((a) => a.isLead) || attendees[0];
-    const receiptDate =
-      booking.paymentMethod === "card" && booking.paidAt ? new Date(booking.paidAt) : new Date();
-    const dateStr = receiptDate.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+      // Preserve the stored post-discount amounts and existing bundle display rules.
+      const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
+      const vat = parseFloat(booking.vatAmount?.toString() || "0");
+      const total = parseFloat(booking.totalAmount?.toString() || "0");
+      const promoDiscount = parseFloat(booking.promoDiscountAmount?.toString() || "0");
+      const groupDiscount = parseFloat(booking.groupDiscountAmount?.toString() || "0");
+      const baseAmount = subtotalAfterDiscounts + groupDiscount + promoDiscount;
+      const passInfo = PASS_PRICES[booking.passType];
+      const isBundlePass = passInfo ? passInfo.seats > 1 : false;
+      const displayQty = isBundlePass ? 1 : booking.quantity;
+      const displayUnitPrice = baseAmount / Math.max(displayQty, 1);
 
-    // booking.subtotalAmount IS subtotalAfterDiscounts (stored post-discount).
-    const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
-    const vat = parseFloat(booking.vatAmount?.toString() || "0");
-    const total = parseFloat(booking.totalAmount?.toString() || "0");
-    const promoDiscount = parseFloat(booking.promoDiscountAmount?.toString() || "0");
-    const groupDiscount = parseFloat(booking.groupDiscountAmount?.toString() || "0");
+      layout.text("VAT Receipt", left, 161, { size: 31, font: "ExtraBold" });
+      layout.label("RECEIPT NUMBER", right, 166, "right");
+      const referenceEnd = layout.paragraph(
+        reference,
+        311,
+        right - 311,
+        { page: 0, y: 183 },
+        {
+          size: 17.5,
+          font: "SemiBold",
+          align: "right",
+        },
+      );
+      const detailsStart = layout.ensure(
+        { page: referenceEnd.page, y: Math.max(219, referenceEnd.y + 12) },
+        50,
+      );
+      layout.label("BILL TO", left, detailsStart.y);
+      let billing: ReceiptPosition = { ...detailsStart, y: detailsStart.y + 20 };
+      const billingLine = (value: string | null | undefined, size = 10, bold = false) => {
+        if (!value) return;
+        billing = layout.paragraph(value, left, 260, billing, {
+          size,
+          font: bold ? "SemiBold" : "Regular",
+          colour: bold ? receiptColours.ink : muted,
+        });
+        billing.y += 3;
+      };
+      billingLine(
+        booking.billingName || (lead ? `${lead.firstName} ${lead.lastName}` : ""),
+        12.5,
+        true,
+      );
+      billingLine(booking.billingCompany || lead?.company, 10.5);
+      billingLine(booking.billingEmail || lead?.workEmail);
+      if (booking.billingAddressLine1) {
+        billingLine(booking.billingAddressLine1);
+        billingLine(booking.billingAddressLine2);
+        billingLine([booking.billingTown, booking.billingRegion].filter(Boolean).join(", "));
+        billingLine(booking.billingPostcode);
+        billingLine(booking.billingCountry);
+      } else {
+        billingLine(booking.billingAddress);
+      }
+      if (booking.billingPhone) billingLine(`Tel: ${booking.billingPhone}`);
+      if (booking.billingVatNumber) billingLine(`VAT No: ${booking.billingVatNumber}`);
 
-    // Reconstruct gross amount shown in the top line item.
-    const baseAmount = subtotalAfterDiscounts + groupDiscount + promoDiscount;
+      let metadata: ReceiptPosition = { ...detailsStart, y: detailsStart.y + 1 };
+      const metadataRows = [
+        ["Date", dateStr],
+        ["Booking Reference", booking.orderReference || `#${booking.id}`],
+        ...(booking.cardBrand && booking.cardLast4
+          ? [["Payment Card", `${booking.cardBrand} ending ${booking.cardLast4}`]]
+          : []),
+        ...(booking.poNumber ? [["PO Number", booking.poNumber]] : []),
+      ];
+      for (const [key, value] of metadataRows) {
+        metadata = layout.ensure(metadata, 27);
+        layout.text(key!, 333, metadata.y + 1, { size: 9.1, colour: muted });
+        const end = layout.paragraph(value!, 442, right - 442, metadata, {
+          size: 10.1,
+          font: "SemiBold",
+          align: "right",
+        });
+        metadata = {
+          page: end.page,
+          y: Math.max(end.y + 12, end.page === metadata.page ? metadata.y + 27 : 0),
+        };
+      }
 
-    // For team pass (bundle product): billing is 1 bundle, qty shown = 1.
-    const passInfo = PASS_PRICES[booking.passType];
-    const isBundlePass = passInfo ? passInfo.seats > 1 : false;
-    const displayQty = isBundlePass ? 1 : booking.quantity;
-    const displayUnitPrice = baseAmount / Math.max(displayQty, 1);
+      const end =
+        billing.page > metadata.page || (billing.page === metadata.page && billing.y > metadata.y)
+          ? billing
+          : metadata;
+      let position: ReceiptPosition = {
+        page: end.page,
+        y: Math.max(end.page === 0 ? 315 : 0, end.y + 14),
+      };
+      const rows = [
+        {
+          description: passLabels[booking.passType] || booking.passType,
+          quantity: String(displayQty),
+          unit: formatCurrency(displayUnitPrice),
+          amount: formatCurrency(baseAmount),
+        },
+        ...(groupDiscount > 0
+          ? [
+              {
+                description: "Group Discount",
+                quantity: "",
+                unit: "",
+                amount: `-${formatCurrency(groupDiscount)}`,
+              },
+            ]
+          : []),
+        ...(promoDiscount > 0
+          ? [
+              {
+                description: `Promo Code (${booking.promoCode})`,
+                quantity: "",
+                unit: "",
+                amount: `-${formatCurrency(promoDiscount)}`,
+              },
+            ]
+          : []),
+      ];
+      const rowHeights = rows.map((row) =>
+        Math.max(30, layout.lines(row.description, 240).length * 14.175 + 14),
+      );
+      // Keep prices, totals and legal details together where they fit on a fresh page.
+      const summaryHeight = 43 + rowHeights.reduce((sum, height) => sum + height, 0) - 1 + 330;
+      if (summaryHeight <= layout.bottom - layout.continuationTop)
+        position = layout.ensure(position, summaryHeight);
+      else position = layout.ensure(position, 90);
 
-    doc.fontSize(22).fillColor("#004eb9").text("SWP Summit", { align: "left" });
+      const tableHeader = () => {
+        doc.rect(left, position.y, right - left, 28).fill(wash);
+        for (const [x, value, align] of [
+          [54, "DESCRIPTION", "left"],
+          [321, "QTY", "right"],
+          [431, "UNIT PRICE", "right"],
+          [541, "AMOUNT", "right"],
+        ] as const) {
+          layout.text(value, x, position.y + 10, {
+            size: 8.3,
+            font: "SemiBold",
+            colour: blue,
+            spacing: 0.45,
+            align,
+          });
+        }
+        position.y += 43;
+      };
+      layout.selectPage(position.page);
+      tableHeader();
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index]!;
+        if (position.y + Math.min(rowHeights[index]!, 90) > layout.bottom) {
+          position = layout.nextPage(position);
+          tableHeader();
+        }
+        layout.number(row.quantity, 321, position.y, 25);
+        layout.number(row.unit, 431, position.y, 90);
+        layout.number(row.amount, 541, position.y, 90, { font: "SemiBold" });
+        const descriptionEnd = layout.paragraph(row.description, 54, 240, position);
+        position = {
+          page: descriptionEnd.page,
+          y: Math.max(
+            descriptionEnd.y + 14,
+            descriptionEnd.page === position.page ? position.y + 30 : 0,
+          ),
+        };
+        layout.rule(position.y - (index === rows.length - 1 ? 1 : 9));
+      }
+      // Totals are a single block, with no currency wrapping or automatic page breaks.
+      position.y -= 1;
+      position = layout.ensure(position, 165);
+      layout.text("Subtotal (excl. VAT)", 333, position.y + 23, { size: 10.1, colour: muted });
+      layout.number(formatCurrency(subtotalAfterDiscounts), 541, position.y + 23, 90, {
+        size: 10.7,
+        font: "SemiBold",
+      });
+      layout.text("VAT (20%)", 333, position.y + 47, { size: 10.1, colour: muted });
+      layout.number(formatCurrency(vat), 541, position.y + 47, 90, {
+        size: 10.7,
+        font: "SemiBold",
+      });
+      doc.rect(left, position.y + 79, right - left, 55).fill(wash);
+      doc.rect(left, position.y + 79, 3, 55).fill(blue);
+      layout.text("Total (incl. VAT)", 64, position.y + 100, { size: 13, font: "SemiBold" });
+      layout.number(formatCurrency(total), right - 18, position.y + 93, 220, {
+        size: 25,
+        font: "ExtraBold",
+        colour: blue,
+      });
+      layout.text(
+        "This document serves as a VAT receipt. VAT Reg No: 336124621",
+        left,
+        position.y + 153,
+        { size: 8.9, colour: muted },
+      );
 
-    doc
-      .fontSize(11)
-      .fillColor("#666")
-      .text("Wednesday, 3 March 2027 - 1 Basinghall Avenue, London EC2V 5DD", { align: "left" });
-
-    doc.moveDown(0.5);
-
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#004eb9").lineWidth(2).stroke();
-
-    doc.moveDown(1);
-
-    doc.fontSize(18).fillColor("#000").text("VAT Receipt", { align: "left" });
-
-    doc.moveDown(0.5);
-    doc.fontSize(11).fillColor("#333");
-    doc.text(`Receipt Number: ${booking.orderReference || `INV-${booking.id}`}`);
-    doc.text(`Date: ${dateStr}`);
-    doc.text(`Booking Reference: ${booking.orderReference || `#${booking.id}`}`);
-    if (booking.cardBrand && booking.cardLast4) {
-      doc.text(`Payment Card: ${booking.cardBrand} ending ${booking.cardLast4}`);
+      position.y += 179;
+      position = layout.ensure(position, 151);
+      layout.rule(position.y);
+      layout.label("ISSUED BY", left, position.y + 19);
+      layout.label("BANK DETAILS", 321, position.y + 19);
+      const issuer = [
+        [39, "Dynamic Business Leaders Limited", 10, true],
+        [57, "Company No. 12252258  |  VAT No. 336124621", 8.6, false],
+        [77, "Registered Address:", 8.5, true],
+        [91, "45 Lemsford Village, Welwyn Garden City,", 8.7, false],
+        [105, "Hertfordshire AL8 7TR", 8.7, false],
+        [124, "Contact: douglas@dynamicbusinessleaders.co.uk", 8.5, false],
+        [139, "Tel: 07763618052", 8.7, false],
+      ] as const;
+      const bank = [
+        [39, "Bank: Tide (ClearBank)", 10, true],
+        [57, "Sort Code: 04-06-05  |  Account: 16963209", 8.6, false],
+        [78, "IBAN (GBP): GB65CLRB04060516963209", 8.6, false],
+        [93, "SWIFT: CLRBGB22", 8.7, false],
+        [115, "IBAN (EUR): GB45TCCL00997990500906", 8.6, false],
+        [130, "BIC: TCCLGB31", 8.7, false],
+      ] as const;
+      for (const [x, lines] of [
+        [left, issuer],
+        [321, bank],
+      ] as const) {
+        for (const [offset, value, size, bold] of lines) {
+          layout.text(value, x, position.y + offset, {
+            size,
+            font: bold ? "SemiBold" : "Regular",
+            colour: bold ? receiptColours.ink : muted,
+          });
+        }
+      }
+      doc.end();
+    } catch (error) {
+      reject(error);
     }
-    if (booking.poNumber) {
-      doc.text(`PO Number: ${booking.poNumber}`);
-    }
-
-    doc.moveDown(1);
-
-    doc.fontSize(12).fillColor("#000").text("Bill To:", { underline: true });
-    doc.fontSize(11).fillColor("#333");
-    if (booking.billingName || lead) {
-      doc.text(booking.billingName || `${lead?.firstName} ${lead?.lastName}` || "");
-    }
-    if (booking.billingCompany || lead?.company) {
-      doc.text(booking.billingCompany || lead?.company || "");
-    }
-    if (booking.billingEmail || lead?.workEmail) {
-      doc.text(booking.billingEmail || lead?.workEmail || "");
-    }
-    if (booking.billingAddressLine1) {
-      doc.text(booking.billingAddressLine1);
-      if (booking.billingAddressLine2) doc.text(booking.billingAddressLine2);
-      const cityLine = [booking.billingTown, booking.billingRegion].filter(Boolean).join(", ");
-      if (cityLine) doc.text(cityLine);
-      if (booking.billingPostcode) doc.text(booking.billingPostcode);
-      if (booking.billingCountry) doc.text(booking.billingCountry);
-    } else if (booking.billingAddress) {
-      doc.text(booking.billingAddress);
-    }
-    if (booking.billingPhone) {
-      doc.text(`Tel: ${booking.billingPhone}`);
-    }
-    if (booking.billingVatNumber) {
-      doc.text(`VAT No: ${booking.billingVatNumber}`);
-    }
-
-    doc.moveDown(1.5);
-
-    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor("#ddd").lineWidth(1).stroke();
-
-    const tableTop = doc.y + 10;
-    doc
-      .fontSize(11)
-      .fillColor("#666")
-      .text("Description", 50, tableTop)
-      .text("Qty", 370, tableTop, { width: 50, align: "right" })
-      .text("Unit Price", 420, tableTop, { width: 70, align: "right" })
-      .text("Amount", 490, tableTop, { width: 55, align: "right" });
-
-    doc
-      .moveTo(50, tableTop + 18)
-      .lineTo(545, tableTop + 18)
-      .strokeColor("#ddd")
-      .lineWidth(1)
-      .stroke();
-
-    let rowY = tableTop + 26;
-
-    doc
-      .fontSize(11)
-      .fillColor("#000")
-      .text(passLabels[booking.passType] || booking.passType, 50, rowY, { width: 310 })
-      .text(String(displayQty), 370, rowY, { width: 50, align: "right" })
-      .text(formatCurrency(displayUnitPrice), 420, rowY, { width: 70, align: "right" })
-      .text(formatCurrency(baseAmount), 490, rowY, { width: 55, align: "right" });
-
-    rowY += 24;
-
-    if (groupDiscount > 0) {
-      doc
-        .fontSize(11)
-        .fillColor("#333")
-        .text("Group Discount", 50, rowY)
-        .text("", 370, rowY, { width: 50, align: "right" })
-        .text("", 420, rowY, { width: 70, align: "right" })
-        .text(`-${formatCurrency(groupDiscount)}`, 490, rowY, { width: 55, align: "right" });
-      rowY += 24;
-    }
-
-    if (promoDiscount > 0) {
-      doc
-        .fontSize(11)
-        .fillColor("#333")
-        .text(`Promo Code (${booking.promoCode})`, 50, rowY)
-        .text(`-${formatCurrency(promoDiscount)}`, 490, rowY, { width: 55, align: "right" });
-      rowY += 24;
-    }
-
-    doc.moveTo(50, rowY).lineTo(545, rowY).strokeColor("#ddd").lineWidth(1).stroke();
-
-    rowY += 10;
-
-    // Subtotal (excl. VAT) = subtotalAfterDiscounts - discounts already subtracted above.
-    doc
-      .fontSize(11)
-      .fillColor("#333")
-      .text("Subtotal (excl. VAT)", 50, rowY)
-      .text(formatCurrency(subtotalAfterDiscounts), 490, rowY, { width: 55, align: "right" });
-
-    rowY += 20;
-
-    doc
-      .text("VAT (20%)", 50, rowY)
-      .text(formatCurrency(vat), 490, rowY, { width: 55, align: "right" });
-
-    rowY += 20;
-
-    doc.moveTo(390, rowY).lineTo(545, rowY).strokeColor("#000").lineWidth(1.5).stroke();
-
-    rowY += 8;
-
-    doc
-      .fontSize(14)
-      .fillColor("#000")
-      .text("Total (incl. VAT)", 50, rowY)
-      .text(formatCurrency(total), 490, rowY, { width: 55, align: "right" });
-
-    rowY += 40;
-
-    doc.fontSize(10).fillColor("#555");
-    doc.text("This document serves as a VAT receipt. VAT Reg No: 336124621", 50, rowY);
-
-    rowY += 30;
-    doc.moveTo(50, rowY).lineTo(545, rowY).strokeColor("#eee").lineWidth(1).stroke();
-
-    rowY += 20;
-    doc.fontSize(9).fillColor("#555");
-
-    doc.text("Issued by: Dynamic Business Leaders Limited", 50, rowY, { align: "center" });
-    rowY += 13;
-    doc.text("Company No. 12252258   |   VAT No. 336124621", 50, rowY, { align: "center" });
-    rowY += 13;
-    doc.text(
-      "Registered Address: 45 Lemsford Village, Welwyn Garden City, Hertfordshire AL8 7TR",
-      50,
-      rowY,
-      { align: "center" },
-    );
-    rowY += 13;
-    doc.text("Contact: douglas@dynamicbusinessleaders.co.uk   |   Tel: 07763618052", 50, rowY, {
-      align: "center",
-    });
-
-    rowY += 20;
-    doc.text("Bank: Tide (ClearBank)", 50, rowY, { align: "center" });
-    rowY += 13;
-    doc.text("Sort Code: 04-06-05   |   Account: 16963209", 50, rowY, { align: "center" });
-    rowY += 13;
-    doc.text("IBAN (GBP): GB65CLRB04060516963209   |   SWIFT: CLRBGB22", 50, rowY, {
-      align: "center",
-    });
-    rowY += 13;
-    doc.text("IBAN (EUR): GB45TCCL00997990500906   |   BIC: TCCLGB31", 50, rowY, {
-      align: "center",
-    });
-
-    rowY += 20;
-    doc.fillColor("#888");
-    doc.text("SWP Summit - 1 Basinghall Avenue, London EC2V 5DD - swpsummit.com", 50, rowY, {
-      align: "center",
-    });
-
-    doc.end();
   });
 }
