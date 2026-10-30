@@ -1,5 +1,7 @@
 # Checkout reliability — 30 October 2026
 
+Historical checkpoint. The designs were subsequently approved and implemented; see [the checkout release verification](../2026-10-30-checkout-release/VERIFICATION.md) for current progress.
+
 Status: implemented and verified in an isolated local worktree. Not published. The Passes and Payment redesigns are image mock-ups awaiting Douglas's approval; their layouts have not been applied to the app.
 
 ## Source and boundaries

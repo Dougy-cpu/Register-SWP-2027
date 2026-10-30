@@ -21,14 +21,14 @@ describe("checkout visual guardrails", () => {
     expect(source).not.toMatch(/#E74F3E|rgba\(231,\s*79,\s*62/i);
   });
 
-  it("uses the shared premium card and primary CTA treatments on Steps 1-3", () => {
+  it("keeps the shared primary CTA treatment across checkout", () => {
     for (const file of [
       "pages/checkout/Step1Lead.tsx",
       "pages/checkout/Step2Passes.tsx",
       "pages/checkout/Step3Attendees.tsx",
+      "pages/checkout/Step4Payment.tsx",
     ]) {
       const source = read(file);
-      expect(source, file).toContain("swp-card");
       expect(source, file).toContain("swp-primary-btn");
     }
   });

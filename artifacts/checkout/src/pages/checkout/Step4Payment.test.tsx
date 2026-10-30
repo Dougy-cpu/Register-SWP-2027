@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -75,7 +75,7 @@ const labels: Record<keyof typeof invoiceDetails, RegExp> = {
   billingName: /^Billing contact name/,
   billingCompany: /^Company name/,
   billingEmail: /^Invoice email address/,
-  billingPhone: /^Purchaser contact number/,
+  billingPhone: /^Contact number/,
   billingAddressLine1: /^Address line 1/,
   billingAddressLine2: /^Address line 2/,
   billingTown: /^Town \/ City/,
@@ -216,6 +216,79 @@ afterEach(async () => {
 });
 
 describe("invoice payment drafts", () => {
+  it("validates the current invoice form and focuses its first missing field from the summary action", async () => {
+    renderPayment();
+    await advance();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm booking & email invoice" }));
+    await advance();
+
+    expect(screen.getByText("Address line 1 is required")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: /^Address line 1/ }));
+    expect(api.updateBooking).not.toHaveBeenCalled();
+    expectNoPaymentOrDelivery();
+  });
+
+  it("shows the edited invoice recipient immediately and keeps the lead details reusable", async () => {
+    renderPayment();
+    await advance();
+    const email = screen.getByRole("textbox", { name: /^Invoice email address/ });
+    fireEvent.change(email, { target: { value: "finance@example.test" } });
+
+    expect(
+      screen.getByText(/This confirms your place and emails the invoice to/).textContent,
+    ).toContain("finance@example.test");
+    expect(
+      screen.getByText(/This confirms your place and emails the invoice to/).textContent,
+    ).not.toContain("taylor@example.test");
+    fireEvent.click(screen.getByTestId("relink-billingEmail"));
+    expect((email as HTMLInputElement).value).toBe("taylor@example.test");
+    expect(screen.getByTestId("linked-billingEmail")).toBeTruthy();
+    expect(
+      screen.getByText(/This confirms your place and emails the invoice to/).textContent,
+    ).toContain("taylor@example.test");
+    expectNoPaymentOrDelivery();
+  });
+
+  it("keeps admin invoice guidance collapsed and shows the complete payment deadline", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          invoiceHelpContent: "Supplier onboarding\nContact the event team for your supplier form.",
+        }),
+        { status: 200 },
+      ),
+    );
+    renderPayment();
+    await advance();
+
+    const help = screen.getByRole("button", { name: "How invoice payment works" });
+    expect(help.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Supplier onboarding")).toBeNull();
+    expect(
+      screen.getByText("Payment due within 14 days, or before the event if sooner."),
+    ).toBeTruthy();
+    fireEvent.click(help);
+    expect(help.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Supplier onboarding")).toBeTruthy();
+    expect(screen.getByText("Contact the event team for your supplier form.")).toBeTruthy();
+    expectNoPaymentOrDelivery();
+  });
+
+  it("retains a saved non-UK billing country without converting it to a default", async () => {
+    renderPayment(booking({ ...invoiceDetails, billingCountry: "New Zealand" }));
+    await advance();
+
+    expect((screen.getByRole("textbox", { name: /^Country/ }) as HTMLInputElement).value).toBe(
+      "New Zealand",
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: /^PO number/ }), {
+      target: { value: "NZ-PO-42" },
+    });
+    await advance(600);
+    expect(serverBooking.billingCountry).toBe("New Zealand");
+    expectNoPaymentOrDelivery();
+  });
+
   it("restores the saved invoice choice and exposes named payment radios", async () => {
     renderPayment(booking({ paymentMethod: "invoice", ...invoiceDetails }));
     await advance();
@@ -224,9 +297,9 @@ describe("invoice payment drafts", () => {
     expect(screen.getByRole("radio", { name: "Pay by invoice" }).getAttribute("aria-checked")).toBe(
       "true",
     );
-    expect(
-      screen.getByRole("radio", { name: "Pay by card now" }).getAttribute("aria-checked"),
-    ).toBe("false");
+    expect(screen.getByRole("radio", { name: "Pay by card" }).getAttribute("aria-checked")).toBe(
+      "false",
+    );
     expect(
       (screen.getByRole("textbox", { name: /^Address line 1/ }) as HTMLInputElement).value,
     ).toBe(invoiceDetails.billingAddressLine1);
@@ -362,7 +435,7 @@ describe("invoice payment drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to attendees" }));
     await advance();
 
-    expect(screen.getByRole("heading", { name: "Final checkout" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Complete your booking" })).toBeTruthy();
     expect(screen.getByText("Connection interrupted")).toBeTruthy();
     expect(api.updateBooking.mock.calls.some(([request]) => request.data.currentStep === 3)).toBe(
       false,
@@ -378,6 +451,35 @@ describe("invoice payment drafts", () => {
 });
 
 describe("payment quote safeguards", () => {
+  it("shows the supplied group and promo savings, discounted subtotal and VAT in one summary", async () => {
+    api.calculatePricing.mockResolvedValue({
+      ...quote,
+      quantity: 3,
+      baseSubtotal: 567,
+      groupDiscountPercent: 15,
+      groupDiscountAmount: 85.05,
+      promoDiscountAmount: 96.39,
+      subtotalAfterDiscounts: 385.56,
+      vatAmount: 77.11,
+      total: 462.67,
+    });
+    renderPayment(booking({ quantity: 3, promoCode: "EXAMPLE20" }));
+    await advance();
+
+    const summary = within(screen.getByRole("complementary", { name: "Your booking" }));
+    expect(summary.getByText("3 × Workforce Pass").parentElement?.textContent).toContain("£567.00");
+    expect(summary.getByText("Group saving (15%)").parentElement?.textContent).toContain("−£85.05");
+    expect(summary.getByText("Promo code (EXAMPLE20)").parentElement?.textContent).toContain(
+      "−£96.39",
+    );
+    expect(summary.getByText("Subtotal").parentElement?.textContent).toContain("£385.56");
+    expect(summary.getByText("VAT (20%)").parentElement?.textContent).toContain("£77.11");
+    expect(summary.getByText("Total including VAT").parentElement?.textContent).toContain(
+      "£462.67",
+    );
+    expectNoPaymentOrDelivery();
+  });
+
   it("offers a retry for a stalled quote and ignores its late response after recovery", async () => {
     let resolveLate!: (value: PricingBreakdown) => void;
     api.calculatePricing.mockImplementationOnce(
@@ -389,7 +491,7 @@ describe("payment quote safeguards", () => {
     renderPayment(booking({ paymentMethod: "card" }));
     await advance();
     await advance(9999);
-    const label = "Proceed to secure card payment";
+    const label = "Continue to secure payment";
     expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Retry total" })).toBeNull();
     await advance(1);
@@ -403,7 +505,7 @@ describe("payment quote safeguards", () => {
     await act(async () => resolveLate({ ...quote, total: 0 }));
     await advance();
 
-    expect(screen.getByRole("heading", { name: "Final checkout" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Complete your booking" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Confirm Registration" })).toBeNull();
     expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(false);
     expectNoPaymentOrDelivery();
@@ -416,9 +518,7 @@ describe("payment quote safeguards", () => {
       renderPayment(booking({ paymentMethod, ...invoiceDetails }));
       await advance();
       const label =
-        paymentMethod === "card"
-          ? "Proceed to secure card payment"
-          : "Confirm registration and email invoice";
+        paymentMethod === "card" ? "Continue to secure payment" : "Confirm booking & email invoice";
       const submit = screen.getByRole("button", { name: label }) as HTMLButtonElement;
       expect(submit.disabled).toBe(true);
       fireEvent.click(submit);
@@ -437,7 +537,7 @@ describe("payment quote safeguards", () => {
   it("blocks payment while a changed booking is waiting for its own quote", async () => {
     const { client } = renderPayment(booking({ paymentMethod: "card" }));
     await advance();
-    const label = "Proceed to secure card payment";
+    const label = "Continue to secure payment";
     expect((screen.getByRole("button", { name: label }) as HTMLButtonElement).disabled).toBe(false);
     let resolveQuote: ((value: PricingBreakdown) => void) | undefined;
     api.calculatePricing.mockImplementationOnce(
@@ -467,15 +567,15 @@ describe("payment quote safeguards", () => {
     api.createInvoice.mockImplementation(() => new Promise(() => {}));
     renderPayment(booking({ paymentMethod: "invoice", ...invoiceDetails }));
     await advance();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm registration and email invoice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm booking & email invoice" }));
     await advance();
 
     expect(api.createInvoice).toHaveBeenCalledTimes(1);
     const address = screen.getByRole("textbox", { name: /^Address line 1/ });
     expect(address.closest("fieldset")?.disabled).toBe(true);
-    expect(
-      (screen.getByRole("radio", { name: "Pay by card now" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((screen.getByRole("radio", { name: "Pay by card" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(api.createCheckout).not.toHaveBeenCalled();
   });
 });

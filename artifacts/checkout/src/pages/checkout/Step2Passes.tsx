@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   useUpdateBooking,
   useListDiscountTiers,
@@ -10,21 +9,9 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import SaveAndReturnButton from "@/components/checkout/SaveAndReturnButton";
-import {
-  Check,
-  Minus,
-  Plus,
-  Users,
-  Flame,
-  AlertCircle,
-  TrendingUp,
-  Star,
-  Tag,
-  X,
-} from "lucide-react";
+import { Check, Minus, Plus, ArrowLeft, ArrowRight, Tag, X } from "lucide-react";
 import type { BookingWithAttendees } from "@/types/booking";
 import { CompShortfallPrompt } from "./CompShortfallPrompt";
 import { calculateCheckoutPricing } from "@/lib/checkout-pricing";
@@ -49,8 +36,6 @@ const DEFAULT_BUSINESS_EXTRA_BENEFITS = [
   "Speaking, branding, sponsor visibility and VIP invitations are handled separately.",
 ];
 
-const WORKFORCE_PASS_ORIGINAL_PRICE = 429;
-const BUSINESS_PASS_ORIGINAL_PRICE = 999;
 const DEFAULT_PRICING_PERIOD = "Super Early Bird";
 
 interface PassConfig {
@@ -74,241 +59,11 @@ const FALLBACK_HEAR_OPTIONS = [
   "Other",
 ];
 
-function getActiveTier(tiers: DiscountTier[], passType: string, qty: number): DiscountTier | null {
-  const relevant = tiers
-    .filter((t) => t.passType === passType)
-    .sort((a, b) => a.minQuantity - b.minQuantity);
-  let active: DiscountTier | null = null;
-  for (const tier of relevant) {
-    if (qty >= tier.minQuantity) active = tier;
-  }
-  return active;
-}
-
 function getNextTier(tiers: DiscountTier[], passType: string, qty: number): DiscountTier | null {
   const relevant = tiers
     .filter((t) => t.passType === passType)
     .sort((a, b) => a.minQuantity - b.minQuantity);
   return relevant.find((t) => t.minQuantity > qty) ?? null;
-}
-
-interface TierRow {
-  key: string;
-  label: string;
-  note: string;
-  active: boolean;
-  isSpecial?: boolean;
-}
-
-function buildWorkforceTierRows(
-  tiers: DiscountTier[],
-  qty: number,
-  pricePerPass: number,
-): TierRow[] {
-  const relevant = tiers
-    .filter((t) => t.passType === "single")
-    .sort((a, b) => a.minQuantity - b.minQuantity);
-
-  const rows: TierRow[] = [];
-
-  if (relevant.length === 0) {
-    rows.push({
-      key: "all",
-      label: "All quantities",
-      note: `£${pricePerPass}/pass`,
-      active: true,
-    });
-    return rows;
-  }
-
-  const firstTierMin = relevant[0].minQuantity;
-  const noDiscountEnd = firstTierMin - 1;
-
-  if (noDiscountEnd >= 3) {
-    rows.push({
-      key: "1-2",
-      label: "1–2 passes",
-      note: `£${pricePerPass}/pass`,
-      active: qty <= 2,
-    });
-    rows.push({
-      key: "3",
-      label: "3 passes",
-      note: "Most Popular",
-      active: qty === 3,
-      isSpecial: true,
-    });
-    if (noDiscountEnd > 3) {
-      rows.push({
-        key: `4-${noDiscountEnd}`,
-        label: `4–${noDiscountEnd} passes`,
-        note: `£${pricePerPass}/pass`,
-        active: qty >= 4 && qty <= noDiscountEnd,
-      });
-    }
-  } else if (noDiscountEnd >= 1) {
-    rows.push({
-      key: `1-${noDiscountEnd}`,
-      label: noDiscountEnd === 1 ? "1 pass" : `1–${noDiscountEnd} passes`,
-      note: `£${pricePerPass}/pass`,
-      active: qty <= noDiscountEnd,
-    });
-  }
-
-  for (let i = 0; i < relevant.length; i++) {
-    const tier = relevant[i];
-    const nextTier = relevant[i + 1];
-    const maxQty = nextTier ? nextTier.minQuantity - 1 : null;
-    const savingPerPass = ((pricePerPass * tier.discountPercent) / 100).toFixed(2);
-    const rangeLabel = maxQty
-      ? `${tier.minQuantity}–${maxQty} passes`
-      : `${tier.minQuantity}+ passes`;
-    rows.push({
-      key: rangeLabel,
-      label: rangeLabel,
-      note: `${tier.discountPercent}% off — save £${savingPerPass}/pass`,
-      active: qty >= tier.minQuantity && (maxQty === null || qty <= maxQty),
-    });
-  }
-
-  return rows;
-}
-
-function buildBusinessTierRows(
-  tiers: DiscountTier[],
-  qty: number,
-  pricePerPass: number,
-): TierRow[] {
-  const relevant = tiers
-    .filter((t) => t.passType === "business")
-    .sort((a, b) => a.minQuantity - b.minQuantity);
-
-  const rows: TierRow[] = [];
-
-  if (relevant.length === 0) {
-    rows.push({ key: "all", label: "All quantities", note: `£${pricePerPass}/pass`, active: true });
-    return rows;
-  }
-
-  const firstTierMin = relevant[0].minQuantity;
-  const noDiscountEnd = firstTierMin - 1;
-
-  if (noDiscountEnd >= 1) {
-    rows.push({
-      key: `1-${noDiscountEnd}`,
-      label: noDiscountEnd === 1 ? "1 pass" : `1–${noDiscountEnd} passes`,
-      note: `£${pricePerPass}/pass`,
-      active: qty <= noDiscountEnd,
-    });
-  }
-
-  for (let i = 0; i < relevant.length; i++) {
-    const tier = relevant[i];
-    const nextTier = relevant[i + 1];
-    const maxQty = nextTier ? nextTier.minQuantity - 1 : null;
-    const savingPerPass = ((pricePerPass * tier.discountPercent) / 100).toFixed(2);
-    const rangeLabel = maxQty
-      ? `${tier.minQuantity}–${maxQty} pass${maxQty > 1 ? "es" : ""}`
-      : `${tier.minQuantity}+ passes`;
-    rows.push({
-      key: rangeLabel,
-      label: rangeLabel,
-      note: `${tier.discountPercent}% off — save £${savingPerPass}/pass`,
-      active: qty >= tier.minQuantity && (maxQty === null || qty <= maxQty),
-    });
-  }
-
-  return rows;
-}
-
-function InventoryBadge({
-  remaining,
-  className = "",
-}: {
-  remaining: number | null;
-  className?: string;
-}) {
-  if (remaining === null) return null;
-
-  if (remaining <= 5) {
-    return (
-      <div
-        className={`flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-md ${className}`}
-      >
-        <Flame className="w-3.5 h-3.5" />
-        Only {remaining} {remaining === 1 ? "spot" : "spots"} left!
-      </div>
-    );
-  }
-  if (remaining <= 20) {
-    return (
-      <div
-        className={`flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md ${className}`}
-      >
-        <AlertCircle className="w-3.5 h-3.5" />
-        {remaining} spots remaining — selling fast
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-md ${className}`}
-    >
-      <AlertCircle className="w-3.5 h-3.5" />
-      {remaining} spots remaining
-    </div>
-  );
-}
-
-interface UpsellNudgeProps {
-  tiers: DiscountTier[];
-  passType: string;
-  quantity: number;
-  unitLabel: string;
-  pricePerPass: number | null;
-}
-
-function UpsellNudge({ tiers, passType, quantity, unitLabel, pricePerPass }: UpsellNudgeProps) {
-  const nextTier = getNextTier(tiers, passType, quantity);
-  if (!nextTier || pricePerPass === null) return null;
-
-  const needed = nextTier.minQuantity - quantity;
-  if (needed > 3) return null;
-
-  const currentTier = getActiveTier(tiers, passType, quantity);
-  const currentDiscountPct = currentTier?.discountPercent ?? 0;
-  const basePrice = pricePerPass;
-  const upliftValue =
-    (nextTier.minQuantity * basePrice * nextTier.discountPercent) / 100 -
-    (quantity * basePrice * currentDiscountPct) / 100;
-  const uplift = upliftValue.toFixed(2);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
-      className="flex items-start gap-2.5 rounded-md border border-primary/15 bg-white px-3 py-2.5 text-xs leading-relaxed text-foreground shadow-[0_8px_20px_rgba(0,78,185,0.04)]"
-    >
-      <TrendingUp className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
-      <span>
-        <span className="font-bold">
-          Add {needed} more {unitLabel}
-          {needed > 1 ? "es" : ""}
-        </span>{" "}
-        to reach the next group discount:{" "}
-        <span className="font-bold text-primary">{nextTier.discountPercent}% off</span>
-        {upliftValue > 0 && (
-          <span>
-            {" "}
-            — save an extra <span className="font-bold text-secondary">£{uplift}</span> on your
-            order
-          </span>
-        )}
-        !
-      </span>
-    </motion.div>
-  );
 }
 
 export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
@@ -329,6 +84,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     single: null,
     business: null,
   });
+  const [inventoryKnown, setInventoryKnown] = useState(false);
   const [passConfig, setPassConfig] = useState<Record<string, PassConfig | null>>({
     single: null,
     business: null,
@@ -342,6 +98,7 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     booking.promoCode ?? null,
   );
   const [appliedViaLink, setAppliedViaLink] = useState<boolean>(false);
+  const [promoExpanded, setPromoExpanded] = useState(!!booking.promoCode || !!linkPromo);
   const [promoError, setPromoError] = useState<string | null>(null);
   const promoRequestId = useRef(0);
   const [promoCandidate, setPromoCandidate] = useState<{
@@ -382,8 +139,18 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
 
   useEffect(() => {
     fetch("/api/passes/inventory")
-      .then((res) => (res.ok ? res.json() : {}))
-      .then((data) => setInventory(data))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (
+          data &&
+          ["single", "business"].every(
+            (type) => data[type] === null || (typeof data[type] === "number" && data[type] >= 0),
+          )
+        ) {
+          setInventory(data);
+          setInventoryKnown(true);
+        }
+      })
       .catch(() => {});
     fetch("/api/passes/config")
       .then((res) => (res.ok ? res.json() : {}))
@@ -573,710 +340,480 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
     await savePassSelection(2);
   };
 
-  const activeTier = getActiveTier(allTiers, selectedPass, quantity);
-  const discountLabel = activeTier ? `${activeTier.discountPercent}% off` : null;
-  const isMostPopular = isHR && quantity === 3 && !activeTier;
-
-  const singleCfg = passConfig.single;
-  const businessCfg = passConfig.business;
-
-  const singleCurrentPrice =
-    (selectedPass === "single" ? currentPricing?.pricePerHead : null) ??
-    (singleCfg ? parseFloat(singleCfg.currentPrice) : null);
-  const singleOriginalPrice = singleCfg
-    ? parseFloat(singleCfg.originalPrice)
-    : WORKFORCE_PASS_ORIGINAL_PRICE;
-  const singlePeriodName = singleCfg?.pricingPeriodName ?? DEFAULT_PRICING_PERIOD;
-  const singleDiscountPct =
-    singleCurrentPrice !== null && singleOriginalPrice > singleCurrentPrice
-      ? Math.round(((singleOriginalPrice - singleCurrentPrice) / singleOriginalPrice) * 100)
+  const maxQuantity = selectedPass === "business" ? 10 : 20;
+  const remaining = inventory[selectedPass];
+  const nextTier = getNextTier(allTiers, selectedPass, quantity);
+  const nextQuantity = nextTier?.minQuantity ?? 0;
+  const canOfferGroup =
+    !!currentPricing &&
+    !pricingLoading &&
+    !pricingError &&
+    !promoValidating &&
+    !updateBooking.isPending &&
+    inventoryKnown &&
+    currentPricing.total > 0 &&
+    currentPricing.promoDiscountType !== "complimentary" &&
+    nextQuantity > quantity &&
+    nextQuantity <= maxQuantity &&
+    (remaining === null || nextQuantity <= remaining);
+  const offerKey = JSON.stringify([
+    selectedPass,
+    quantity,
+    appliedPromoCode,
+    nextQuantity,
+    currentPricing?.total,
+    currentPricing?.groupDiscountPercent,
+  ]);
+  const [groupQuote, setGroupQuote] = useState<{ key: string; data: PricingBreakdown } | null>(
+    null,
+  );
+  const groupOffer =
+    canOfferGroup &&
+    groupQuote?.key === offerKey &&
+    groupQuote.data.total > 0 &&
+    groupQuote.data.promoDiscountType !== "complimentary" &&
+    groupQuote.data.groupDiscountPercent > (currentPricing?.groupDiscountPercent ?? 0)
+      ? groupQuote.data
       : null;
-  const singleBenefits =
-    singleCfg && singleCfg.benefits.length > 0 ? singleCfg.benefits : DEFAULT_SINGLE_BENEFITS;
 
-  const businessCurrentPrice =
-    (selectedPass === "business" ? currentPricing?.pricePerHead : null) ??
-    (businessCfg ? parseFloat(businessCfg.currentPrice) : null);
-  const businessOriginalPrice = businessCfg
-    ? parseFloat(businessCfg.originalPrice)
-    : BUSINESS_PASS_ORIGINAL_PRICE;
-  const businessPeriodName = businessCfg?.pricingPeriodName ?? DEFAULT_PRICING_PERIOD;
-  const businessDiscountPct =
-    businessCurrentPrice !== null && businessOriginalPrice > businessCurrentPrice
-      ? Math.round(((businessOriginalPrice - businessCurrentPrice) / businessOriginalPrice) * 100)
-      : null;
-  const businessBenefits =
-    businessCfg && businessCfg.benefits.length > 0 ? businessCfg.benefits : DEFAULT_SINGLE_BENEFITS;
-  const businessExtraBenefits =
-    businessCfg && businessCfg.extraBenefits.length > 0
-      ? businessCfg.extraBenefits
-      : DEFAULT_BUSINESS_EXTRA_BENEFITS;
-  const audienceLabel = isVendor ? "Commercial attendee" : "Employer-side attendee";
-  const hrTierRows =
-    singleCurrentPrice === null
-      ? []
-      : buildWorkforceTierRows(allTiers, quantity, singleCurrentPrice);
-  const businessTierRows =
-    businessCurrentPrice === null
-      ? []
-      : buildBusinessTierRows(allTiers, quantity, businessCurrentPrice);
-  const passLabel = isVendor ? "Business Pass" : "Workforce Pass";
-  const unitLabel = "pass";
+  // An optional group offer uses the same authoritative pricing and promo rules
+  // as checkout. Failure here never blocks a valid current selection.
+  useEffect(() => {
+    if (!canOfferGroup) return;
+    const controller = new AbortController();
+    calculateCheckoutPricing(
+      { passType: selectedPass, quantity: nextQuantity, promoCode: appliedPromoCode ?? undefined },
+      { signal: controller.signal },
+    )
+      .then((data) => {
+        if (!controller.signal.aborted) setGroupQuote({ key: offerKey, data });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setGroupQuote(null);
+      });
+    return () => controller.abort();
+  }, [canOfferGroup, selectedPass, nextQuantity, appliedPromoCode, offerKey]);
+
+  const config = passConfig[selectedPass];
+  const currentPrice =
+    currentPricing?.pricePerHead ?? (config ? Number(config.currentPrice) : null);
+  const periodName = config?.pricingPeriodName ?? DEFAULT_PRICING_PERIOD;
+  const benefits = config?.benefits.length ? config.benefits : DEFAULT_SINGLE_BENEFITS;
+  const extraBenefits = config?.extraBenefits.length
+    ? config.extraBenefits
+    : DEFAULT_BUSINESS_EXTRA_BENEFITS;
+  const passLabel = selectedPass === "business" ? "Business Pass" : "Workforce Pass";
+  const relevantTiers = allTiers
+    .filter((tier) => tier.passType === selectedPass)
+    .sort((a, b) => a.minQuantity - b.minQuantity);
+  const blocked =
+    !currentPricing ||
+    pricingLoading ||
+    !!pricingError ||
+    promoValidating ||
+    !booking.id ||
+    compShortfall ||
+    updateBooking.isPending;
+  const money = (value: number) =>
+    `£${value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const handleBack = async () => {
+    setSaveError(null);
+    try {
+      await savePassSelection(1);
+      onAdvance?.(1);
+    } catch {
+      setSaveError("We could not save your pass selection. Please try again.");
+    }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="space-y-3">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Step 2 of 4</p>
-        <h1 className="text-4xl font-bold md:text-5xl">Select your pass</h1>
-        <p className="text-lg text-muted-foreground">
-          {isVendor
-            ? "Choose how many Business Passes you need. Group savings are applied automatically where available."
-            : "Choose how many Workforce Passes you need. Group savings are applied automatically where available."}
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.8fr)_minmax(340px,1fr)] lg:gap-6">
+      <section className="min-w-0 lg:border-r lg:border-primary/15 lg:pr-6">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
+          Choose your passes
+        </h1>
+        <p className="mt-3 text-base text-muted-foreground md:text-lg">
+          Group savings are applied automatically. You can add attendee names next.
         </p>
-        <p className="text-sm font-semibold text-primary">
-          Super Early Bird is currently the best value time to book. Prices are shown excluding VAT;
-          VAT and the final total are shown before payment or invoice confirmation.
-        </p>
-      </div>
 
-      <div className="swp-metric-strip grid grid-cols-1 divide-y divide-primary/10 overflow-hidden md:grid-cols-3 md:divide-x md:divide-y-0">
-        <div className="p-4 md:p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Booking type
-          </p>
-          <p className="text-lg font-bold mt-1">{audienceLabel}</p>
-        </div>
-        <div className="p-4 md:p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Selected pass
-          </p>
-          <p className="text-lg font-bold mt-1">
-            {quantity} {unitLabel}
-            {quantity !== 1 ? "es" : ""}
-          </p>
-          <p className="text-sm text-muted-foreground">{passLabel}</p>
-        </div>
-        <div className="p-4 md:p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Current total
-          </p>
-          <p className="text-lg font-bold mt-1">
-            {currentPricing
-              ? `£${currentPricing.total.toFixed(2)}`
-              : pricingError
-                ? "Unavailable"
-                : "Calculating"}
-          </p>
-          <p className="text-sm text-muted-foreground">Including VAT</p>
-        </div>
-      </div>
-
-      {/* HR: Single pass with quantity picker */}
-      {isHR && (
-        <Card className="swp-card relative overflow-hidden rounded-2xl border-primary/25 bg-white p-0">
-          {/* ── Header band ── */}
-          <div className="px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap border-b border-primary/20 bg-gradient-to-r from-primary to-secondary text-white">
-            <div>
-              <p className="swp-blue-header-muted mb-1 text-xs font-semibold uppercase tracking-widest">
-                SWP Summit · 3 Mar 2027 · Employer-side attendees
-              </p>
-              <div
-                role="heading"
-                aria-level={3}
-                className="font-display text-2xl font-bold leading-tight text-white"
-              >
-                Workforce Pass
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <InventoryBadge remaining={inventory.single} />
-              <div className="text-right">
-                <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="swp-blue-header-title text-3xl font-bold">
-                    {singleCurrentPrice === null
-                      ? "Loading price…"
-                      : `£${singleCurrentPrice.toFixed(0)}`}
-                  </span>
-                  {singleCurrentPrice !== null && singleOriginalPrice > singleCurrentPrice && (
-                    <span className="swp-blue-header-muted text-sm line-through">
-                      £{singleOriginalPrice.toFixed(0)}
-                    </span>
-                  )}
-                  {singleDiscountPct !== null && (
-                    <span className="badge-shine text-xs font-bold px-3 py-1 rounded-full inline-block">
-                      {singleDiscountPct}% off
-                    </span>
-                  )}
-                </div>
-                <p className="swp-blue-header-muted mt-0.5 text-xs">
-                  Per pass, ex VAT · {singlePeriodName}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-start">
-            {/* ── Left column: Benefits ── */}
-            <div className="flex-1 p-6 md:p-8">
-              {/* Benefits grid */}
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                What's included
-              </p>
-              <div className="mb-5 space-y-2 text-sm leading-relaxed">
-                <p className="font-semibold text-foreground">
-                  For employer-side leaders and practitioners across strategic workforce planning,
-                  people analytics, HR, talent, skills, organisation design and transformation.
-                </p>
-                <p className="text-muted-foreground">
-                  This pass is not valid for vendors, consultants, recruiters, agencies or
-                  commercial service providers.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
-                {singleBenefits.map((b) => (
-                  <div key={b} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                    <span>{b}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Column separator */}
-            <div className="hidden md:block w-px bg-border self-stretch" />
-
-            {/* ── Right column: Quantity picker (warm panel) ── */}
-            <div className="md:w-80 shrink-0 p-6 bg-primary/5 space-y-4 ml-[0px]">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                How many passes?
-              </p>
-
-              {/* 3 passes shortcut */}
-              <button
-                type="button"
-                onClick={() => setQuantity(3)}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg border border-primary/20 px-4 py-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 ${
-                  quantity === 3
-                    ? "bg-primary text-white shadow-md"
-                    : "text-white shadow-md hover:shadow-lg"
-                }`}
-                style={
-                  quantity !== 3
-                    ? {
-                        background: "linear-gradient(135deg, #004eb9 0%, #266cc7 100%)",
-                      }
-                    : undefined
-                }
-              >
-                <span className="flex items-center gap-2">
-                  <Users className="w-4 h-4 shrink-0" />3 passes — Most Popular
-                </span>
-                <Check
-                  className={`w-4 h-4 shrink-0 transition-opacity ${quantity === 3 ? "opacity-100" : "opacity-0"}`}
-                />
-              </button>
-
-              {/* Custom stepper */}
-              <div className="flex items-stretch border border-border bg-white overflow-hidden">
-                <button
-                  type="button"
-                  aria-label="Decrease pass quantity"
-                  className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  disabled={quantity <= 1}
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <div className="flex-1 text-center font-bold text-2xl py-2.5 text-foreground border-x border-border">
-                  {quantity}
-                </div>
-                <button
-                  type="button"
-                  aria-label="Increase pass quantity"
-                  className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  onClick={() => setQuantity((q) => Math.min(20, q + 1))}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Upsell nudge — fixed-height container prevents layout shift */}
-              <div className="min-h-[56px]">
-                <AnimatePresence>
-                  <UpsellNudge
-                    tiers={allTiers}
-                    passType="single"
-                    quantity={quantity}
-                    unitLabel="pass"
-                    pricePerPass={
-                      selectedPass === "single" ? singleCurrentPrice : businessCurrentPrice
-                    }
-                  />
-                </AnimatePresence>
-              </div>
-
-              {/* Tier table */}
-              <div className="space-y-1.5 text-xs">
-                {hrTierRows.map(({ key, label, note, active, isSpecial }) => (
-                  <div
-                    key={key}
-                    className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition-all ${
-                      active
-                        ? "border-primary/40 bg-white text-foreground shadow-[0_8px_22px_rgba(0,78,185,0.08)] ring-1 ring-primary/10"
-                        : "border-primary/10 bg-white/60 text-muted-foreground"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2 font-semibold">
-                      <span>{label}</span>
-                      {active && (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                          Current
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={`text-right ${active || isSpecial ? "font-bold text-primary" : ""}`}
-                    >
-                      {note}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Discount applied indicator */}
-              {discountLabel && (
-                <div className="flex items-center gap-2 border-l-4 border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary">
-                  <Check className="w-4 h-4 shrink-0" />
-                  {discountLabel} group discount applied
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
-      {/* Vendor: Business Pass with quantity + discounts */}
-      {isVendor && (
-        <Card className="swp-card relative overflow-hidden rounded-2xl border-primary/35 bg-white p-0">
-          {/* ── Header band ── */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-primary/20 bg-gradient-to-r from-primary to-secondary px-6 py-5 text-white md:px-8">
-            <div>
-              <p className="swp-blue-header-muted mb-1 text-xs font-semibold uppercase tracking-widest">
-                SWP Summit · 3 Mar 2027 · Commercial attendees
-              </p>
-              <h3 className="swp-blue-header-title font-display text-2xl font-bold leading-tight">
-                Business Pass
-              </h3>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <InventoryBadge remaining={inventory.business} />
-              <div className="text-right">
-                <div className="flex items-baseline gap-2 justify-end flex-wrap">
-                  <span className="swp-blue-header-title text-3xl font-bold">
-                    {businessCurrentPrice === null
-                      ? "Loading price…"
-                      : `£${businessCurrentPrice.toFixed(0)}`}
-                  </span>
-                  {businessCurrentPrice !== null &&
-                    businessOriginalPrice > businessCurrentPrice && (
-                      <span className="swp-blue-header-muted text-sm line-through">
-                        £{businessOriginalPrice.toFixed(0)}
-                      </span>
-                    )}
-                  {businessDiscountPct !== null && (
-                    <span className="badge-shine text-xs font-bold px-3 py-1 rounded-full inline-block">
-                      {businessDiscountPct}% off
-                    </span>
-                  )}
-                </div>
-                <p className="swp-blue-header-muted mt-0.5 text-xs">
-                  Per pass, ex VAT · {businessPeriodName}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-start">
-            {/* ── Left column: Benefits ── */}
-            <div className="flex-1 p-6 md:p-8">
-              {/* Standard benefits */}
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                What's included
-              </p>
-              <p className="mb-5 text-sm font-semibold leading-relaxed text-foreground">
-                For vendors, consultants, advisory firms, recruiters, technology providers and
-                commercial service providers attending as delegates to understand the market, hear
-                the content and build relevant conversations.
-              </p>
-              <div className="space-y-2 mb-4">
-                {businessBenefits.map((b) => (
-                  <div key={b} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                    <span>{b}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Exclusive / premium benefits */}
-              {businessExtraBenefits.length > 0 && (
-                <div className="border-t border-border pt-3 mt-3 space-y-2">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
-                    Important Business Pass guidance
-                  </p>
-                  {businessExtraBenefits.map((b) => (
-                    <div
-                      key={b}
-                      className="flex items-start gap-2 border-l-2 border-primary/35 pl-2 text-sm font-semibold"
-                    >
-                      <Star className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      <span>{b}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Column separator */}
-            <div className="hidden md:block w-px bg-border self-stretch" />
-
-            {/* ── Right column: Quantity picker (warm panel) ── */}
-            <div className="md:w-72 shrink-0 p-6 bg-primary/5 space-y-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                How many passes?
-              </p>
-
-              {/* Custom stepper */}
-              <div className="flex items-stretch border border-border bg-white overflow-hidden">
-                <button
-                  type="button"
-                  aria-label="Decrease pass quantity"
-                  className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  disabled={quantity <= 1}
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <div className="flex-1 text-center font-bold text-2xl py-2.5 text-foreground border-x border-border">
-                  {quantity}
-                </div>
-                <button
-                  type="button"
-                  aria-label="Increase pass quantity"
-                  className="flex-none w-11 flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-30"
-                  onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                  disabled={quantity >= 10}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Upsell nudge — fixed-height container prevents layout shift */}
-              <div className="min-h-[56px]">
-                <AnimatePresence>
-                  <UpsellNudge
-                    tiers={allTiers}
-                    passType="business"
-                    quantity={quantity}
-                    unitLabel="pass"
-                    pricePerPass={
-                      selectedPass === "single" ? singleCurrentPrice : businessCurrentPrice
-                    }
-                  />
-                </AnimatePresence>
-              </div>
-
-              {/* Business discount tiers */}
-              <div className="space-y-1.5 text-xs">
-                {businessTierRows.map(({ key, label, note, active }) => (
-                  <div
-                    key={key}
-                    className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2 transition-all ${
-                      active
-                        ? "border-primary/40 bg-white text-foreground shadow-[0_8px_22px_rgba(0,78,185,0.08)] ring-1 ring-primary/10"
-                        : "border-primary/10 bg-white/60 text-muted-foreground"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2 font-semibold">
-                      <span>{label}</span>
-                      {active && (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                          Current
-                        </span>
-                      )}
-                    </span>
-                    <span className={`text-right ${active ? "font-bold text-primary" : ""}`}>
-                      {note}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Discount applied indicator */}
-              {discountLabel && (
-                <div className="flex items-center gap-2 border-l-4 border-primary bg-primary/10 px-3 py-2 text-sm font-bold text-primary">
-                  <Check className="w-4 h-4 shrink-0" />
-                  {discountLabel} group discount applied
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
-      {/* ── Order Summary ── */}
-      <div className="swp-card flex flex-col justify-between gap-0 overflow-hidden rounded-2xl md:flex-row md:items-start md:gap-8">
-        {/* Left: selection summary */}
-        <div className="flex-1 p-6 md:p-8 space-y-1">
-          <h2 className="text-xl font-bold">
-            {quantity} pass{quantity !== 1 ? "es" : ""} selected
-          </h2>
-          {discountLabel && !isMostPopular && (
-            <p className="text-sm font-semibold text-secondary">
-              {discountLabel} group discount applied
+        <div className="mt-6 flex flex-col justify-between gap-5 sm:flex-row sm:gap-8">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold md:text-3xl">{passLabel}</h2>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground md:text-base">
+              {isVendor
+                ? "For consultants, vendors and organisations providing products or services to workforce and HR teams."
+                : "For employer-side HR, people and workforce professionals. This pass is not available to consultants or vendors."}
             </p>
-          )}
-          {isMostPopular && (
-            <p className="text-sm font-semibold text-secondary">Most popular choice for teams</p>
-          )}
-          <p className="text-sm text-muted-foreground pt-1">
-            You'll add attendee details in the next step.
-          </p>
-
-          {/* How did you hear about us */}
-          <div className="pt-4">
-            <div className="space-y-2 rounded-xl border border-primary/15 bg-primary/[0.025] px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                How did you hear about the event?
-              </p>
-              <select
-                aria-label="How did you hear about the event?"
-                value={hearAboutUs}
-                onChange={(e) => setHearAboutUs(e.target.value)}
-                className="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Select an option…</option>
-                {hearOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Button
+              type="button"
+              variant="link"
+              className="mt-1 min-h-11 px-0 text-sm font-normal underline"
+              onClick={handleBack}
+              disabled={updateBooking.isPending || promoValidating}
+            >
+              Change booking type
+            </Button>
           </div>
-
-          {/* Promo code input */}
-          <div className="pt-4 space-y-2">
-            {appliedPromoCode ? (
-              <>
-                <div className="flex items-center gap-2 bg-green-50 border border-green-200 px-3 py-2 text-sm font-semibold text-green-800">
-                  <Tag className="w-4 h-4 shrink-0" />
-                  <span className="flex-1">
-                    Code <span className="font-mono">{appliedPromoCode}</span> applied
-                    {appliedViaLink && (
-                      <span className="ml-2 inline-block text-[10px] uppercase tracking-wider font-bold bg-green-200 text-green-900 px-1.5 py-0.5 rounded-md">
-                        Applied via link
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleRemovePromo}
-                    className="ml-auto text-green-600 hover:text-green-800 transition-colors"
-                    aria-label="Remove promo code"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                {compShortfall && compRemaining !== null && (
-                  <CompShortfallPrompt
-                    remaining={compRemaining}
-                    quantity={quantity}
-                    onReduce={handleReduceToCompCap}
-                    onRemove={handleRemovePromo}
-                  />
-                )}
-              </>
-            ) : (
-              <div className="space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Promo Code
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    className="h-10 uppercase bg-white text-sm font-mono"
-                    placeholder="Enter code"
-                    aria-label="Promo code"
-                    aria-invalid={!!promoError}
-                    aria-describedby={promoError ? "promo-code-error" : undefined}
-                    value={promoInput}
-                    onChange={(e) => {
-                      setPromoInput(e.target.value.toUpperCase());
-                      setPromoError(null);
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-10 px-4 border-border shrink-0"
-                    onClick={handleApplyPromo}
-                    disabled={promoValidating || !promoInput.trim()}
-                  >
-                    {promoValidating ? "Checking…" : "Apply"}
-                  </Button>
-                </div>
-                {promoError && (
-                  <p
-                    id="promo-code-error"
-                    role="alert"
-                    className="text-xs text-red-600 font-medium"
-                  >
-                    {promoError}
-                  </p>
-                )}
-              </div>
+          <div className="shrink-0 sm:text-right">
+            <p className="inline-block rounded bg-[#f0f6ff] px-3 py-1 text-sm font-semibold text-primary">
+              {periodName}
+            </p>
+            <p className="mt-1 text-4xl font-bold tracking-tight md:text-5xl">
+              {currentPrice === null
+                ? "—"
+                : `£${currentPrice.toLocaleString("en-GB", { maximumFractionDigits: 2 })}`}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">per person, excluding VAT</p>
+            {currentPrice !== null && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {money(currentPrice * 1.2)} including VAT
+              </p>
             )}
           </div>
         </div>
 
-        {/* Right: price breakdown */}
-        <div className="min-w-0 md:min-w-[280px] bg-primary/[0.045] p-6 md:p-8">
-          <h3 className="text-lg font-bold mb-4">Order Summary</h3>
-          {currentPricing ? (
-            <div className="space-y-2.5">
-              <div className="flex justify-between text-sm">
-                <span>
-                  {quantity} × {passLabel}
-                </span>
-                <span>£{currentPricing.baseSubtotal.toFixed(2)}</span>
-              </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <label id="pass-quantity-label" className="text-base font-semibold">
+              Number of passes
+            </label>
+            {inventoryKnown && remaining !== null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {remaining} {remaining === 1 ? "place" : "places"} available
+              </p>
+            )}
+          </div>
+          <div
+            role="group"
+            aria-labelledby="pass-quantity-label"
+            className="flex h-12 w-40 shrink-0 overflow-hidden rounded-md border border-border bg-white"
+          >
+            <button
+              type="button"
+              aria-label="Decrease pass quantity"
+              className="flex w-12 items-center justify-center hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40"
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              disabled={quantity <= 1 || updateBooking.isPending}
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <output
+              aria-live="polite"
+              className="flex flex-1 items-center justify-center border-x border-border text-xl font-semibold"
+            >
+              {quantity}
+            </output>
+            <button
+              type="button"
+              aria-label="Increase pass quantity"
+              className="flex w-12 items-center justify-center hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40"
+              onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+              disabled={
+                quantity >= maxQuantity ||
+                updateBooking.isPending ||
+                (inventoryKnown && remaining !== null && quantity >= remaining)
+              }
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
 
-              {currentPricing.groupDiscountAmount > 0 && (
-                <div className="flex justify-between text-sm font-bold text-secondary">
-                  <span>Group Discount ({currentPricing.groupDiscountPercent}%)</span>
-                  <span>-£{currentPricing.groupDiscountAmount.toFixed(2)}</span>
-                </div>
-              )}
-
-              {currentPricing.promoDiscountAmount > 0 && (
-                <div className="flex justify-between text-sm font-bold text-primary">
-                  <span className="flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 shrink-0" />
-                    Promo Code
-                  </span>
-                  <span>-£{currentPricing.promoDiscountAmount.toFixed(2)}</span>
-                </div>
-              )}
-
-              <div className="flex justify-between text-sm">
-                <span>Subtotal</span>
-                <span>£{currentPricing.subtotalAfterDiscounts.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>VAT (20%)</span>
-                <span>£{currentPricing.vatAmount.toFixed(2)}</span>
-              </div>
-
-              <div className="pt-3 border-t border-border flex justify-between font-bold text-2xl">
-                <span>Total</span>
-                <span>£{currentPricing.total.toFixed(2)}</span>
-              </div>
-
-              {currentPricing.savedAmount > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="savings-pulse flex justify-between items-center text-sm font-bold bg-success text-success-foreground px-4 py-2.5 -mx-2 mt-1"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Check className="w-4 h-4 shrink-0" />
-                    You're saving
-                  </span>
-                  <span className="text-lg font-bold">
-                    £{currentPricing.savedAmount.toFixed(2)}
-                  </span>
-                </motion.div>
-              )}
+        {groupOffer && (
+          <div
+            className="mt-5 flex flex-col items-start gap-3 rounded-lg border border-primary/15 bg-[#f0f6ff] p-4 sm:flex-row sm:items-center sm:justify-between"
+            aria-label="Group savings offer"
+          >
+            <div>
+              <p className="text-base font-semibold text-primary md:text-lg">
+                Add {nextQuantity - quantity} more{" "}
+                {nextQuantity - quantity === 1 ? "pass" : "passes"} for{" "}
+                {groupOffer.groupDiscountPercent}% off all {nextQuantity}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {nextQuantity} passes total:{" "}
+                <span className="font-semibold text-foreground">{money(groupOffer.total)}</span>{" "}
+                including VAT{appliedPromoCode ? ", with your promo code" : ""}
+              </p>
             </div>
-          ) : (
-            <div className="animate-pulse space-y-3">
-              <div className="h-4 bg-border w-full rounded"></div>
-              <div className="h-4 bg-border w-2/3 rounded"></div>
-              <div className="h-4 bg-border w-full rounded"></div>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 shrink-0 border px-4 text-sm"
+              onClick={() => setQuantity(nextQuantity)}
+            >
+              Add {nextQuantity - quantity} {nextQuantity - quantity === 1 ? "pass" : "passes"}
+            </Button>
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-sm">
+          {currentPricing && currentPricing.groupDiscountAmount > 0 && (
+            <p className="flex items-center gap-2 py-3 text-primary">
+              <Check className="h-4 w-4 shrink-0" />
+              {currentPricing.groupDiscountPercent}% group saving applied to your current {quantity}{" "}
+              passes
+            </p>
+          )}
+          {relevantTiers.length > 0 && (
+            <details className="min-w-0 flex-1 basis-48 sm:text-right">
+              <summary className="cursor-pointer py-3 text-primary underline underline-offset-4">
+                View all group rates
+              </summary>
+              <ul className="space-y-2 rounded-md border border-border p-4 text-left text-muted-foreground">
+                {relevantTiers.map((tier) => (
+                  <li key={tier.id} className="flex justify-between gap-4">
+                    <span>{tier.minQuantity}+ passes</span>
+                    <span className="font-semibold text-foreground">
+                      {tier.discountPercent}% off
+                    </span>
+                  </li>
+                ))}
+                <li className="pt-2 text-xs">
+                  Applied automatically to all passes in your booking.
+                </li>
+              </ul>
+            </details>
+          )}
+        </div>
+
+        <div className="mt-2 border-t border-border pt-5">
+          <h2 className="text-lg font-semibold">Every pass includes</h2>
+          <ul className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            {benefits.map((benefit) => (
+              <li
+                key={benefit}
+                className="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"
+              >
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span>{benefit}</span>
+              </li>
+            ))}
+          </ul>
+          {isVendor && (
+            <div className="mt-5 space-y-1.5 text-sm text-muted-foreground">
+              {extraBenefits.map((benefit) => (
+                <p key={benefit}>{benefit}</p>
+              ))}
             </div>
           )}
         </div>
-      </div>
-      {pricingError && (
-        <div
-          role="alert"
-          className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3"
-        >
-          <p>{pricingError}</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-2"
-            onClick={() => setPricingAttempt((attempt) => attempt + 1)}
-            disabled={pricingLoading}
+        <div className="mt-5 border-t border-border pt-5">
+          <label htmlFor="hear-about-us" className="text-sm font-semibold">
+            How did you hear about the event?{" "}
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <select
+            id="hear-about-us"
+            aria-label="How did you hear about the event?"
+            value={hearAboutUs}
+            onChange={(e) => setHearAboutUs(e.target.value)}
+            className="mt-2 h-12 w-full rounded-md border border-input bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            Retry total
-          </Button>
+            <option value="">Select an option…</option>
+            {hearOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
-      {saveError && (
-        <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md p-3">
-          {saveError}
-        </div>
-      )}
-
-      <div className="grid gap-3 border-t border-border pt-6 md:grid-cols-[auto_minmax(260px,1fr)_minmax(260px,320px)] md:items-start">
         <Button
-          variant="outline"
-          size="lg"
-          className="order-3 h-14 w-full px-8 text-lg border-border md:order-1 md:w-auto"
-          onClick={async () => {
-            setSaveError(null);
-            try {
-              await savePassSelection(1);
-            } catch {
-              setSaveError("We could not save your pass selection. Please try again.");
-            }
-          }}
+          type="button"
+          variant="link"
+          className="mt-5 min-h-11 px-0 font-normal text-muted-foreground"
+          onClick={handleBack}
           disabled={updateBooking.isPending || promoValidating}
         >
+          <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <SaveAndReturnButton
-          onSave={handleSaveAndReturn}
-          disabled={
-            !currentPricing ||
-            pricingLoading ||
-            !!pricingError ||
-            promoValidating ||
-            !booking.id ||
-            compShortfall ||
-            updateBooking.isPending
-          }
-          className="order-2 items-stretch md:order-2 md:items-center"
-          buttonClassName="h-14 w-full md:w-auto md:min-w-[260px]"
-        />
-        <Button
-          size="lg"
-          className="swp-primary-btn order-1 h-14 w-full min-w-0 px-8 text-lg md:order-3"
-          onClick={handleContinue}
-          disabled={
-            !currentPricing ||
-            pricingLoading ||
-            !!pricingError ||
-            promoValidating ||
-            !booking.id ||
-            compShortfall ||
-            updateBooking.isPending
-          }
+      </section>
+
+      <aside
+        aria-label="Your booking"
+        className="min-w-0 self-start rounded-xl border border-primary/10 bg-[#f0f6ff] p-5 sm:p-7"
+      >
+        <h2 className="text-2xl font-bold">Your booking</h2>
+        <div className="my-6 border-t border-primary/10" />
+        {currentPricing ? (
+          <dl className="space-y-4 text-base">
+            <div className="flex justify-between gap-4">
+              <dt>
+                {quantity} × {passLabel}
+              </dt>
+              <dd className="shrink-0 tabular-nums">{money(currentPricing.baseSubtotal)}</dd>
+            </div>
+            {currentPricing.groupDiscountAmount > 0 && (
+              <div className="flex justify-between gap-4 text-primary">
+                <dt>Group saving ({currentPricing.groupDiscountPercent}%)</dt>
+                <dd className="shrink-0 tabular-nums">
+                  −{money(currentPricing.groupDiscountAmount)}
+                </dd>
+              </div>
+            )}
+            {currentPricing.promoDiscountAmount > 0 && (
+              <div className="flex justify-between gap-4 text-primary">
+                <dt>Promo code saving</dt>
+                <dd className="shrink-0 tabular-nums">
+                  −{money(currentPricing.promoDiscountAmount)}
+                </dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-4 border-t border-primary/10 pt-4">
+              <dt>Subtotal</dt>
+              <dd className="tabular-nums">{money(currentPricing.subtotalAfterDiscounts)}</dd>
+            </div>
+            <div className="flex justify-between gap-4 text-muted-foreground">
+              <dt>VAT ({Math.round(currentPricing.vatRate * 100)}%)</dt>
+              <dd className="tabular-nums">{money(currentPricing.vatAmount)}</dd>
+            </div>
+            <div className="flex flex-wrap items-end justify-between gap-3 border-t border-primary/15 pt-4">
+              <dt className="text-xl font-semibold">
+                Total
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                  Including VAT
+                </span>
+              </dt>
+              <dd className="text-3xl font-bold tracking-tight tabular-nums sm:text-4xl">
+                {money(currentPricing.total)}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <div role="status" className="py-5 text-sm text-muted-foreground">
+            {pricingError ? "Your total is unavailable." : "Updating your total…"}
+          </div>
+        )}
+
+        <details
+          className="mt-6 border-t border-primary/10 pt-2"
+          open={promoExpanded || promoValidating || !!promoError}
+          onToggle={(event) => setPromoExpanded(event.currentTarget.open)}
         >
-          Continue to Attendees
+          <summary className="cursor-pointer py-3 text-sm font-medium text-primary">
+            Have a promo or VIP code?
+          </summary>
+          {appliedPromoCode ? (
+            <div className="space-y-3 pb-3">
+              <div className="flex items-center gap-2 rounded-md border border-green-200 bg-green-50 pl-3 text-sm text-green-800">
+                <Tag className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 break-all">
+                  Code <strong>{appliedPromoCode}</strong> applied
+                  {appliedViaLink && <span className="block text-xs">Applied via link</span>}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRemovePromo}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                  aria-label="Remove promo code"
+                  disabled={updateBooking.isPending}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {compShortfall && compRemaining !== null && (
+                <CompShortfallPrompt
+                  remaining={compRemaining}
+                  quantity={quantity}
+                  onReduce={handleReduceToCompCap}
+                  onRemove={handleRemovePromo}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 pb-3">
+              <div className="flex gap-2">
+                <Input
+                  className="h-11 min-w-0 bg-white uppercase"
+                  placeholder="Enter code"
+                  aria-label="Promo code"
+                  aria-invalid={!!promoError}
+                  aria-describedby={promoError ? "promo-code-error" : undefined}
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value.toUpperCase());
+                    setPromoError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleApplyPromo();
+                    }
+                  }}
+                  disabled={updateBooking.isPending}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 shrink-0 border px-4"
+                  onClick={handleApplyPromo}
+                  disabled={promoValidating || !promoInput.trim() || updateBooking.isPending}
+                >
+                  {promoValidating ? "Checking…" : "Apply"}
+                </Button>
+              </div>
+              {promoError && (
+                <p id="promo-code-error" role="alert" className="text-sm text-destructive">
+                  {promoError}
+                </p>
+              )}
+            </div>
+          )}
+        </details>
+        {pricingError && (
+          <div
+            role="alert"
+            className="mt-3 rounded-md border border-destructive/30 bg-white p-3 text-sm text-destructive"
+          >
+            <p>{pricingError}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-2"
+              onClick={() => setPricingAttempt((attempt) => attempt + 1)}
+              disabled={pricingLoading}
+            >
+              Retry total
+            </Button>
+          </div>
+        )}
+        {saveError && (
+          <p
+            role="alert"
+            className="mt-3 rounded-md border border-destructive/30 bg-white p-3 text-sm text-destructive"
+          >
+            {saveError}
+          </p>
+        )}
+        <Button
+          type="button"
+          size="lg"
+          className="swp-primary-btn mt-5 min-h-14 w-full whitespace-normal px-4 py-3 text-base font-semibold"
+          onClick={handleContinue}
+          disabled={blocked}
+        >
+          {updateBooking.isPending ? "Saving…" : "Continue to Attendees"}
+          <ArrowRight className="h-4 w-4" />
         </Button>
-      </div>
+        <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+          Attendee names can be confirmed later.
+        </p>
+        <SaveAndReturnButton
+          appearance="link"
+          onSave={handleSaveAndReturn}
+          disabled={blocked}
+          className="mt-3"
+        />
+        <p className="mt-5 border-t border-primary/10 pt-5 text-center text-xs text-muted-foreground">
+          Need help?{" "}
+          <a
+            href="mailto:douglas@peoplestrategyhub.com"
+            className="text-primary underline underline-offset-2"
+          >
+            Contact the event team
+          </a>
+        </p>
+      </aside>
     </div>
   );
 }

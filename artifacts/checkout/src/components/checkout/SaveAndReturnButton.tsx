@@ -9,6 +9,7 @@ interface SaveAndReturnButtonProps {
   disabled?: boolean;
   className?: string;
   buttonClassName?: string;
+  appearance?: "button" | "link";
 }
 
 export default function SaveAndReturnButton({
@@ -16,6 +17,7 @@ export default function SaveAndReturnButton({
   disabled = false,
   className = "",
   buttonClassName = "",
+  appearance = "button",
 }: SaveAndReturnButtonProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -41,9 +43,9 @@ export default function SaveAndReturnButton({
     <div className={`flex flex-col items-stretch gap-2 w-full ${className}`}>
       <Button
         type="button"
-        variant="outline"
+        variant={appearance === "link" ? "link" : "outline"}
         size="lg"
-        className={`h-14 w-full min-w-0 px-5 border-border bg-white text-sm leading-tight text-center whitespace-normal sm:px-6 sm:text-base ${buttonClassName}`}
+        className={`${appearance === "link" ? "min-h-11 w-full px-0 text-sm font-normal underline" : "h-14 w-full px-5 border-border bg-white text-sm sm:px-6 sm:text-base"} min-w-0 leading-tight text-center whitespace-normal ${buttonClassName}`}
         onClick={handleClick}
         disabled={disabled || isSaving}
         aria-label="Save progress and return to the SWP Summit website"
@@ -51,7 +53,7 @@ export default function SaveAndReturnButton({
         <span className="min-w-0 flex-1 text-center">
           {isSaving ? "Saving..." : "Save and return to SWP Summit"}
         </span>
-        <ArrowUpRight className="w-4 h-4 shrink-0" />
+        {appearance !== "link" && <ArrowUpRight className="w-4 h-4 shrink-0" />}
       </Button>
       {saveError && (
         <p className="max-w-sm text-center text-xs font-medium text-destructive" role="alert">
