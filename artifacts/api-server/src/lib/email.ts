@@ -2,6 +2,7 @@
 import http from "http";
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
+import { prepareInlineEmailImages } from "./email-images";
 import { defaultOrderRef, DEFAULT_REF_PREFIX, DEFAULT_REF_OFFSET } from "./order-reference";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -295,7 +296,9 @@ export async function sendMail(options: {
       to: options.to,
       bcc: options.bcc,
       subject: options.subject,
-      html: options.html,
+      html: await prepareInlineEmailImages(options.html),
+      // CID attachments work in email clients; raw data URLs only work in browser previews.
+      attachDataUrls: true,
       attachments: nodemailerAttachments,
     });
     return true;
