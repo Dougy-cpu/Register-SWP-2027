@@ -3,6 +3,17 @@ import http from "http";
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 import { prepareInlineEmailImages } from "./email-images";
+import {
+  approvedEmailImages,
+  approvedEmailTemplates,
+  confirmationDesignVars,
+  emailPlainText,
+  emailSection,
+  isApprovedEmailDesign,
+  renderApprovedEmail,
+  welcomeDesignVars,
+  type EmailDocument,
+} from "./approved-email-design";
 import { defaultOrderRef, DEFAULT_REF_PREFIX, DEFAULT_REF_OFFSET } from "./order-reference";
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -266,6 +277,7 @@ export async function sendMail(options: {
   to: string | string[];
   subject: string;
   html: string;
+  text?: string;
   attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
   fromName?: string;
   fromEmail?: string;
@@ -297,9 +309,12 @@ export async function sendMail(options: {
       bcc: options.bcc,
       subject: options.subject,
       html: await prepareInlineEmailImages(options.html),
+      text:
+        options.text ??
+        (isApprovedEmailDesign(options.html) ? emailPlainText(options.html) : undefined),
       // CID attachments work in email clients; raw data URLs only work in browser previews.
       attachDataUrls: true,
-      attachments: nodemailerAttachments,
+      attachments: [...nodemailerAttachments, ...approvedEmailImages(options.html)],
     });
     return true;
   } catch (err) {
@@ -380,11 +395,12 @@ export function wrapInBrandedLayout(
 </html>`;
 }
 
-async function buildConfirmationEmailHtml(
+export async function buildConfirmationEmailHtml(
   booking: typeof bookingsTable.$inferSelect,
   attendees: Array<typeof attendeesTable.$inferSelect>,
   lead: typeof attendeesTable.$inferSelect,
   settings: EventSettings,
+  documents: EmailDocument[] = [],
 ): Promise<{ html: string; subject: string }> {
   const passLabels: Record<string, string> = {
     single: "Workforce Pass",
@@ -507,6 +523,25 @@ async function buildConfirmationEmailHtml(
       .from(emailTemplatesTable)
       .where(eq(emailTemplatesTable.type, "confirmation"));
 
+    if (!dbTemplate || isApprovedEmailDesign(dbTemplate.htmlBody)) {
+      return renderApprovedEmail(
+        dbTemplate || approvedEmailTemplates.confirmation,
+        confirmationDesignVars({
+          booking,
+          attendees,
+          lead,
+          settings,
+          documents,
+          calendarHtml: getCalendarPlaceholders(settings).calendarLinks,
+          invoiceHelpHtml: renderInvoiceHelpHtml(
+            settings.invoiceHelpContent || DEFAULT_INVOICE_HELP_CONTENT,
+          ),
+          appBaseUrl: process.env.APP_BASE_URL,
+        }),
+        settings,
+        { "{{firstName}}": lead.firstName, "{{orderReference}}": orderRef },
+      );
+    }
     if (dbTemplate) {
       // Body vars: user-controlled values are HTML-escaped; pre-built HTML
       // fragments (calendar links, attendees table, manage-link section,
@@ -714,13 +749,6 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
     return false;
   }
 
-  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
-    booking,
-    attendees,
-    lead,
-    settings,
-  );
-
   let pdfBuffer: Buffer | null = null;
   let pdfFilename = `receipt-${booking.orderReference || bookingId}.pdf`;
   let pdfIsReceipt = true;
@@ -759,6 +787,14 @@ export async function sendConfirmationAndReceiptEmail(bookingId: number): Promis
       contentType: "application/pdf",
     });
   }
+
+  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
+    booking,
+    attendees,
+    lead,
+    settings,
+    attachments,
+  );
 
   const confirmSent = await sendMail({
     to: lead.workEmail,
@@ -830,13 +866,6 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
     return;
   }
 
-  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
-    booking,
-    attendees,
-    lead,
-    settings,
-  );
-
   // Prefer Stripe invoice PDF, then fall back to our custom receipt
   let pdfBuffer: Buffer | null = null;
   let pdfFilename = `receipt-${booking.orderReference || bookingId}.pdf`;
@@ -887,6 +916,14 @@ export async function sendBookingEmails(bookingId: number): Promise<void> {
       contentType: "application/pdf",
     });
   }
+
+  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
+    booking,
+    attendees,
+    lead,
+    settings,
+    attachments,
+  );
 
   const confirmSent = await sendMail({
     to: lead.workEmail,
@@ -943,29 +980,6 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
   const recipient = booking.billingEmail || lead.workEmail;
   const orderRef = booking.orderReference || `#${bookingId}`;
 
-  // Build the standard confirmation body but prepend a re-issue notice banner
-  const { html: bodyHtml, subject: baseSubject } = await buildConfirmationEmailHtml(
-    booking,
-    attendees,
-    lead,
-    settings,
-  );
-
-  const reissueBanner = `
-    <div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:18px 22px;margin:0 0 20px;">
-      <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#004eb9;">Your invoice has been re-issued</p>
-      <p style="margin:0;font-size:14px;color:#333;line-height:1.5;">
-        We've updated your billing details${booking.poNumber ? ` (including PO Number <strong style="font-family:monospace;">${escHtml(booking.poNumber)}</strong>)` : ""} and issued a fresh invoice. The previous invoice has been voided. The latest invoice PDF is attached and a payment link is below.
-      </p>
-    </div>`;
-  // Inject the banner just after the opening branded layout container if
-  // present. `.replace()` always returns a truthy string, so we explicitly
-  // check whether the marker exists before deciding where to put the banner.
-  const containerRe = /(<div class="container"[^>]*>)/i;
-  const html = containerRe.test(bodyHtml)
-    ? bodyHtml.replace(containerRe, `$1${reissueBanner}`)
-    : reissueBanner + bodyHtml;
-
   let pdfBuffer: Buffer | null = null;
   const pdfFilename = `invoice-${booking.orderReference || bookingId}.pdf`;
   if (booking.stripeInvoicePdfUrl) {
@@ -986,6 +1000,24 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
   if (pdfBuffer)
     attachments.push({ filename: pdfFilename, content: pdfBuffer, contentType: "application/pdf" });
 
+  const { html: bodyHtml } = await buildConfirmationEmailHtml(
+    booking,
+    attendees,
+    lead,
+    settings,
+    attachments,
+  );
+  const reissueBanner = `<div style="background:#f0f6ff;border:1px solid #e2e8f0;padding:18px 22px;">
+    <p style="margin:0 0 6px;font-size:16px;font-weight:bold;color:#004eb9;">Your invoice has been re-issued</p>
+    <p style="margin:0;font-size:14px;line-height:1.6;">We have updated your billing details${booking.poNumber ? ` (including PO number <strong>${escHtml(booking.poNumber)}</strong>)` : ""} and issued a fresh invoice. The previous invoice has been voided.${pdfBuffer ? " The latest invoice PDF is attached." : " Please contact the event team if you need a copy of the invoice."}</p>
+  </div>`;
+  const html = isApprovedEmailDesign(bodyHtml)
+    ? bodyHtml.replace(
+        "<!-- swp-transactional-v2 -->",
+        `<!-- swp-transactional-v2 -->${emailSection(reissueBanner)}`,
+      )
+    : bodyHtml.replace('<div class="content">', `<div class="content">${reissueBanner}`);
+
   const sent = await sendMail({
     to: recipient,
     subject: `Updated Invoice - ${settings.eventName || "SWP Summit"} (${orderRef})`,
@@ -994,7 +1026,6 @@ export async function sendReissuedInvoiceEmail(bookingId: number): Promise<void>
     fromName: settings.fromName,
     fromEmail: settings.fromEmail,
   });
-  void baseSubject;
   await logEmail(
     bookingId,
     recipient,
@@ -1026,13 +1057,6 @@ export async function resendConfirmationAndReceipt(
     logger.warn({ bookingId }, "No lead attendee found for email resend");
     return null;
   }
-
-  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
-    booking,
-    attendees,
-    lead,
-    settings,
-  );
 
   // Prefer Stripe invoice PDF, then fall back to custom receipt
   let pdfBuffer: Buffer | null = null;
@@ -1087,6 +1111,14 @@ export async function resendConfirmationAndReceipt(
   }
 
   const recipient = booking.billingEmail || lead.workEmail;
+  const { html: confirmationHtml, subject: confirmationSubject } = await buildConfirmationEmailHtml(
+    booking,
+    attendees,
+    lead,
+    settings,
+    attachments,
+  );
+
   const sent = await sendMail({
     to: recipient,
     subject: confirmationSubject,
@@ -2016,11 +2048,13 @@ export async function sendWelcomeEmail(
     const appBaseUrl = process.env.APP_BASE_URL || "https://register.swpsummit.com";
 
     let manageLinkHtml = "";
+    let welcomeBooking: typeof bookingsTable.$inferSelect | null = null;
     if (bookingId) {
       const [booking] = await db
         .select()
         .from(bookingsTable)
         .where(eq(bookingsTable.id, bookingId));
+      welcomeBooking = booking ?? null;
       if (booking?.managementToken) {
         manageLinkHtml = buildManageLinkSection(`${appBaseUrl}/manage/${booking.managementToken}`);
       }
@@ -2046,11 +2080,26 @@ export async function sendWelcomeEmail(
     const leadSharingNotice = personalised.includes("Badge scanning and sponsor leads")
       ? ""
       : `<div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>`;
-    const html = wrapInBrandedLayout(`${personalised}${leadSharingNotice}`, settings);
+    const designed = isApprovedEmailDesign(template.htmlBody)
+      ? renderApprovedEmail(
+          template,
+          welcomeDesignVars({
+            firstName,
+            settings,
+            booking: welcomeBooking,
+            calendarHtml: calPh.calendarLinks,
+            appBaseUrl,
+          }),
+          settings,
+          { "{{firstName}}": firstName },
+        )
+      : null;
+    const html =
+      designed?.html ?? wrapInBrandedLayout(`${personalised}${leadSharingNotice}`, settings);
 
     const sent = await sendMail({
       to: toEmail,
-      subject: template.subject,
+      subject: designed?.subject ?? template.subject,
       html,
       fromName: settings.fromName,
       fromEmail: settings.fromEmail,

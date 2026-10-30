@@ -1,3 +1,9 @@
+import {
+  approvedEmailTemplates,
+  emailBrowserPreview,
+  isApprovedEmailDesign,
+} from "../lib/approved-email-design";
+import { renderApprovedEmailSample } from "../lib/approved-email-sample";
 import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -259,16 +265,8 @@ function isEditableTemplateType(value: string): value is EditableTemplateType {
 }
 
 const TEMPLATE_DEFAULTS: Record<EditableTemplateType, { subject: string; htmlBody: string }> = {
-  welcome: {
-    subject: "Welcome to SWP Summit 2027!",
-    htmlBody:
-      "<h2>Welcome, {{firstName}}!</h2><p>We're thrilled to have you join us at the SWP Summit 2027. Your booking is confirmed and we can't wait to see you there.</p><p>If you have any questions in the meantime, don't hesitate to reach out.</p><p>See you on 3 March!</p>",
-  },
-  confirmation: {
-    subject: "Booking Confirmed - SWP Summit 2027",
-    htmlBody:
-      "<h2>Booking Confirmed, {{firstName}}!</h2><p>Thank you for registering. Your order reference is <strong>{{orderReference}}</strong>.</p><p>You have booked <strong>{{quantity}}</strong> {{passType}} pass(es). A full VAT receipt is attached to this email.</p>{{invoiceConfirmation}}{{promoSummary}}{{emailDeliveryReminder}}<p>We look forward to seeing you at the SWP Summit!</p>",
-  },
+  welcome: approvedEmailTemplates.welcome,
+  confirmation: approvedEmailTemplates.confirmation,
   invoice_reminder: {
     subject: "Invoice Reminder - {{orderReference}} - SWP Summit 2027",
     htmlBody:
@@ -537,10 +535,21 @@ router.post("/email-templates/:type/test-send", adminAuth, async (req, res): Pro
     subject = subject.replaceAll(key, val);
   }
 
-  const html = wrap(personalised, settings);
+  const designed =
+    (type === "welcome" || type === "confirmation") && isApprovedEmailDesign(template.htmlBody)
+      ? renderApprovedEmailSample({
+          type,
+          template,
+          settings,
+          toName,
+          toEmail,
+          calendarHtml: vars["{{calendarLinks}}"],
+        })
+      : null;
+  const html = designed?.html ?? wrap(personalised, settings);
   await sendMail({
     to: toEmail,
-    subject: `[TEST] ${subject}`,
+    subject: `[TEST] ${designed?.subject ?? subject}`,
     html,
     fromName: settings.fromName,
     fromEmail: settings.fromEmail,
@@ -589,8 +598,18 @@ router.post("/email-templates/:type/preview", adminAuth, async (req, res): Promi
     renderedSubject = renderedSubject.replaceAll(key, val);
   }
 
-  const html = wrap(personalised, settings);
-  res.json({ subject: renderedSubject, html });
+  const designed =
+    (type === "welcome" || type === "confirmation") && isApprovedEmailDesign(String(htmlBody))
+      ? renderApprovedEmailSample({
+          type,
+          template: { subject: String(subject), htmlBody: String(htmlBody) },
+          settings,
+          toName,
+          calendarHtml: vars["{{calendarLinks}}"],
+        })
+      : null;
+  const html = designed?.html ?? wrap(personalised, settings);
+  res.json({ subject: designed?.subject ?? renderedSubject, html: emailBrowserPreview(html) });
 });
 
 // ─── Email Logs ───────────────────────────────────────────────────────────────

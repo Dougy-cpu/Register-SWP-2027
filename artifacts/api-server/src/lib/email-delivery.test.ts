@@ -1,3 +1,6 @@
+import type { EventSettings } from "@workspace/db";
+import { approvedEmailImages, approvedEmailTemplates } from "./approved-email-design";
+import { renderApprovedEmailSample } from "./approved-email-sample";
 import nodemailer from "nodemailer";
 import type StreamTransport from "nodemailer/lib/stream-transport";
 import sharp from "sharp";
@@ -132,6 +135,56 @@ describe("email image delivery", () => {
     expect(deliveredHtml).toContain("Keep this confirmation.");
     expect(deliveredHtml).not.toContain("<img");
   });
+  it.each(["confirmation", "welcome"] as const)(
+    "builds the approved %s as complete HTML/text MIME with the exact two original PNGs",
+    async (type) => {
+      const settings = {
+        eventName: "SWP Summit",
+        eventDate: "Wednesday, 3 March 2027",
+        eventVenue: "1 Basinghall Avenue, London",
+        eventVenuePostcode: "EC2V 5DD",
+      } as EventSettings;
+      const designed = renderApprovedEmailSample({
+        type,
+        template: approvedEmailTemplates[type],
+        settings,
+      });
+      const pdf = Buffer.from("%PDF-1.4\nFixture only\n%%EOF");
+      expect(
+        await sendMail({
+          to: "preview@example.invalid",
+          subject: designed.subject,
+          html: designed.html,
+          attachments:
+            type === "confirmation"
+              ? [{ filename: "receipt.pdf", content: pdf, contentType: "application/pdf" }]
+              : [],
+        }),
+      ).toBe(true);
+      const parts = leafParts(messages[0].message as Buffer);
+      const html = parts
+        .find((part) => /^Content-Type: text\/html/im.test(part.headers))!
+        .content.toString();
+      const text = parts
+        .find((part) => /^Content-Type: text\/plain/im.test(part.headers))!
+        .content.toString();
+      const imageParts = parts.filter((part) => /^Content-Type: image\/png/im.test(part.headers));
+      expect(imageParts).toHaveLength(2);
+      expect(html.match(/src="cid:/g)).toHaveLength(3);
+      expect(html).not.toContain("data:image");
+      expect(text).toContain("People Strategy Hub");
+      expect(text).toContain("/manage/PREVIEW-ONLY-NOT-A-REAL-BOOKING");
+      for (const original of approvedEmailImages(designed.html)) {
+        const actual = imageParts.find((part) => part.headers.includes(`<${original.cid}>`))!;
+        expect(actual).toBeDefined();
+        expect(actual.headers).toMatch(/Content-Disposition: inline/i);
+        expect(actual.content).toEqual(original.content);
+      }
+      const pdfParts = parts.filter((part) => /Content-Type: application\/pdf/i.test(part.headers));
+      expect(pdfParts).toHaveLength(type === "confirmation" ? 1 : 0);
+      if (type === "confirmation") expect(pdfParts[0].content).toEqual(pdf);
+    },
+  );
 });
 
 describe("embedded image preparation", () => {

@@ -451,7 +451,43 @@ const TEMPLATE_ATTACHMENTS: Record<TemplateType, string[]> = {
   invoice_reminder: ["Invoice PDF (itemised, with bank transfer and company details)"],
 };
 
-function TemplateEditor({ type }: { type: TemplateType }) {
+const BRANDED_TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
+  welcome: [
+    ["firstName", "First name"],
+    ["eventName", "Event name"],
+    ["eventDate", "Event date"],
+    ["eventDetails", "Venue and arrival times"],
+    ["calendarSection", "Available calendar links"],
+    ["nextStep", "Manage booking details"],
+    ["checkinDetails", "Check-in instructions"],
+    ["badgeNotice", "Badge-scanning privacy notice"],
+  ].map(([tag, label]) => ({
+    tag: `{{${tag}}}`,
+    label,
+    description: "Filled automatically for each attendee.",
+  })),
+  confirmation: [
+    ["firstName", "First name"],
+    ["eventName", "Event name"],
+    ["orderReference", "Booking reference"],
+    ["bookingIntro", "Booking introduction"],
+    ["bookingSummary", "Booking and payment status"],
+    ["nextStep", "Add or update attendee details"],
+    ["eventDetails", "Event date and venue"],
+    ["calendarSection", "Available calendar links"],
+    ["attendees", "Named and unassigned attendees"],
+    ["paymentSummary", "Prices, discounts and attachments"],
+    ["invoiceDetails", "Invoice payment and billing guidance"],
+  ].map(([tag, label]) => ({
+    tag: `{{${tag}}}`,
+    label,
+    description: "Filled automatically from the booking.",
+  })),
+  community_social: TEMPLATE_VARIABLES.community_social,
+  invoice_reminder: TEMPLATE_VARIABLES.invoice_reminder,
+};
+
+export function TemplateEditor({ type }: { type: TemplateType }) {
   const { toast } = useToast();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [subject, setSubject] = useState("");
@@ -464,6 +500,7 @@ function TemplateEditor({ type }: { type: TemplateType }) {
   // Source/HTML mode state
   const [htmlMode, setHtmlMode] = useState(false);
   const [rawHtml, setRawHtml] = useState("");
+  const preservesLayout = rawHtml.includes("<!-- swp-transactional-v2 -->");
 
   // Live preview state
   const [previewHtml, setPreviewHtml] = useState<string>("");
@@ -493,9 +530,9 @@ function TemplateEditor({ type }: { type: TemplateType }) {
 
   // Helper: get the current body text depending on which mode the admin is in.
   const getCurrentBody = useCallback(() => {
-    if (htmlMode) return rawHtml;
+    if (htmlMode || preservesLayout) return rawHtml;
     return editor?.getHTML() || "";
-  }, [editor, htmlMode, rawHtml]);
+  }, [editor, htmlMode, rawHtml, preservesLayout]);
 
   useEffect(() => {
     async function loadTemplate() {
@@ -507,7 +544,9 @@ function TemplateEditor({ type }: { type: TemplateType }) {
         if (resp.ok) {
           const data = await resp.json();
           setSubject(data.subject || "");
-          if (editor && data.htmlBody) editor.commands.setContent(data.htmlBody);
+          const branded = String(data.htmlBody || "").includes("<!-- swp-transactional-v2 -->");
+          setHtmlMode(branded);
+          if (editor && data.htmlBody && !branded) editor.commands.setContent(data.htmlBody);
           // Seed rawHtml so toggling to Source mode before any edit shows real content.
           setRawHtml(data.htmlBody || "");
         }
@@ -552,7 +591,7 @@ function TemplateEditor({ type }: { type: TemplateType }) {
   // Toggle between Visual (TipTap) and Source (HTML textarea) modes.
   // Push the latest content across so neither side loses work.
   const handleToggleHtmlMode = useCallback(() => {
-    if (!editor) return;
+    if (!editor || preservesLayout) return;
     if (!htmlMode) {
       // Visual -> Source: take the editor's current HTML.
       setRawHtml(editor.getHTML());
@@ -563,7 +602,7 @@ function TemplateEditor({ type }: { type: TemplateType }) {
       editor.commands.setContent(rawHtml);
       setHtmlMode(false);
     }
-  }, [editor, htmlMode, rawHtml]);
+  }, [editor, htmlMode, rawHtml, preservesLayout]);
 
   // Fetch the live preview from the server, which uses the same render path
   // as the real send so what admins see matches what recipients receive.
@@ -631,7 +670,7 @@ function TemplateEditor({ type }: { type: TemplateType }) {
       });
       if (!resp.ok) throw new Error("Failed to save");
       // After save, sync the other view so both modes show the canonical body.
-      if (htmlMode) {
+      if (htmlMode && !preservesLayout) {
         editor.commands.setContent(body);
       } else {
         setRawHtml(body);
@@ -738,7 +777,10 @@ function TemplateEditor({ type }: { type: TemplateType }) {
                 Available Variables — click to insert at cursor
               </p>
               <div className="flex flex-wrap gap-2">
-                {TEMPLATE_VARIABLES[type].map((v) => (
+                {(preservesLayout
+                  ? BRANDED_TEMPLATE_VARIABLES[type]
+                  : TEMPLATE_VARIABLES[type]
+                ).map((v) => (
                   <button
                     key={v.tag}
                     type="button"
@@ -775,12 +817,19 @@ function TemplateEditor({ type }: { type: TemplateType }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Editor pane */}
               <div className="border border-border rounded overflow-hidden bg-white flex flex-col">
-                <TipTapToolbar
-                  editor={editor}
-                  onImageUpload={handleImageUpload}
-                  htmlMode={htmlMode}
-                  onToggleHtmlMode={handleToggleHtmlMode}
-                />
+                {preservesLayout ? (
+                  <p className="text-xs text-muted-foreground bg-muted/30 px-4 py-3 border-b">
+                    Approved branded layout. Edit the wording in the source below; the live preview
+                    shows the result.
+                  </p>
+                ) : (
+                  <TipTapToolbar
+                    editor={editor}
+                    onImageUpload={handleImageUpload}
+                    htmlMode={htmlMode}
+                    onToggleHtmlMode={handleToggleHtmlMode}
+                  />
+                )}
                 {htmlMode ? (
                   <>
                     <Textarea
@@ -791,9 +840,9 @@ function TemplateEditor({ type }: { type: TemplateType }) {
                       placeholder="Raw HTML — full control over markup. Switch back to Visual to use rich-text editing."
                     />
                     <p className="text-[11px] text-amber-700 bg-amber-50 border-t border-amber-200 px-3 py-1.5 leading-snug">
-                      Heads up: switching back to Visual may simplify advanced HTML (TipTap can
-                      strip unknown tags or attributes). Save first if you want to keep the raw
-                      version exactly as written.
+                      {preservesLayout
+                        ? "The source editor preserves this email’s layout, spacing and automatic booking sections."
+                        : "Switching to Visual may simplify advanced HTML. Save first to preserve the source."}
                     </p>
                   </>
                 ) : (

@@ -18,6 +18,7 @@ async function buildAll() {
     entryPoints: {
       index: path.resolve(artifactDir, "src/index.ts"),
       "sponsor-deadlines": path.resolve(artifactDir, "src/jobs/sponsor-deadlines.ts"),
+      "email-templates": path.resolve(artifactDir, "src/jobs/approved-email-templates.ts"),
     },
     platform: "node",
     bundle: true,
