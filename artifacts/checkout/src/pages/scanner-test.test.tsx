@@ -289,6 +289,7 @@ it("rehearses two reps meeting the same person, then reopens the personal view a
   click("Alex");
   click("Leads");
   expect(screen.queryByText("Alex Morgan")).toBeNull();
+  expect(screen.getByText("Your practice leads will appear here.")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "My scans" })).toBeTruthy();
   click("Team leads");
   expect(screen.getByText("Alex Morgan")).toBeTruthy();
@@ -308,4 +309,7 @@ it("rehearses two reps meeting the same person, then reopens the personal view a
   expect(screen.getByRole("heading", { name: "My scans" })).toBeTruthy();
   click("Team leads");
   expect(screen.getAllByText("Alex Morgan")).toHaveLength(1);
+  click("Scan");
+  click("Leads");
+  expect(screen.getByRole("heading", { name: "My scans" })).toBeTruthy();
 });

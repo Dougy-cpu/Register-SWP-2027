@@ -151,6 +151,10 @@ function PhoneScannerTest() {
     camera.stop();
     viewRef.current = next;
     setView(next);
+    if (next === "leads") {
+      setShared(false);
+      setExpanded(null);
+    }
     notesOpenRef.current = false;
     setQuickNotes(false);
     setError("");
@@ -504,11 +508,11 @@ function PhoneScannerTest() {
               {filtered.length === 0 && (
                 <Card className="space-y-3 p-6 text-center text-slate-600">
                   <p>
-                    {leads.length
+                    {search.trim()
                       ? "No practice leads match that search."
                       : "Your practice leads will appear here."}
                   </p>
-                  {!leads.length && (
+                  {!(shared ? teamPeople.size : mine.length) && (
                     <Button className="h-12" onClick={() => changeView("scan")}>
                       Scan a badge
                     </Button>

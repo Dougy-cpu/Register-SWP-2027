@@ -1,3 +1,3 @@
 // Increment only for a tested scanner release. The build also emits this value
 // outside the service-worker cache so an installed copy can compare versions.
-export const SCANNER_RELEASE = "2026.10.31.1";
+export const SCANNER_RELEASE = "2026.10.31.2";
