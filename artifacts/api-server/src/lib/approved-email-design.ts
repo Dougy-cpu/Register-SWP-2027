@@ -181,9 +181,9 @@ function commonVars(settings: EventSettings, calendarHtml = "") {
     "{{calendarSection}}": calendarHtml ? emailSection(calendarHtml, 0, 28, false) : "",
   };
 }
-function managementUrl(booking: Booking | null | undefined, base: string) {
+function managementUrl(booking: Booking | null | undefined, base: string, billing = false) {
   return booking?.managementToken
-    ? `${base.replace(/\/$/, "")}/manage/${encodeURIComponent(booking.managementToken)}`
+    ? `${base.replace(/\/$/, "")}/manage${billing ? "/billing" : ""}#${encodeURIComponent(booking.managementToken)}`
     : "";
 }
 function priceRow(left: string, right: string, bold = false) {
@@ -345,7 +345,7 @@ export function confirmationDesignVars(context: ConfirmationDesignContext): Reco
           : "");
     if (manageUrl)
       content += p(
-        `${link("Update PO number or billing details", `${manageUrl}/billing`)}<br>Use this secure link to add or update your PO number and billing details. We will automatically re-issue the invoice after the update.`,
+        `${link("Update PO number or billing details", managementUrl(booking, context.appBaseUrl || "https://register.swpsummit.com", true))}<br>Use this secure link to add or update your PO number and billing details. We will automatically re-issue the invoice after the update.`,
         14,
         muted,
         "20px 0 18px",

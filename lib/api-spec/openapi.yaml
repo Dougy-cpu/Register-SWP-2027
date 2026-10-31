@@ -165,9 +165,95 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /bookings/current:
+    get:
+      operationId: getCurrentBooking
+      tags: [bookings]
+      summary: Resume checkout using the private booking session header
+      security: [{ BookingSession: [] }]
+      responses:
+        "200":
+          description: The current booking, or null if checkout has not started
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - { $ref: "#/components/schemas/BookingWithAttendees" }
+                  - { type: "null" }
+        "403": { description: Booking session required }
+
+  /bookings/manage:
+    get:
+      operationId: getManagedBooking
+      tags: [bookings]
+      summary: Read a booking through its management link
+      security: [{ ManagementAccess: [] }]
+      responses:
+        "200":
+          description: Manageable booking details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  status: { type: string }
+                  passType: { type: string }
+                  quantity: { type: integer }
+                  orderReference: { type: [string, "null"] }
+                  paymentMethod: { type: [string, "null"] }
+                  billingEmail: { type: [string, "null"] }
+                  invoiceBadgeStatus: { type: [string, "null"] }
+                  changesLocked: { type: boolean }
+                  lockedMessage: { type: [string, "null"] }
+                  attendees: { type: array, items: { $ref: "#/components/schemas/Attendee" } }
+                required: [id, status, passType, quantity, changesLocked, attendees]
+        "403": { description: Management credential required }
+        "404": { description: Booking not found }
+
+  /bookings/manage/billing:
+    get:
+      operationId: getManagedBilling
+      tags: [bookings]
+      security: [{ ManagementAccess: [] }]
+      responses:
+        "200": { description: Billing details and editability }
+        "403": { description: Management credential required }
+    post:
+      operationId: updateManagedBilling
+      tags: [bookings]
+      security: [{ ManagementAccess: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        "200": { description: Billing details saved }
+        "403": { description: Management credential required }
+  /bookings/manage/invoice-pdf:
+    get:
+      operationId: downloadManagedInvoice
+      tags: [bookings]
+      security: [{ ManagementAccess: [] }]
+      responses:
+        "200":
+          description: Privately downloaded booking document
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+        "403": { description: Management credential required }
+  /bookings/manage/resend-email:
+    post:
+      operationId: resendManagedEmail
+      tags: [bookings]
+      security: [{ ManagementAccess: [] }]
+      responses:
+        "200": { description: Requested transactional copy processed }
+        "403": { description: Management credential required }
+
   /bookings/by-session/{sessionToken}:
     get:
       operationId: getBookingBySession
+      deprecated: true
       tags: [bookings]
       summary: Get or create a booking by session token
       parameters:
@@ -188,7 +274,10 @@ paths:
     get:
       operationId: getBookingPricing
       tags: [pricing]
-      summary: Get pricing breakdown for a booking
+      summary: Get the pricing breakdown for an owned booking
+      security:
+        - BookingSession: []
+        - AdminToken: []
       parameters:
         - name: id
           in: path
@@ -207,6 +296,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PricingBreakdown"
+        "403":
+          description: Booking session or administrator access required
         "404":
           description: Not found
           content:
@@ -1823,9 +1914,23 @@ paths:
           }
 
   # ==================== PRIVATE SPONSOR WORKSPACE ====================
+  /sponsor/access:
+    post:
+      operationId: exchangePrivateSponsorLink
+      tags: [sponsor-workspace]
+      summary: Exchange the link credential without putting it in a request URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        "204": { description: Sponsor session established }
+        "401": { description: Invalid or revoked link }
   /sponsor/access/{token}:
     post:
       operationId: exchangeSponsorAccessToken
+      deprecated: true
       tags: [sponsor-workspace]
       summary: Exchange a private signed link for an HttpOnly SameSite session cookie
       parameters:
@@ -2593,6 +2698,14 @@ paths:
 
 components:
   securitySchemes:
+    ManagementAccess:
+      type: http
+      scheme: bearer
+      bearerFormat: booking-management
+    BookingSession:
+      type: apiKey
+      in: header
+      name: x-booking-session
     AdminToken:
       type: apiKey
       in: header

@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:registration-edges": "vitest run --config vitest.registration-edges.config.ts"
   },
   "private": true,
   "devDependencies": {

@@ -562,7 +562,11 @@ function PhoneSponsorScanner({
             ...(source === "camera" ? { cameraTested: true } : {}),
           });
           if (!current()) return;
-          setNotice("Test badge recognised. QR scanning is ready.");
+          setNotice(
+            bootstrap && !bootstrap.scannerWindow.scanningOpen
+              ? "Test badge recognised. Attendee scanning is not open yet."
+              : "Test badge recognised. QR scanning is ready.",
+          );
           recentScansRef.current.set(code, now);
           await refreshBootstrap();
           return;
@@ -839,13 +843,15 @@ function PhoneSponsorScanner({
         )}
         {storageReady && (
           <p className="text-sm text-slate-200">
-            {offlineUsable && release.offlineReady
-              ? "Ready to scan, even without Wi-Fi."
-              : offlineUsable
-                ? "Ready to scan. Keep this page open while offline setup finishes."
-                : preparing
-                  ? "Ready to scan. Downloading badge details in the background…"
-                  : "Ready to scan. Badge details will be checked when connected."}
+            {bootstrap && !bootstrap.scannerWindow.scanningOpen
+              ? "Attendee scanning is not open. You can still check a test badge."
+              : offlineUsable && release.offlineReady
+                ? "Ready to scan, even without Wi-Fi."
+                : offlineUsable
+                  ? "Ready to scan. Keep this page open while offline setup finishes."
+                  : preparing
+                    ? "Ready to scan. Downloading badge details in the background…"
+                    : "Ready to scan. Badge details will be checked when connected."}
           </p>
         )}
         {accessError && (

@@ -540,11 +540,11 @@ function ExpandedRegistrationDetail({
   const isGroup = (data?.attendees?.length ?? 0) > 1;
   const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const manageUrl = data?.managementToken
-    ? `${window.location.origin}${appBasePath}/manage/${data.managementToken}`
+    ? `${window.location.origin}${appBasePath}/manage#${encodeURIComponent(data.managementToken)}`
     : null;
   const billingUpdateUrl =
     data?.paymentMethod === "invoice" && data?.managementToken
-      ? `${window.location.origin}${appBasePath}/manage/${data.managementToken}/billing`
+      ? `${window.location.origin}${appBasePath}/manage/billing#${encodeURIComponent(data.managementToken)}`
       : null;
 
   const copyLink = async (url: string, onCopied: () => void, onReset: () => void) => {

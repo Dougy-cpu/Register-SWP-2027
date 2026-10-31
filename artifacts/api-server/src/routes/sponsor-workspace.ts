@@ -1,7 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import multer from "multer";
 import {
   attendeesTable,
   bookingsTable,
@@ -35,7 +34,8 @@ import {
   recordSponsorStorageFailure,
   safeDownloadFilename,
   SponsorAssetValidationError,
-  SPONSOR_DOCUMENT_MAX_BYTES,
+  sponsorFileUpload,
+  SponsorAssetConflict,
 } from "../lib/sponsor-assets";
 import { getSponsorObjectStorage, SponsorStorageError } from "../lib/sponsor-storage";
 import { sendSponsorInternalNotification, sendSponsorStaffWelcome } from "../lib/sponsor-email";
@@ -50,10 +50,7 @@ import {
 } from "../lib/sponsor-portal";
 
 const router: IRouter = Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: SPONSOR_DOCUMENT_MAX_BYTES, files: 1, fields: 10 },
-});
+const upload = sponsorFileUpload(10);
 const ACTIVE_BOOKING_STATUSES = ["paid", "invoiced"] as const;
 const ASSET_CATEGORIES = [
   "logo",
@@ -84,6 +81,10 @@ function csrfTokenFromCookie(req: Request): string | null {
 }
 
 function handleError(res: Response, error: unknown): void {
+  if (error instanceof SponsorAssetConflict) {
+    res.status(409).json({ error: error.message });
+    return;
+  }
   if (error instanceof SponsorConflictError) {
     res.status(409).json({ error: error.message });
     return;
@@ -111,8 +112,8 @@ function handleError(res: Response, error: unknown): void {
   res.status(500).json({ error: "The sponsor workspace request could not be completed" });
 }
 
-router.post("/sponsor/access/:token", async (req, res): Promise<void> => {
-  const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+router.post(["/sponsor/access", "/sponsor/access/:token"], async (req, res): Promise<void> => {
+  const token = typeof req.body?.token === "string" ? req.body.token : (req.params.token ?? "");
   const decoded = verifySponsorAccessToken(token);
   if (!decoded) {
     res.status(401).json({ error: "This sponsor link is invalid or has been replaced" });
@@ -294,7 +295,8 @@ router.post("/sponsor/staff", async (req, res): Promise<void> => {
         .select()
         .from(sponsorsTable)
         .where(eq(sponsorsTable.id, sponsorId));
-      if (!sponsor) throw new Error("Sponsor not found");
+      if (!sponsor || !["confirmed", "completed"].includes(sponsor.status))
+        throw new SponsorConflictError("Sponsor registration is paused or closed.");
       const [usage] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(bookingsTable)
@@ -648,7 +650,7 @@ router.post("/sponsor/sessions/:sessionId/submit", async (req, res): Promise<voi
   }
 });
 
-router.post("/sponsor/assets", upload.single("file"), async (req, res): Promise<void> => {
+router.post("/sponsor/assets", upload, async (req, res): Promise<void> => {
   const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
   if (!req.file) {
     res.status(400).json({ error: "Choose a file to upload" });
@@ -704,60 +706,56 @@ router.post("/sponsor/assets", upload.single("file"), async (req, res): Promise<
   }
 });
 
-router.post(
-  "/sponsor/assets/:assetId/replace",
-  upload.single("file"),
-  async (req, res): Promise<void> => {
-    const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
-    const assetId = Array.isArray(req.params.assetId) ? req.params.assetId[0] : req.params.assetId;
-    if (!req.file) {
-      res.status(400).json({ error: "Choose a replacement file" });
-      return;
-    }
-    const [existing] = await db
-      .select()
-      .from(sponsorAssetsTable)
-      .where(
-        and(
-          eq(sponsorAssetsTable.id, assetId),
-          eq(sponsorAssetsTable.sponsorId, sponsorId),
-          eq(sponsorAssetsTable.status, "active"),
-        ),
+router.post("/sponsor/assets/:assetId/replace", upload, async (req, res): Promise<void> => {
+  const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
+  const assetId = Array.isArray(req.params.assetId) ? req.params.assetId[0] : req.params.assetId;
+  if (!req.file) {
+    res.status(400).json({ error: "Choose a replacement file" });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(sponsorAssetsTable)
+    .where(
+      and(
+        eq(sponsorAssetsTable.id, assetId),
+        eq(sponsorAssetsTable.sponsorId, sponsorId),
+        eq(sponsorAssetsTable.status, "active"),
+      ),
+    );
+  if (!existing) {
+    res.status(404).json({ error: "Active file version not found" });
+    return;
+  }
+  try {
+    const replacement = await createSponsorAsset({
+      sponsorId,
+      category: existing.category,
+      file: req.file,
+      uploaderType: "sponsor",
+      replaces: existing,
+    });
+    await sendSponsorInternalNotification({
+      sponsorId,
+      category: "content",
+      event: "Sponsor asset replaced",
+      summary: `${existing.originalName} was replaced by version ${replacement.version}. Any required acknowledgement was reset.`,
+    });
+    res.status(201).json(formatSponsorAsset(replacement));
+  } catch (error) {
+    if (error instanceof SponsorStorageError) {
+      await recordSponsorStorageFailure({
+        sponsorId,
+        operation: "sponsor_replace",
+        error,
+        actorType: "sponsor",
+      }).catch((attentionError) =>
+        logger.error({ attentionError, sponsorId }, "Could not record App Storage failure"),
       );
-    if (!existing) {
-      res.status(404).json({ error: "Active file version not found" });
-      return;
     }
-    try {
-      const replacement = await createSponsorAsset({
-        sponsorId,
-        category: existing.category,
-        file: req.file,
-        uploaderType: "sponsor",
-        replaces: existing,
-      });
-      await sendSponsorInternalNotification({
-        sponsorId,
-        category: "content",
-        event: "Sponsor asset replaced",
-        summary: `${existing.originalName} was replaced by version ${replacement.version}. Any required acknowledgement was reset.`,
-      });
-      res.status(201).json(formatSponsorAsset(replacement));
-    } catch (error) {
-      if (error instanceof SponsorStorageError) {
-        await recordSponsorStorageFailure({
-          sponsorId,
-          operation: "sponsor_replace",
-          error,
-          actorType: "sponsor",
-        }).catch((attentionError) =>
-          logger.error({ attentionError, sponsorId }, "Could not record App Storage failure"),
-        );
-      }
-      handleError(res, error);
-    }
-  },
-);
+    handleError(res, error);
+  }
+});
 
 router.get("/sponsor/assets/:assetId/download", async (req, res): Promise<void> => {
   const sponsorId = sponsorReq(req).sponsorSession.sponsorId;

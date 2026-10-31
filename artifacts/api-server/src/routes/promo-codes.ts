@@ -1,4 +1,5 @@
-﻿import { Router, type IRouter, type Request, type Response } from "express";
+import type { DbExecutor } from "../lib/pricing";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and, lte, gte, or, isNull, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { promoCodesTable, bookingsTable, attendeesTable } from "@workspace/db";
@@ -140,9 +141,10 @@ export async function isCodeUsedByEmail(
   code: string,
   normalisedEmail: string,
   excludeBookingId?: number,
+  conn: DbExecutor = db,
 ): Promise<boolean> {
   if (!normalisedEmail) return false;
-  const matchingBookings = await db
+  const matchingBookings = await conn
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
     .where(
@@ -153,7 +155,7 @@ export async function isCodeUsedByEmail(
     );
   const bookingIds = matchingBookings.map((b) => b.id).filter((id) => id !== excludeBookingId);
   if (bookingIds.length === 0) return false;
-  const leads = await db
+  const leads = await conn
     .select({ workEmail: attendeesTable.workEmail, bookingId: attendeesTable.bookingId })
     .from(attendeesTable)
     .where(and(eq(attendeesTable.isLead, true), inArray(attendeesTable.bookingId, bookingIds)));

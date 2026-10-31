@@ -456,13 +456,13 @@ export async function buildConfirmationEmailHtml(
   ].join("");
 
   const manageUrl = booking.managementToken
-    ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/${booking.managementToken}`
+    ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage#${encodeURIComponent(booking.managementToken)}`
     : null;
   const managementLinkHtml = manageUrl ? buildManageLinkSection(manageUrl) : "";
 
   const billingEditUrl =
     booking.managementToken && booking.paymentMethod === "invoice"
-      ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/${booking.managementToken}/billing`
+      ? `${process.env.APP_BASE_URL || "https://register.swpsummit.com"}/manage/billing#${encodeURIComponent(booking.managementToken)}`
       : "";
   const billingEditLinkHtml = billingEditUrl
     ? `<p style="margin:14px 0 0;font-size:14px;"><a href="${billingEditUrl}" style="color:#004eb9;font-weight:600;text-decoration:underline;">${booking.poNumber ? "Update PO number or billing details" : "Add PO number or update billing"}</a></p>`
@@ -1900,7 +1900,9 @@ export async function sendWelcomeEmail(
         .where(eq(bookingsTable.id, bookingId));
       welcomeBooking = booking ?? null;
       if (booking?.managementToken) {
-        manageLinkHtml = buildManageLinkSection(`${appBaseUrl}/manage/${booking.managementToken}`);
+        manageLinkHtml = buildManageLinkSection(
+          `${appBaseUrl}/manage#${encodeURIComponent(booking.managementToken)}`,
+        );
       }
     }
 

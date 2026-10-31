@@ -458,7 +458,10 @@ router.get("/scanner/bootstrap", async (req, res): Promise<void> => {
       .innerJoin(sponsorsTable, eq(sponsorsTable.id, sponsorScannerDevicesTable.sponsorId))
       .where(eq(sponsorScannerDevicesTable.id, device.id));
     const currentPackVersion = await currentLeadPackVersion();
+    const scannerWindow = await getScannerWindow();
     const ready = Boolean(
+      scannerWindow.scanningOpen &&
+      scannerWindow.eventStartAt &&
       record?.cameraTested &&
       record.qrTested &&
       record.storageTested &&
@@ -484,7 +487,7 @@ router.get("/scanner/bootstrap", async (req, res): Promise<void> => {
         lastSyncedAt: record?.lastSyncedAt?.toISOString() ?? null,
       },
       companyKey: companyKey(device.sponsorId, device.accessVersion),
-      scannerWindow: await getScannerWindow(),
+      scannerWindow,
       testQrValue: SCANNER_TEST_CODE,
     });
   } catch (error) {
@@ -578,13 +581,14 @@ router.get("/admin/lead-scanner/overview", adminAuth, async (_req, res): Promise
       .from(sponsorScannerDevicesTable)
       .innerJoin(sponsorsTable, eq(sponsorsTable.id, sponsorScannerDevicesTable.sponsorId))
       .orderBy(desc(sponsorScannerDevicesTable.lastSeenAt));
+    const scannerWindow = await getScannerWindow();
     res.json({
       leadCount: Number(leadCount?.value ?? 0),
       deviceCount: Number(deviceCount?.value ?? 0),
       badgeCount: Number(badgeCount?.value ?? 0),
       currentPackVersion,
       testQrValue: SCANNER_TEST_CODE,
-      scannerWindow: await getScannerWindow(),
+      scannerWindow,
       devices: devices.map((device) => {
         const tested =
           device.cameraTested &&
@@ -596,7 +600,10 @@ router.get("/admin/lead-scanner/overview", adminAuth, async (_req, res): Promise
           ? "revoked"
           : device.packVersion && device.packVersion !== currentPackVersion
             ? "out_of_date"
-            : tested && device.packVersion === currentPackVersion
+            : scannerWindow.eventStartAt &&
+                scannerWindow.scanningOpen &&
+                tested &&
+                device.packVersion === currentPackVersion
               ? "ready"
               : "not_tested";
         return {

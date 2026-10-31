@@ -111,7 +111,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                       {booking.managementToken && (
                         <Button variant="outline" size="sm" asChild>
                           <a
-                            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage/${booking.managementToken}/billing`}
+                            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage/billing#${encodeURIComponent(booking.managementToken)}`}
                           >
                             Add PO number or update billing
                           </a>
@@ -189,7 +189,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                 TBC slots. This link is also included in your confirmation email.
               </p>
               <a
-                href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage/${booking.managementToken}`}
+                href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/manage#${encodeURIComponent(booking.managementToken)}`}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
               >
                 Manage attendees

@@ -85,6 +85,8 @@ export default function AdminSponsorAssets() {
   const missingCount = assets.filter((asset) => asset.status === "missing").length;
 
   const planBackup = async () => {
+    setBackupBatches(null);
+    setError("");
     try {
       const result = await adminJson<{
         batches: Array<{ sponsorIds: number[]; assetIds: string[]; byteSize: number }>;

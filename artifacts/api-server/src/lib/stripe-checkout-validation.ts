@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { Booking } from "@workspace/db";
 import type Stripe from "stripe";
 
 export const STRIPE_REGISTRATION_APP = "swp-2027";
@@ -7,6 +9,28 @@ type CheckoutBooking = {
   stripeSessionId: string | null;
   totalAmount: string | number;
 };
+
+export function checkoutQuoteHash(
+  booking: Pick<
+    Booking,
+    "passType" | "quantity" | "promoCode" | "subtotalAmount" | "vatAmount" | "totalAmount"
+  >,
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        booking.passType,
+        booking.quantity,
+        booking.promoCode || null,
+        Number(booking.subtotalAmount),
+        Number(booking.vatAmount),
+        Number(booking.totalAmount),
+      ]),
+    )
+    .digest("hex");
+}
+
+export class PaymentSettlementConflict extends Error {}
 
 type ValidationFailure = {
   ok: false;

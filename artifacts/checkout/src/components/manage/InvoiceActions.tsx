@@ -39,8 +39,11 @@ export default function InvoiceActions({ token, paymentMethod, recipientHint }: 
     setDownloading(true);
     setDownloadStatus({ kind: "idle" });
     try {
-      const url = `${import.meta.env.BASE_URL}api/bookings/by-management-token/${token}/invoice-pdf`;
-      const resp = await fetch(url, { credentials: "same-origin" });
+      const url = `${import.meta.env.BASE_URL}api/bookings/manage/invoice-pdf`;
+      const resp = await fetch(url, {
+        credentials: "same-origin",
+        headers: { authorization: `Bearer ${token}` },
+      });
       if (!resp.ok) {
         let message = `Could not download the ${documentLabel}. Please try again.`;
         try {
@@ -82,8 +85,8 @@ export default function InvoiceActions({ token, paymentMethod, recipientHint }: 
     setResendStatus({ kind: "idle" });
     try {
       const result = await customFetch<{ ok: true; recipient: string }>(
-        `/api/bookings/by-management-token/${token}/resend-email`,
-        { method: "POST", body: JSON.stringify({}) },
+        "/api/bookings/manage/resend-email",
+        { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({}) },
       );
       setResendStatus({
         kind: "ok",

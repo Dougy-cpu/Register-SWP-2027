@@ -29,6 +29,8 @@ async function reserveWithExecutor(
   if (!mapped) return false;
   if (!mapped.sponsorId) return incrementPromoUsage(normalised, quantity, conn);
 
+  // Serialize claims against allocation edits and approvals for this sponsor.
+  await conn.execute(sql`SELECT id FROM sponsors WHERE id = ${mapped.sponsorId} FOR UPDATE`);
   await conn
     .update(bookingsTable)
     .set({ sponsorId: mapped.sponsorId, updatedAt: new Date() })
@@ -140,6 +142,7 @@ export async function restoreSponsorRedemption(bookingId: number): Promise<boole
       .from(sponsorRedemptionsTable)
       .where(eq(sponsorRedemptionsTable.bookingId, bookingId));
     if (!redemption) return { success: true, sponsorId: null as number | null, units: 0 };
+    await tx.execute(sql`SELECT id FROM sponsors WHERE id = ${redemption.sponsorId} FOR UPDATE`);
     if (redemption.status === "reserved") {
       return { success: true, sponsorId: null as number | null, units: redemption.units };
     }

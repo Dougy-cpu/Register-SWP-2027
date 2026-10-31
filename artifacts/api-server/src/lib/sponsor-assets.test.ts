@@ -1,3 +1,4 @@
+import archiver from "archiver";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@workspace/db", () => {
@@ -27,14 +28,34 @@ function upload(originalname: string, mimetype: string, buffer: Buffer) {
   return { originalname, mimetype, size: buffer.length, buffer };
 }
 
-function ooxml(root: "ppt" | "word", macro = false): Buffer {
-  return Buffer.concat([
-    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
-    Buffer.from(
-      `[Content_Types].xml\0${root}/document.xml\0${macro ? `${root}/vbaProject.bin` : ""}`,
-      "latin1",
-    ),
-  ]);
+async function ooxml(root: "ppt" | "word", macro = false, malformed = false): Promise<Buffer> {
+  const archive = archiver("zip"),
+    chunks: Buffer[] = [];
+  const complete = new Promise<Buffer>((resolve, reject) => {
+    archive.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    archive.once("end", () => resolve(Buffer.concat(chunks)));
+    archive.once("error", reject);
+  });
+  const type = root === "ppt" ? "presentationml" : "wordprocessingml";
+  const element = root === "ppt" ? "presentation" : "document",
+    main = root + "/" + element + ".xml";
+  archive.append(
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/${main}" ContentType="application/vnd.openxmlformats-officedocument.${type}.${element}.main+xml"/></Types>`,
+    { name: "[Content_Types].xml" },
+  );
+  archive.append(
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="${main}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/></Relationships>`,
+    { name: "_rels/.rels" },
+  );
+  archive.append(
+    malformed
+      ? "<unclosed>"
+      : `<t:${element} xmlns:t="http://schemas.openxmlformats.org/${type}/2006/main"/>`,
+    { name: main },
+  );
+  if (macro) archive.append(Buffer.from([1, 2, 3]), { name: root + "/vbaProject.bin" });
+  void archive.finalize().catch((error) => archive.emit("error", error));
+  return complete;
 }
 
 afterEach(() => {
@@ -55,30 +76,37 @@ describe("sponsor asset validation", () => {
     ).toThrow(SponsorAssetValidationError);
   });
 
-  it("accepts the correct OOXML root and blocks embedded VBA", () => {
-    expect(() =>
-      validateSponsorAssetFile(
-        upload(
-          "slides.pptx",
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          ooxml("ppt"),
-        ),
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateSponsorAssetFile(
-        upload(
-          "slides.pptx",
-          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          ooxml("ppt", true),
-        ),
-      ),
-    ).toThrow("file signature does not match");
-  });
+  it.each(["ppt", "word"] as const)(
+    "accepts an actual %s package and rejects broken archives, XML and VBA",
+    async (root) => {
+      const doc = root === "word",
+        name = doc ? "material.docx" : "slides.pptx";
+      const mime =
+        "application/vnd.openxmlformats-officedocument." +
+        (doc ? "wordprocessingml.document" : "presentationml.presentation");
+      const valid = await ooxml(root),
+        macro = await ooxml(root, true),
+        malformed = await ooxml(root, false, true);
+      expect(validateSponsorAssetFile(upload(name, mime, valid)).extension).toBe(
+        doc ? ".docx" : ".pptx",
+      );
+      for (const bytes of [
+        macro,
+        malformed,
+        valid.subarray(0, valid.length - 12),
+        Buffer.from("PK\\x03\\x04 [Content_Types].xml ppt/"),
+      ]) {
+        expect(() => validateSponsorAssetFile(upload(name, mime, bytes))).toThrow(
+          "file signature does not match",
+        );
+      }
+    },
+  );
 
-  it("blocks macro-enabled Office extensions and active SVG content", () => {
+  it("blocks macro-enabled Office extensions and active SVG content", async () => {
+    const slides = await ooxml("ppt");
     expect(() =>
-      validateSponsorAssetFile(upload("slides.pptm", "application/octet-stream", ooxml("ppt"))),
+      validateSponsorAssetFile(upload("slides.pptm", "application/octet-stream", slides)),
     ).toThrow("Executable and macro-enabled files are not accepted");
     expect(() =>
       validateSponsorAssetFile(

@@ -94,13 +94,15 @@ const formsMatch = (a: BillingForm | null, b: BillingForm) =>
 
 export default function EditBilling() {
   const [, params] = useRoute("/manage/:token/billing");
-  const token = params?.token ?? "";
+  const token = window.location.hash.slice(1) || params?.token || "";
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery<BillingResponse>({
     queryKey: ["booking-billing", token],
     queryFn: () =>
-      customFetch<BillingResponse>(`/api/bookings/by-management-token/${token}/billing`),
+      customFetch<BillingResponse>("/api/bookings/manage/billing", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
     enabled: !!token,
     retry: false,
   });
@@ -120,7 +122,8 @@ export default function EditBilling() {
 
   const mutation = useMutation({
     mutationFn: async (payload: BillingForm) =>
-      customFetch<SaveResponse>(`/api/bookings/by-management-token/${token}/billing`, {
+      customFetch<SaveResponse>("/api/bookings/manage/billing", {
+        headers: { authorization: `Bearer ${token}` },
         method: "POST",
         body: JSON.stringify(payload),
       }),

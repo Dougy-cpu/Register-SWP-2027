@@ -64,10 +64,10 @@ export const PASS_PRICES: Record<string, { price: number; originalPrice: number;
 
 const PASS_PRICE_DEFAULTS = PASS_PRICES;
 
-async function getPassPrices(): Promise<
-  Record<string, { price: number; originalPrice: number; seats: number }>
-> {
-  const configs = await db.select().from(passConfigTable);
+async function getPassPrices(
+  conn: DbExecutor,
+): Promise<Record<string, { price: number; originalPrice: number; seats: number }>> {
+  const configs = await conn.select().from(passConfigTable);
   const result = { ...PASS_PRICE_DEFAULTS };
   for (const config of configs) {
     if (result[config.passType]) {
@@ -126,6 +126,7 @@ export async function calculatePricing(
   passType: string,
   quantity: number,
   promoCode?: string | null,
+  conn: DbExecutor = db,
 ): Promise<PricingResult> {
   // ---- Input guards --------------------------------------------------------
   // Reject non-positive / non-integer quantities at the boundary so downstream
@@ -134,7 +135,7 @@ export async function calculatePricing(
     throw new Error("Quantity must be a positive integer");
   }
 
-  const PASS_PRICES = await getPassPrices();
+  const PASS_PRICES = await getPassPrices(conn);
   const passInfo = PASS_PRICES[passType];
   if (!passInfo) throw new Error(`Unknown pass type: ${passType}`);
 
@@ -149,7 +150,7 @@ export async function calculatePricing(
   const baseSubtotalP = pricePerHeadP * billingUnits;
   const originalPriceP = originalUnitP * billingUnits;
 
-  const tiers = await db
+  const tiers = await conn
     .select()
     .from(discountTiersTable)
     .where(eq(discountTiersTable.passType, passType as "single" | "team" | "business"))
@@ -172,7 +173,7 @@ export async function calculatePricing(
   let promoRemainingSeats: number | null = null;
   if (promoCode) {
     const now = new Date();
-    const [promo] = await db
+    const [promo] = await conn
       .select()
       .from(promoCodesTable)
       .where(

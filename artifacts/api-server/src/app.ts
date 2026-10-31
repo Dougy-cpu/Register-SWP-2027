@@ -61,6 +61,13 @@ app.use(
 );
 
 // ---------------------------------------------------------------------------
+// Previously sent management links can still include credentials in their paths.
+app.use(["/manage", "/sponsor/access"], (_req, res, next) => {
+  res.set("Referrer-Policy", "no-referrer");
+  res.set("Cache-Control", "private, no-store");
+  next();
+});
+
 // CORS
 // ---------------------------------------------------------------------------
 const PRODUCTION_ORIGIN = "https://register.swpsummit.com";
@@ -107,9 +114,10 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: pathname.startsWith("/api/sponsor/access/")
-            ? "/api/sponsor/access/[redacted]"
-            : pathname,
+          url: pathname.replace(
+            /^(\/(?:api\/bookings\/by-(?:session|management-token)|(?:api\/)?sponsor\/access|manage)\/)[^/]+/i,
+            "$1[redacted]",
+          ),
         };
       },
       res(res) {
@@ -168,7 +176,7 @@ app.use("/api", (req, res, next) => {
 // Tighter limits on mutation/creation endpoints only — reads and updates
 // on /api/bookings/* are not restricted beyond the general limiter.
 app.post("/api/admin/login", adminLoginThrottle);
-app.post("/api/bookings", bookingCreationLimiter);
+app.post(["/api/bookings", "/api/bookings/start"], bookingCreationLimiter);
 app.post("/api/stripe/create-checkout-session", paymentLimiter);
 app.post("/api/stripe/create-invoice", paymentLimiter);
 app.post("/api/stripe/confirm-card-payment", paymentLimiter);

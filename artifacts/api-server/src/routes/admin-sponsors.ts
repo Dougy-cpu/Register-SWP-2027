@@ -1,5 +1,4 @@
 import { Router, type IRouter, type Response } from "express";
-import multer from "multer";
 import { and, asc, desc, eq, gte, ilike, inArray, lte, ne } from "drizzle-orm";
 import { retiredSocialTask } from "../lib/sponsor-progress";
 import {
@@ -34,7 +33,9 @@ import {
   recordSponsorStorageFailure,
   safeDownloadFilename,
   SponsorAssetValidationError,
-  SPONSOR_DOCUMENT_MAX_BYTES,
+  sponsorFileUpload,
+  setSponsorAssetStatus,
+  SponsorAssetConflict,
   streamSponsorAssetsZip,
 } from "../lib/sponsor-assets";
 import { getSponsorObjectStorage, SponsorStorageError } from "../lib/sponsor-storage";
@@ -47,10 +48,7 @@ import { logger } from "../lib/logger";
 import { resolvePassRequest } from "../lib/sponsor-pass-requests";
 
 const router: IRouter = Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: SPONSOR_DOCUMENT_MAX_BYTES, files: 1, fields: 12 },
-});
+const upload = sponsorFileUpload(12);
 const ASSET_CATEGORIES = [
   "logo",
   "headshot",
@@ -74,6 +72,10 @@ function assetIdParam(value: string | string[] | undefined): string {
 }
 
 function sendRouteError(res: Response, error: unknown): void {
+  if (error instanceof SponsorAssetConflict) {
+    res.status(409).json({ error: error.message });
+    return;
+  }
   if (error instanceof SponsorNotFoundError) {
     res.status(404).json({ error: error.message });
     return;
@@ -788,60 +790,56 @@ router.get("/admin/sponsors/:sponsorId/assets", async (req, res): Promise<void> 
   res.json({ assets: assets.map((asset) => formatSponsorAsset(asset)) });
 });
 
-router.post(
-  "/admin/sponsors/:sponsorId/assets",
-  upload.single("file"),
-  async (req, res): Promise<void> => {
-    const sponsorId = idParam(req.params.sponsorId);
-    const category = String(req.body.category ?? "");
-    if (!sponsorId || !req.file || !ASSET_CATEGORIES.includes(category as never)) {
-      res.status(400).json({ error: "Sponsor, category and file are required" });
-      return;
-    }
-    try {
-      const asset = await createSponsorAsset({
+router.post("/admin/sponsors/:sponsorId/assets", upload, async (req, res): Promise<void> => {
+  const sponsorId = idParam(req.params.sponsorId);
+  const category = String(req.body.category ?? "");
+  if (!sponsorId || !req.file || !ASSET_CATEGORIES.includes(category as never)) {
+    res.status(400).json({ error: "Sponsor, category and file are required" });
+    return;
+  }
+  try {
+    const asset = await createSponsorAsset({
+      sponsorId,
+      category: category as (typeof ASSET_CATEGORIES)[number],
+      file: req.file,
+      sessionId: req.body.sessionId ? Number(req.body.sessionId) : null,
+      presenterId: req.body.presenterId ? Number(req.body.presenterId) : null,
+      uploaderType: "admin",
+    });
+    if (asset.category === "logistics" && typeof req.body.documentTitle === "string") {
+      await db.insert(sponsorDocumentsTable).values({
         sponsorId,
-        category: category as (typeof ASSET_CATEGORIES)[number],
-        file: req.file,
-        sessionId: req.body.sessionId ? Number(req.body.sessionId) : null,
-        presenterId: req.body.presenterId ? Number(req.body.presenterId) : null,
-        uploaderType: "admin",
+        assetId: asset.id,
+        title: req.body.documentTitle.trim() || asset.originalName,
+        required: req.body.required !== "false",
+        acknowledgementVersion: asset.version,
       });
-      if (asset.category === "logistics" && typeof req.body.documentTitle === "string") {
-        await db.insert(sponsorDocumentsTable).values({
-          sponsorId,
-          assetId: asset.id,
-          title: req.body.documentTitle.trim() || asset.originalName,
-          required: req.body.required !== "false",
-          acknowledgementVersion: asset.version,
-        });
-      }
-      await sendSponsorInternalNotification({
-        sponsorId,
-        category: "content",
-        event: "Sponsor asset uploaded by admin",
-        summary: `${asset.originalName} was uploaded as ${asset.category}.`,
-      });
-      res.status(201).json(formatSponsorAsset(asset));
-    } catch (error) {
-      if (error instanceof SponsorStorageError) {
-        await recordSponsorStorageFailure({
-          sponsorId,
-          operation: "admin_upload",
-          error,
-          actorType: "admin",
-        }).catch((attentionError) =>
-          logger.error({ attentionError, sponsorId }, "Could not record App Storage failure"),
-        );
-      }
-      sendRouteError(res, error);
     }
-  },
-);
+    await sendSponsorInternalNotification({
+      sponsorId,
+      category: "content",
+      event: "Sponsor asset uploaded by admin",
+      summary: `${asset.originalName} was uploaded as ${asset.category}.`,
+    });
+    res.status(201).json(formatSponsorAsset(asset));
+  } catch (error) {
+    if (error instanceof SponsorStorageError) {
+      await recordSponsorStorageFailure({
+        sponsorId,
+        operation: "admin_upload",
+        error,
+        actorType: "admin",
+      }).catch((attentionError) =>
+        logger.error({ attentionError, sponsorId }, "Could not record App Storage failure"),
+      );
+    }
+    sendRouteError(res, error);
+  }
+});
 
 router.post(
   "/admin/sponsors/:sponsorId/assets/:assetId/replace",
-  upload.single("file"),
+  upload,
   async (req, res): Promise<void> => {
     const sponsorId = idParam(req.params.sponsorId);
     const assetId = assetIdParam(req.params.assetId);
@@ -913,21 +911,7 @@ router.patch("/admin/sponsors/:sponsorId/assets/:assetId", async (req, res): Pro
       return;
     }
   }
-  const [updated] = await db
-    .update(sponsorAssetsTable)
-    .set({
-      status: status as "active" | "archived",
-      archivedAt: status === "archived" ? new Date() : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(sponsorAssetsTable.id, assetId))
-    .returning();
-  await db.insert(sponsorActivityTable).values({
-    sponsorId,
-    type: status === "archived" ? "asset_archived" : "asset_restored",
-    actorType: "admin",
-    data: { assetId },
-  });
+  const updated = await setSponsorAssetStatus(existing, status as "active" | "archived");
   await sendSponsorInternalNotification({
     sponsorId,
     category: "content",
@@ -1032,7 +1016,7 @@ router.get("/admin/sponsors/:sponsorId/assets/complete.zip", async (req, res): P
     res.status(404).json({ error: "Sponsor not found" });
     return;
   }
-  const assets = await activeSponsorAssets(sponsorId);
+  const assets = await activeSponsorAssets(sponsorId, undefined, true);
   const started = await streamSponsorAssetsZip(
     res,
     assets,
@@ -1097,11 +1081,22 @@ router.post("/admin/sponsor-assets/backup-plan", async (req, res): Promise<void>
   const assets = await db
     .select()
     .from(sponsorAssetsTable)
-    .where(eq(sponsorAssetsTable.status, "active"))
+    .where(inArray(sponsorAssetsTable.status, ["active", "missing"]))
     .orderBy(asc(sponsorAssetsTable.sponsorId), asc(sponsorAssetsTable.createdAt));
+  const missing = assets.filter((asset) => asset.status === "missing" && !asset.archivedAt);
+  if (missing.length) {
+    res
+      .status(409)
+      .json({
+        error:
+          "The complete backup contains missing files. Restore them or explicitly archive them before downloading.",
+        missingAssetIds: missing.map((a) => a.id),
+      });
+    return;
+  }
   const batches: Array<{ sponsorIds: number[]; assetIds: string[]; byteSize: number }> = [];
   let current = { sponsorIds: [] as number[], assetIds: [] as string[], byteSize: 0 };
-  for (const asset of assets) {
+  for (const asset of assets.filter((asset) => asset.status === "active")) {
     if (current.assetIds.length && current.byteSize + asset.byteSize > maxBytes) {
       batches.push(current);
       current = { sponsorIds: [], assetIds: [], byteSize: 0 };

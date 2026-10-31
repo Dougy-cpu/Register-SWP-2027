@@ -1788,6 +1788,27 @@ export interface AdminStats {
   recentRegistrations: RegistrationSummary[];
 }
 
+export type GetManagedBooking200 = {
+  id: number;
+  status: string;
+  passType: string;
+  quantity: number;
+  /** @nullable */
+  orderReference?: string | null;
+  /** @nullable */
+  paymentMethod?: string | null;
+  /** @nullable */
+  billingEmail?: string | null;
+  /** @nullable */
+  invoiceBadgeStatus?: string | null;
+  changesLocked: boolean;
+  /** @nullable */
+  lockedMessage?: string | null;
+  attendees: Attendee[];
+};
+
+export type UpdateManagedBillingBody = { [key: string]: unknown };
+
 export type GetBookingPricingParams = {
   promoCode?: string;
 };
@@ -1989,6 +2010,10 @@ export type PlanAllSponsorBackup200 = {
 export type DownloadAllSponsorBackupBatchBody = {
   /** @minItems 1 */
   assetIds: string[];
+};
+
+export type ExchangePrivateSponsorLinkBody = {
+  token: string;
 };
 
 export type RequestMoreSponsorPassesBody = {

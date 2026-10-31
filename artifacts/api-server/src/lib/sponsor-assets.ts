@@ -1,8 +1,12 @@
+import { isOfficePackage } from "./office-package";
+import { Readable } from "node:stream";
+import type { RequestHandler } from "express";
+import multer from "multer";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Response } from "express";
 import archiver from "archiver";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or, isNull, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import {
   db,
@@ -19,6 +23,31 @@ import { logger } from "./logger";
 
 export const SPONSOR_RASTER_MAX_BYTES = 10 * 1024 * 1024;
 export const SPONSOR_DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+
+export function sponsorFileUpload(maxFields: number): RequestHandler {
+  const single = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: SPONSOR_DOCUMENT_MAX_BYTES, files: 1, fields: maxFields },
+  }).single("file");
+  return (req, res, next) =>
+    single(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res
+            .status(413)
+            .json({
+              error: "This file is too large. Images can be up to 10 MB and documents up to 25 MB.",
+            });
+          return;
+        }
+        res.status(400).json({ error: "Choose one file and try the upload again." });
+        return;
+      }
+      next(err);
+    });
+}
+
+export class SponsorAssetConflict extends Error {}
 
 const SAFE_RASTER_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const BLOCKED_EXTENSIONS = new Set([
@@ -53,23 +82,6 @@ interface AllowedFile {
 
 function begins(buffer: Buffer, bytes: number[]): boolean {
   return bytes.every((value, index) => buffer[index] === value);
-}
-
-function isZip(buffer: Buffer): boolean {
-  return begins(buffer, [0x50, 0x4b, 0x03, 0x04]);
-}
-
-function isSafeOoxml(buffer: Buffer, rootFolder: "ppt" | "word"): boolean {
-  if (!isZip(buffer)) return false;
-  // ZIP central-directory filenames are stored as plain bytes even when file
-  // contents are compressed. Checking them prevents a renamed arbitrary ZIP,
-  // a Word/PowerPoint type mismatch and embedded VBA from passing validation.
-  const directory = buffer.toString("latin1").toLowerCase();
-  return (
-    directory.includes("[content_types].xml") &&
-    directory.includes(`${rootFolder}/`) &&
-    !directory.includes("vbaproject.bin")
-  );
 }
 
 const ALLOWED_FILES: Record<string, AllowedFile> = {
@@ -128,12 +140,12 @@ const ALLOWED_FILES: Record<string, AllowedFile> = {
   ".pptx": {
     mimeTypes: ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
     maxBytes: SPONSOR_DOCUMENT_MAX_BYTES,
-    signature: (b) => isSafeOoxml(b, "ppt"),
+    signature: (b) => isOfficePackage(b, "ppt"),
   },
   ".docx": {
     mimeTypes: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
     maxBytes: SPONSOR_DOCUMENT_MAX_BYTES,
-    signature: (b) => isSafeOoxml(b, "word"),
+    signature: (b) => isOfficePackage(b, "word"),
   },
 };
 
@@ -291,6 +303,61 @@ export async function recordSponsorStorageFailure(input: {
   });
 }
 
+type AssetTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function assetFamily(conn: AssetTx | typeof db, sponsorId: number, assetId: string) {
+  const result = await conn.execute<{
+    id: string;
+    version: number;
+    status: SponsorAsset["status"];
+  }>(sql`WITH RECURSIVE ancestors AS (
+    SELECT id,replaces_asset_id FROM sponsor_assets WHERE id=${assetId} AND sponsor_id=${sponsorId}
+    UNION SELECT p.id,p.replaces_asset_id FROM sponsor_assets p JOIN ancestors a ON a.replaces_asset_id=p.id WHERE p.sponsor_id=${sponsorId}
+  ), family AS (
+    SELECT s.id,s.version,s.status FROM sponsor_assets s JOIN ancestors a ON s.id=a.id WHERE a.replaces_asset_id IS NULL
+    UNION SELECT s.id,s.version,s.status FROM sponsor_assets s JOIN family f ON s.replaces_asset_id=f.id WHERE s.sponsor_id=${sponsorId}
+  ) SELECT id,version,status FROM family ORDER BY version DESC`);
+  return result.rows;
+}
+
+export async function setSponsorAssetStatus(asset: SponsorAsset, status: "archived" | "active") {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM sponsors WHERE id=${asset.sponsorId} FOR UPDATE`);
+    const family = await assetFamily(tx, asset.sponsorId, asset.id);
+    if (!family.some((row) => row.id === asset.id))
+      throw new SponsorAssetConflict("Refresh the file list before changing this version.");
+    const otherIds = family.filter((row) => row.id !== asset.id).map((row) => row.id);
+    if (status === "active" && otherIds.length) {
+      await tx
+        .update(sponsorAssetsTable)
+        .set({ status: "archived", archivedAt: new Date() })
+        .where(
+          and(inArray(sponsorAssetsTable.id, otherIds), eq(sponsorAssetsTable.status, "active")),
+        );
+      await tx
+        .update(sponsorDocumentsTable)
+        .set({
+          assetId: asset.id,
+          acknowledgementVersion: sql`${sponsorDocumentsTable.acknowledgementVersion}+1`,
+        })
+        .where(inArray(sponsorDocumentsTable.assetId, otherIds));
+    }
+    const [updated] = await tx
+      .update(sponsorAssetsTable)
+      .set({ status, archivedAt: status === "archived" ? new Date() : null })
+      .where(eq(sponsorAssetsTable.id, asset.id))
+      .returning();
+    await tx
+      .insert(sponsorActivityTable)
+      .values({
+        sponsorId: asset.sponsorId,
+        type: status === "archived" ? "asset_archived" : "asset_restored",
+        actorType: "admin",
+        data: { assetId: asset.id },
+      });
+    return updated;
+  });
+}
+
 export async function createSponsorAsset(input: {
   sponsorId: number;
   category: AssetCategory;
@@ -312,7 +379,8 @@ export async function createSponsorAsset(input: {
     await resolveSponsorAssetRelationships({ sponsorId: input.sponsorId, ...relationships });
   }
   const id = uuidv4();
-  const version = input.replaces ? input.replaces.version + 1 : 1;
+  const previous = input.replaces ? await assetFamily(db, input.sponsorId, input.replaces.id) : [];
+  const version = previous.length ? previous[0].version + 1 : 1;
   const storageKey = sponsorObjectKey(input.sponsorId, id, version);
   const storage = getSponsorObjectStorage();
 
@@ -320,14 +388,26 @@ export async function createSponsorAsset(input: {
   try {
     return await db.transaction(async (tx) => {
       if (input.replaces) {
-        await tx
+        await tx.execute(sql`SELECT id FROM sponsors WHERE id=${input.sponsorId} FOR UPDATE`);
+        const current = await assetFamily(tx, input.sponsorId, input.replaces.id);
+        if (!current.length || current[0].version + 1 !== version)
+          throw new SponsorAssetConflict(
+            "A newer file version exists. Refresh the file list and try again.",
+          );
+        const [archived] = await tx
           .update(sponsorAssetsTable)
           .set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() })
           .where(
             and(
               eq(sponsorAssetsTable.id, input.replaces.id),
               eq(sponsorAssetsTable.sponsorId, input.sponsorId),
+              eq(sponsorAssetsTable.status, "active"),
             ),
+          )
+          .returning({ id: sponsorAssetsTable.id });
+        if (!archived)
+          throw new SponsorAssetConflict(
+            "This file version has already changed. Refresh the file list before replacing it.",
           );
       }
       const [asset] = await tx
@@ -387,7 +467,11 @@ export async function createSponsorAsset(input: {
       if (input.replaces?.category === "logistics") {
         await tx
           .update(sponsorDocumentsTable)
-          .set({ assetId: asset.id, acknowledgementVersion: version, updatedAt: new Date() })
+          .set({
+            assetId: asset.id,
+            acknowledgementVersion: sql`${sponsorDocumentsTable.acknowledgementVersion}+1`,
+            updatedAt: new Date(),
+          })
           .where(eq(sponsorDocumentsTable.assetId, input.replaces.id));
       }
       return asset;
@@ -547,11 +631,49 @@ export async function streamSponsorAssetsZip(
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", `attachment; filename="${safeDownloadFilename(filename)}"`);
   res.setHeader("X-Content-Type-Options", "nosniff");
-  archive.on("warning", (error) => logger.warn({ error }, "Sponsor ZIP warning"));
-  archive.on("error", (error) => {
+  const sources = new Set<Readable>();
+  let failing = false;
+  let settle!: (success: boolean) => void;
+  const completed = new Promise<boolean>((resolve) => {
+    settle = resolve;
+  });
+  function abortStreams() {
+    archive.unpipe(res);
+    for (const source of sources) source.destroy();
+    archive.abort();
+    archive.destroy();
+  }
+  async function fail(error: Error, sponsorIds: number[]) {
+    if (failing) return;
+    failing = true;
+    abortStreams();
     logger.error({ error }, "Sponsor ZIP stream failed");
-    if (!res.headersSent) res.status(500).json({ error: "The ZIP download could not be created" });
-    else res.destroy(error);
+    await Promise.allSettled(
+      sponsorIds.map((sponsorId) =>
+        recordSponsorStorageFailure({ sponsorId, operation: "zip_download", error }),
+      ),
+    );
+    if (!res.headersSent && !res.destroyed) {
+      res.removeHeader("Content-Disposition");
+      res
+        .status(503)
+        .type("application/json")
+        .json({ error: "The folder download failed. Retry it or check Needs attention." });
+    } else if (!res.destroyed) res.destroy();
+    settle(false);
+  }
+  const allSponsors = [...new Set(assets.map((asset) => asset.sponsorId))];
+  archive.on("warning", (error) => void fail(error, allSponsors));
+  archive.on("error", (error) => void fail(error, allSponsors));
+  res.once("finish", () => {
+    if (!failing) settle(true);
+  });
+  res.once("close", () => {
+    if (!res.writableFinished && !failing) {
+      failing = true;
+      abortStreams();
+      settle(false);
+    }
   });
   archive.pipe(res);
   archive.append(manifestCsv(assets, sessions, presenters), { name: "manifest.csv" });
@@ -565,19 +687,35 @@ export async function streamSponsorAssetsZip(
       entry = `${prefix}${asset.category}/v${asset.version}-${asset.id.slice(0, 8)}-${base}`;
     }
     names.add(entry);
-    archive.append(storage.stream(asset.storageKey), { name: entry });
+    // Open one object when the archiver consumes it. Source errors do not
+    // automatically propagate through Node's pipe() into the archive.
+    const source = Readable.from(
+      (async function* () {
+        yield* storage.stream(asset.storageKey);
+      })(),
+    );
+    sources.add(source);
+    source.once("close", () => sources.delete(source));
+    source.once("error", (error) => void fail(error, [asset.sponsorId]));
+    archive.append(source, { name: entry });
   }
-  await archive.finalize();
-  return true;
+  void archive.finalize().catch((error) => fail(error, allSponsors));
+  return completed;
 }
 
 export async function activeSponsorAssets(
   sponsorId: number,
   ids?: string[],
+  includeMissing = false,
 ): Promise<SponsorAsset[]> {
   const filters = [
     eq(sponsorAssetsTable.sponsorId, sponsorId),
-    eq(sponsorAssetsTable.status, "active"),
+    includeMissing
+      ? or(
+          eq(sponsorAssetsTable.status, "active"),
+          and(eq(sponsorAssetsTable.status, "missing"), isNull(sponsorAssetsTable.archivedAt)),
+        )
+      : eq(sponsorAssetsTable.status, "active"),
   ];
   if (ids?.length) filters.push(inArray(sponsorAssetsTable.id, ids));
   return db

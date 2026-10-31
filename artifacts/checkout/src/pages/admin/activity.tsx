@@ -134,6 +134,18 @@ const EVENT_TYPE_CONFIG: Record<
     color: "text-yellow-700",
     bg: "bg-yellow-50 border-yellow-200",
   },
+  checkout_payment_attempt: {
+    label: "Checkout payment attempt",
+    icon: Shield,
+    color: "text-slate-700",
+    bg: "bg-slate-100",
+  },
+  checkout_payment_review: {
+    label: "Payment needs review",
+    icon: Shield,
+    color: "text-red-700",
+    bg: "bg-red-100",
+  },
   admin_login_success: {
     label: "Admin Login",
     icon: ShieldCheck,

@@ -123,6 +123,9 @@ const { mockDb, getRows, resetStore, makeTable, stripeMock, setStripeAvailable, 
             pred = p;
             return builder;
           },
+          for(_strength: string) {
+            return builder;
+          },
           orderBy(..._args: unknown[]) {
             return builder;
           },

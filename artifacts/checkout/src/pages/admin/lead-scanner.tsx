@@ -222,12 +222,13 @@ export default function AdminLeadScanner() {
           <Metric label="Badge ready" value={badgeReady} icon={QrCode} />
         </div>
 
-        {overview && !overview.scannerWindow.eventEndAt && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
-            Configure the event start and end time in Settings before scanning. The scanner fails
-            closed until an end time exists.
-          </div>
-        )}
+        {overview &&
+          (!overview.scannerWindow.eventStartAt || !overview.scannerWindow.eventEndAt) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
+              Set the Summit start and end times in Settings before testing attendee badges. A test
+              badge can work before attendee scanning is available.
+            </div>
+          )}
 
         <Card className="swp-card overflow-hidden">
           <div className="p-5 border-b flex items-center justify-between gap-4">

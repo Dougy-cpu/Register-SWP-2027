@@ -1,5 +1,10 @@
+import {
+  protectComplimentaryConfirmation,
+  CheckoutPaymentError,
+  runCheckoutAttempt,
+} from "../lib/checkout-payment";
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gte, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { bookingsTable, attendeesTable, eventSettingsTable } from "@workspace/db";
 import { calculatePricing } from "../lib/pricing";
@@ -39,9 +44,47 @@ function isAdminRequest(req: import("express").Request): boolean {
   return verifyAdminToken(token, password).valid;
 }
 
+function managementCredential(req: import("express").Request): string | undefined {
+  const legacy = req.params.token;
+  return typeof legacy === "string"
+    ? legacy
+    : req.get("authorization")?.match(/^Bearer ([^\s]+)$/i)?.[1];
+}
+
 const router: IRouter = Router();
 const CHECKOUT_EDITABLE_STATUSES = ["partial", "pending_payment"] as const;
 const CHECKOUT_CLOSED_MESSAGE = "This booking is no longer editable through checkout.";
+
+async function reissueAfterBillingEdit(
+  stripe: NonNullable<ReturnType<typeof getStripe>>,
+  booking: typeof bookingsTable.$inferSelect,
+) {
+  const result = await runCheckoutAttempt(
+    stripe,
+    booking.id,
+    booking.sessionToken,
+    "reissue",
+    async (tx, locked, key) => {
+      const issued = await reissueBookingInvoice(stripe, locked.id, tx, key);
+      await applyReissueInvoiceResultTx(tx, locked.id, issued);
+      return {
+        invoiceId: issued.alreadyPaid ? locked.stripeInvoiceId! : issued.invoiceId,
+        invoiceUrl: issued.alreadyPaid ? locked.stripeInvoicePdfUrl : issued.pdfUrl,
+        paymentUrl: issued.alreadyPaid ? locked.stripeInvoicePaymentUrl : issued.paymentUrl,
+        invoiceReference: locked.orderReference || "",
+        alreadyProcessed: issued.alreadyPaid,
+      };
+    },
+    async (locked) => {
+      if (locked.stripeInvoiceId !== booking.stripeInvoiceId)
+        throw new CheckoutPaymentError(
+          409,
+          "The invoice was already updated. Refresh the booking.",
+        );
+    },
+  );
+  return { alreadyPaid: "alreadyProcessed" in result && !!result.alreadyProcessed };
+}
 
 async function generateOrderRef(bookingId?: number): Promise<string> {
   const [settings] = await db
@@ -120,35 +163,8 @@ router.post("/bookings", async (req, res): Promise<void> => {
     return;
   }
 
-  const existing = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.sessionToken, sessionToken));
-
-  if (existing.length > 0) {
-    const pricing = await calculatePricing(passType, quantity);
-    const [updated] = await db
-      .update(bookingsTable)
-      .set({
-        passType,
-        attendeeType,
-        quantity,
-        subtotalAmount: pricing.subtotalAfterDiscounts.toString(),
-        vatAmount: pricing.vatAmount.toString(),
-        totalAmount: pricing.total.toString(),
-        groupDiscountAmount:
-          pricing.groupDiscountAmount > 0 ? pricing.groupDiscountAmount.toString() : null,
-        currentStep: Math.max(currentStep, existing[0].currentStep),
-      })
-      .where(eq(bookingsTable.id, existing[0].id))
-      .returning();
-    res.status(201).json(formatBooking(updated));
-    return;
-  }
-
   const pricing = await calculatePricing(passType, quantity);
-
-  const [booking] = await db
+  const [created] = await db
     .insert(bookingsTable)
     .values({
       sessionToken,
@@ -156,17 +172,24 @@ router.post("/bookings", async (req, res): Promise<void> => {
       attendeeType,
       quantity,
       status: "partial",
-      subtotalAmount: pricing.subtotalAfterDiscounts.toString(),
-      vatAmount: pricing.vatAmount.toString(),
-      totalAmount: pricing.total.toString(),
-      groupDiscountAmount:
-        pricing.groupDiscountAmount > 0 ? pricing.groupDiscountAmount.toString() : null,
-      currentStep,
       managementToken: uuidv4(),
+      currentStep:
+        Number.isInteger(currentStep) && currentStep >= 1 && currentStep <= 4 ? currentStep : 1,
+      subtotalAmount: String(pricing.subtotalAfterDiscounts),
+      vatAmount: String(pricing.vatAmount),
+      totalAmount: String(pricing.total),
+      groupDiscountAmount: pricing.groupDiscountAmount ? String(pricing.groupDiscountAmount) : null,
     })
+    .onConflictDoNothing({ target: bookingsTable.sessionToken })
     .returning();
-
-  res.status(201).json(formatBooking(booking));
+  const booking =
+    created ??
+    (await db.select().from(bookingsTable).where(eq(bookingsTable.sessionToken, sessionToken)))[0];
+  if (!booking || !CHECKOUT_EDITABLE_STATUSES.some((status) => status === booking.status)) {
+    res.status(409).json({ error: CHECKOUT_CLOSED_MESSAGE });
+    return;
+  }
+  res.status(created ? 201 : 200).json(formatBooking(booking));
 });
 
 router.post("/bookings/start", async (req, res): Promise<void> => {
@@ -206,67 +229,56 @@ router.post("/bookings/start", async (req, res): Promise<void> => {
   const requestedCurrentStep =
     Number.isInteger(currentStep) && currentStep >= 1 && currentStep <= 2 ? currentStep : 2;
 
-  const [existing] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.sessionToken, sessionToken));
-
   const pricing = await calculatePricing(passType, quantity);
   const gdprConsentAt = gdprConsent ? new Date() : null;
-  const managementToken = uuidv4();
-
-  const { finalBooking } = await db.transaction(async (tx) => {
-    let bookingId: number;
-
-    if (existing) {
-      const [updated] = await tx
+  const result = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(bookingsTable)
+      .values({
+        sessionToken,
+        passType,
+        attendeeType,
+        quantity,
+        status: "partial",
+        managementToken: uuidv4(),
+        subtotalAmount: String(pricing.subtotalAfterDiscounts),
+        vatAmount: String(pricing.vatAmount),
+        totalAmount: String(pricing.total),
+        groupDiscountAmount: pricing.groupDiscountAmount
+          ? String(pricing.groupDiscountAmount)
+          : null,
+        currentStep: requestedCurrentStep,
+      })
+      .onConflictDoNothing({ target: bookingsTable.sessionToken })
+      .returning();
+    const booking =
+      created ??
+      (
+        await tx
+          .select()
+          .from(bookingsTable)
+          .where(eq(bookingsTable.sessionToken, sessionToken))
+          .for("update")
+      )[0];
+    if (!booking || !CHECKOUT_EDITABLE_STATUSES.some((status) => status === booking.status))
+      return null;
+    // A retry from the first screen must not overwrite a later checkout step.
+    if (!created && booking.currentStep > 2) return { finalBooking: booking, created: false };
+    const bookingId = booking.id;
+    if (!created && booking.currentStep < requestedCurrentStep)
+      await tx
         .update(bookingsTable)
-        .set({
-          passType,
-          attendeeType,
-          quantity,
-          subtotalAmount: pricing.subtotalAfterDiscounts.toString(),
-          vatAmount: pricing.vatAmount.toString(),
-          totalAmount: pricing.total.toString(),
-          groupDiscountAmount:
-            pricing.groupDiscountAmount > 0 ? pricing.groupDiscountAmount.toString() : null,
-          currentStep: Math.max(requestedCurrentStep, existing.currentStep),
-        })
-        .where(eq(bookingsTable.id, existing.id))
-        .returning();
-      bookingId = updated.id;
-    } else {
-      const [created] = await tx
-        .insert(bookingsTable)
-        .values({
-          sessionToken,
-          passType,
-          attendeeType,
-          quantity,
-          status: "partial",
-          subtotalAmount: pricing.subtotalAfterDiscounts.toString(),
-          vatAmount: pricing.vatAmount.toString(),
-          totalAmount: pricing.total.toString(),
-          groupDiscountAmount:
-            pricing.groupDiscountAmount > 0 ? pricing.groupDiscountAmount.toString() : null,
-          currentStep: requestedCurrentStep,
-          managementToken,
-        })
-        .returning();
-      bookingId = created.id;
-    }
-
-    const [existingAttendee] = existing
+        .set({ currentStep: requestedCurrentStep })
+        .where(eq(bookingsTable.id, bookingId));
+    const [existingAttendee] = !created
       ? await tx
           .select()
           .from(attendeesTable)
           .where(and(eq(attendeesTable.bookingId, bookingId), eq(attendeesTable.isLead, true)))
       : [undefined];
 
-    let attendee: typeof attendeesTable.$inferSelect;
-
     if (existingAttendee) {
-      const [updated] = await tx
+      await tx
         .update(attendeesTable)
         .set({
           firstName,
@@ -280,9 +292,8 @@ router.post("/bookings/start", async (req, res): Promise<void> => {
         })
         .where(eq(attendeesTable.id, existingAttendee.id))
         .returning();
-      attendee = updated;
     } else {
-      const [created] = await tx
+      await tx
         .insert(attendeesTable)
         .values({
           bookingId,
@@ -298,7 +309,6 @@ router.post("/bookings/start", async (req, res): Promise<void> => {
           seatIndex: 0,
         })
         .returning();
-      attendee = created;
     }
 
     const [finalBooking] = await tx
@@ -306,81 +316,122 @@ router.post("/bookings/start", async (req, res): Promise<void> => {
       .from(bookingsTable)
       .where(eq(bookingsTable.id, bookingId));
 
-    return { finalBooking, attendee };
+    return { finalBooking, created: !!created };
   });
 
+  if (!result) {
+    res.status(409).json({ error: CHECKOUT_CLOSED_MESSAGE });
+    return;
+  }
+  const { finalBooking } = result;
   const allAttendees = await db
     .select()
     .from(attendeesTable)
     .where(eq(attendeesTable.bookingId, finalBooking.id));
 
-  res.status(existing ? 200 : 201).json({
+  res.status(result.created ? 201 : 200).json({
     ...formatBooking(finalBooking),
     attendees: allAttendees.map(formatAttendee),
   });
 });
 
-router.get("/bookings/by-session/:sessionToken", async (req, res): Promise<void> => {
-  const { sessionToken } = req.params;
-  const [initial] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.sessionToken, sessionToken));
+router.get(
+  ["/bookings/current", "/bookings/by-session/:sessionToken"],
+  async (req, res): Promise<void> => {
+    const sessionToken =
+      typeof req.params.sessionToken === "string"
+        ? req.params.sessionToken
+        : req.get("x-booking-session");
+    if (!sessionToken) {
+      res.status(403).json({ error: "Booking session required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
+    const [initial] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.sessionToken, sessionToken));
 
-  if (!initial) {
-    res.json(null);
-    return;
-  }
+    if (!initial) {
+      res.json(null);
+      return;
+    }
 
-  // Live re-poll Stripe if our cached invoice status is stale (or unset) so the
-  // Confirmation page badge reflects reality even if the webhook hasn't fired yet.
-  await refreshStripeInvoiceStatusIfStale(getStripe(), initial.id);
+    // Live re-poll Stripe if our cached invoice status is stale (or unset) so the
+    // Confirmation page badge reflects reality even if the webhook hasn't fired yet.
+    await refreshStripeInvoiceStatusIfStale(getStripe(), initial.id);
 
-  const [[booking], attendees] = await Promise.all([
-    db.select().from(bookingsTable).where(eq(bookingsTable.id, initial.id)),
-    db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, initial.id)),
-  ]);
+    const [[booking], attendees] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, initial.id)),
+      db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, initial.id)),
+    ]);
 
-  res.json({
-    ...formatBooking(booking),
-    attendees: attendees.map(formatAttendee),
-  });
-});
+    res.json({
+      ...formatBooking(booking),
+      attendees: attendees.map(formatAttendee),
+    });
+  },
+);
 
-router.get("/bookings/by-management-token/:token", async (req, res): Promise<void> => {
-  const { token } = req.params;
+router.get(
+  ["/bookings/manage", "/bookings/by-management-token/:token"],
+  async (req, res): Promise<void> => {
+    const token = managementCredential(req);
+    if (!token) {
+      res.status(403).json({ error: "Booking management link required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
 
-  const [initial] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.managementToken, token));
+    const [initial] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.managementToken, token));
 
-  if (!initial) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
+    if (!initial) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
 
-  // Live re-poll Stripe if our cached invoice status is stale (or unset). Errors are
-  // swallowed so a Stripe blip doesn't break the page.
-  await refreshStripeInvoiceStatusIfStale(getStripe(), initial.id);
+    // Live re-poll Stripe if our cached invoice status is stale (or unset). Errors are
+    // swallowed so a Stripe blip doesn't break the page.
+    await refreshStripeInvoiceStatusIfStale(getStripe(), initial.id);
 
-  const [[booking], attendees, settingsRows] = await Promise.all([
-    db.select().from(bookingsTable).where(eq(bookingsTable.id, initial.id)),
-    db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, initial.id)),
-    db.select().from(eventSettingsTable).limit(1),
-  ]);
+    const [[booking], attendees, settingsRows] = await Promise.all([
+      db.select().from(bookingsTable).where(eq(bookingsTable.id, initial.id)),
+      db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, initial.id)),
+      db.select().from(eventSettingsTable).limit(1),
+    ]);
 
-  const settings = settingsRows[0];
-  const changesLocked = settings?.attendeeChangesLocked ?? false;
-  const lockedMessage = settings?.attendeeChangesLockedMessage ?? null;
+    const settings = settingsRows[0];
+    const changesLocked = settings?.attendeeChangesLocked ?? false;
+    const lockedMessage = settings?.attendeeChangesLockedMessage ?? null;
 
-  res.json({
-    ...formatBooking(booking),
-    attendees: attendees.map(formatAttendee),
-    changesLocked,
-    lockedMessage,
-  });
-});
+    const {
+      id,
+      status,
+      passType,
+      quantity,
+      orderReference,
+      paymentMethod,
+      billingEmail,
+      invoiceBadgeStatus,
+    } = formatBooking(booking);
+    res.set("Cache-Control", "no-store").json({
+      id,
+      status,
+      passType,
+      quantity,
+      orderReference,
+      paymentMethod,
+      billingEmail,
+      invoiceBadgeStatus,
+      attendees: attendees.map(formatAttendee),
+      changesLocked,
+      lockedMessage,
+    });
+  },
+);
 
 router.get("/bookings/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -514,18 +565,31 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     }
   }
 
-  const [updated] = await db
-    .update(bookingsTable)
-    .set(updateData)
-    .where(
-      admin
-        ? eq(bookingsTable.id, id)
-        : and(
-            eq(bookingsTable.id, id),
-            inArray(bookingsTable.status, [...CHECKOUT_EDITABLE_STATUSES]),
-          ),
-    )
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(bookingsTable)
+      .set(updateData)
+      .where(
+        admin
+          ? eq(bookingsTable.id, id)
+          : and(
+              eq(bookingsTable.id, id),
+              inArray(bookingsTable.status, [...CHECKOUT_EDITABLE_STATUSES]),
+              eq(bookingsTable.quantity, existing.quantity),
+              eq(bookingsTable.passType, existing.passType),
+              existing.promoCode
+                ? eq(bookingsTable.promoCode, existing.promoCode)
+                : isNull(bookingsTable.promoCode),
+            ),
+      )
+      .returning();
+    if (row && !admin && quantity !== undefined && quantity < existing.quantity) {
+      await tx
+        .delete(attendeesTable)
+        .where(and(eq(attendeesTable.bookingId, id), gte(attendeesTable.seatIndex, quantity)));
+    }
+    return row;
+  });
 
   // Payment confirmation can finish after the initial read (including while
   // pricing is fetched). Keep the editability check in the same database write
@@ -558,12 +622,7 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     const stripe = getStripe();
     if (stripe) {
       try {
-        const result = await reissueBookingInvoice(stripe, id);
-        // Persist the new invoice metadata (or paid flip) inside a tx so the
-        // booking-row write is atomic.
-        await db.transaction(async (tx) => {
-          await applyReissueInvoiceResultTx(tx, id, result);
-        });
+        const result = await reissueAfterBillingEdit(stripe, updated);
         reissueResult = result.alreadyPaid ? { alreadyPaid: true } : { reissued: true };
         if (!result.alreadyPaid) {
           try {
@@ -605,210 +664,248 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
 
 // ----- Self-serve billing/PO management (token-authed) -----
 
-router.get("/bookings/by-management-token/:token/billing", async (req, res): Promise<void> => {
-  const { token } = req.params;
-  const [booking] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.managementToken, token));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
+router.get(
+  ["/bookings/manage/billing", "/bookings/by-management-token/:token/billing"],
+  async (req, res): Promise<void> => {
+    const token = managementCredential(req);
+    if (!token) {
+      res.status(403).json({ error: "Booking management link required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.managementToken, token));
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
 
-  let alreadyPaid = booking.status === "paid";
-  if (!alreadyPaid && booking.stripeInvoiceId) {
-    const stripe = getStripe();
-    if (stripe) {
-      const { paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
-      if (paid) {
-        alreadyPaid = true;
-        await db
-          .update(bookingsTable)
-          .set({ status: "paid" })
-          .where(eq(bookingsTable.id, booking.id));
+    let alreadyPaid = booking.status === "paid";
+    if (!alreadyPaid && booking.status === "invoiced" && booking.stripeInvoiceId) {
+      const stripe = getStripe();
+      if (stripe) {
+        const { paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId, booking);
+        if (paid) {
+          alreadyPaid = true;
+          await db
+            .update(bookingsTable)
+            .set({ status: "paid", paidAt: booking.paidAt ?? new Date() })
+            .where(
+              and(
+                eq(bookingsTable.id, booking.id),
+                eq(bookingsTable.status, "invoiced"),
+                eq(bookingsTable.stripeInvoiceId, booking.stripeInvoiceId),
+              ),
+            );
+        }
       }
     }
-  }
 
-  const settings = await getEventSettings();
-  const locked = !!settings?.attendeeChangesLocked;
-  const lockedMessage = settings?.attendeeChangesLockedMessage ?? null;
+    const settings = await getEventSettings();
+    const locked = !!settings?.attendeeChangesLocked;
+    const lockedMessage = settings?.attendeeChangesLockedMessage ?? null;
 
-  res.json({
-    id: booking.id,
-    orderReference: booking.orderReference,
-    paymentMethod: booking.paymentMethod,
-    status: alreadyPaid ? "paid" : booking.status,
-    alreadyPaid,
-    locked,
-    lockedMessage,
-    billingName: booking.billingName,
-    billingCompany: booking.billingCompany,
-    billingEmail: booking.billingEmail,
-    billingAddressLine1: booking.billingAddressLine1,
-    billingAddressLine2: booking.billingAddressLine2,
-    billingTown: booking.billingTown,
-    billingRegion: booking.billingRegion,
-    billingPostcode: booking.billingPostcode,
-    billingCountry: booking.billingCountry,
-    billingPhone: booking.billingPhone,
-    billingVatNumber: booking.billingVatNumber,
-    poNumber: booking.poNumber,
-    stripeInvoicePaymentUrl: booking.stripeInvoicePaymentUrl,
-    stripeInvoicePdfUrl: booking.stripeInvoicePdfUrl,
-  });
-});
-
-router.post("/bookings/by-management-token/:token/billing", async (req, res): Promise<void> => {
-  const { token } = req.params;
-  const [booking] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.managementToken, token));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-  if (booking.paymentMethod !== "invoice") {
-    res.status(400).json({ error: "Billing details can only be edited for invoice bookings" });
-    return;
-  }
-
-  // Lock check — once admin freezes attendee/booking edits, billing edits are locked too
-  const settings = await getEventSettings();
-  if (settings?.attendeeChangesLocked) {
-    res.status(423).json({
-      error:
-        settings.attendeeChangesLockedMessage ||
-        "Booking edits are currently locked. Please contact us.",
-      locked: true,
+    res.json({
+      id: booking.id,
+      orderReference: booking.orderReference,
+      paymentMethod: booking.paymentMethod,
+      status: alreadyPaid ? "paid" : booking.status,
+      alreadyPaid,
+      locked,
+      lockedMessage,
+      billingName: booking.billingName,
+      billingCompany: booking.billingCompany,
+      billingEmail: booking.billingEmail,
+      billingAddressLine1: booking.billingAddressLine1,
+      billingAddressLine2: booking.billingAddressLine2,
+      billingTown: booking.billingTown,
+      billingRegion: booking.billingRegion,
+      billingPostcode: booking.billingPostcode,
+      billingCountry: booking.billingCountry,
+      billingPhone: booking.billingPhone,
+      billingVatNumber: booking.billingVatNumber,
+      poNumber: booking.poNumber,
+      stripeInvoicePaymentUrl: booking.stripeInvoicePaymentUrl,
+      stripeInvoicePdfUrl: booking.stripeInvoicePdfUrl,
     });
-    return;
-  }
+  },
+);
 
-  // Pre-flight paid check BEFORE any DB writes — catches Stripe-side payments
-  // that have not yet been webhooked into our DB.
-  if (booking.status === "paid") {
-    res.status(409).json({ error: "Invoice has already been paid", alreadyPaid: true });
-    return;
-  }
-  if (booking.stripeInvoiceId) {
-    const stripe = getStripe();
-    if (stripe) {
-      const { paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
-      if (paid) {
-        await db
-          .update(bookingsTable)
-          .set({ status: "paid" })
-          .where(eq(bookingsTable.id, booking.id));
-        res.status(409).json({ error: "Invoice has already been paid", alreadyPaid: true });
+router.post(
+  ["/bookings/manage/billing", "/bookings/by-management-token/:token/billing"],
+  async (req, res): Promise<void> => {
+    const token = managementCredential(req);
+    if (!token) {
+      res.status(403).json({ error: "Booking management link required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.managementToken, token));
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.paymentMethod !== "invoice") {
+      res.status(400).json({ error: "Billing details can only be edited for invoice bookings" });
+      return;
+    }
+
+    // Lock check — once admin freezes attendee/booking edits, billing edits are locked too
+    const settings = await getEventSettings();
+    if (settings?.attendeeChangesLocked) {
+      res.status(423).json({
+        error:
+          settings.attendeeChangesLockedMessage ||
+          "Booking edits are currently locked. Please contact us.",
+        locked: true,
+      });
+      return;
+    }
+
+    // Pre-flight paid check BEFORE any DB writes — catches Stripe-side payments
+    // that have not yet been webhooked into our DB.
+    if (booking.status === "paid") {
+      res.status(409).json({ error: "Invoice has already been paid", alreadyPaid: true });
+      return;
+    }
+    if (booking.stripeInvoiceId) {
+      const stripe = getStripe();
+      if (stripe) {
+        const { paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId, booking);
+        if (paid) {
+          await db
+            .update(bookingsTable)
+            .set({ status: "paid", paidAt: booking.paidAt ?? new Date() })
+            .where(
+              and(
+                eq(bookingsTable.id, booking.id),
+                eq(bookingsTable.status, "invoiced"),
+                eq(bookingsTable.stripeInvoiceId, booking.stripeInvoiceId),
+              ),
+            );
+          res.status(409).json({ error: "Invoice has already been paid", alreadyPaid: true });
+          return;
+        }
+      }
+    }
+
+    const {
+      poNumber,
+      billingName,
+      billingCompany,
+      billingEmail,
+      billingAddressLine1,
+      billingAddressLine2,
+      billingTown,
+      billingRegion,
+      billingPostcode,
+      billingCountry,
+      billingPhone,
+      billingVatNumber,
+    } = req.body ?? {};
+
+    const updates: Partial<typeof bookingsTable.$inferInsert> = {};
+    if (poNumber !== undefined) updates.poNumber = (poNumber ?? "").toString().trim() || null;
+    if (billingName !== undefined) updates.billingName = billingName || null;
+    if (billingCompany !== undefined) updates.billingCompany = billingCompany || null;
+    if (billingEmail !== undefined) updates.billingEmail = billingEmail || null;
+    if (billingAddressLine1 !== undefined)
+      updates.billingAddressLine1 = billingAddressLine1 || null;
+    if (billingAddressLine2 !== undefined)
+      updates.billingAddressLine2 = billingAddressLine2 || null;
+    if (billingTown !== undefined) updates.billingTown = billingTown || null;
+    if (billingRegion !== undefined) updates.billingRegion = billingRegion || null;
+    if (billingPostcode !== undefined) updates.billingPostcode = billingPostcode || null;
+    if (billingCountry !== undefined) updates.billingCountry = billingCountry || null;
+    if (billingPhone !== undefined) updates.billingPhone = billingPhone || null;
+    if (billingVatNumber !== undefined) updates.billingVatNumber = billingVatNumber || null;
+
+    if (Object.keys(updates).length > 0) {
+      const [wrote] = await db
+        .update(bookingsTable)
+        .set(updates)
+        .where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "invoiced")))
+        .returning({ id: bookingsTable.id });
+      if (!wrote) {
+        res.status(409).json({ error: "The invoice is no longer editable. Refresh your booking." });
         return;
       }
     }
-  }
 
-  const {
-    poNumber,
-    billingName,
-    billingCompany,
-    billingEmail,
-    billingAddressLine1,
-    billingAddressLine2,
-    billingTown,
-    billingRegion,
-    billingPostcode,
-    billingCountry,
-    billingPhone,
-    billingVatNumber,
-  } = req.body ?? {};
+    // Diff old vs new billing fields BEFORE the re-issue step so the organiser
+    // notification reflects exactly what the customer changed (rather than any
+    // post-reissue Stripe-driven rewrites).
+    const [postUpdate] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, booking.id));
+    const billingChanges = diffBillingFields(
+      booking as unknown as Record<string, unknown>,
+      postUpdate as unknown as Record<string, unknown>,
+    );
 
-  const updates: Partial<typeof bookingsTable.$inferInsert> = {};
-  if (poNumber !== undefined) updates.poNumber = (poNumber ?? "").toString().trim() || null;
-  if (billingName !== undefined) updates.billingName = billingName || null;
-  if (billingCompany !== undefined) updates.billingCompany = billingCompany || null;
-  if (billingEmail !== undefined) updates.billingEmail = billingEmail || null;
-  if (billingAddressLine1 !== undefined) updates.billingAddressLine1 = billingAddressLine1 || null;
-  if (billingAddressLine2 !== undefined) updates.billingAddressLine2 = billingAddressLine2 || null;
-  if (billingTown !== undefined) updates.billingTown = billingTown || null;
-  if (billingRegion !== undefined) updates.billingRegion = billingRegion || null;
-  if (billingPostcode !== undefined) updates.billingPostcode = billingPostcode || null;
-  if (billingCountry !== undefined) updates.billingCountry = billingCountry || null;
-  if (billingPhone !== undefined) updates.billingPhone = billingPhone || null;
-  if (billingVatNumber !== undefined) updates.billingVatNumber = billingVatNumber || null;
-
-  if (Object.keys(updates).length > 0) {
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, booking.id));
-  }
-
-  // Diff old vs new billing fields BEFORE the re-issue step so the organiser
-  // notification reflects exactly what the customer changed (rather than any
-  // post-reissue Stripe-driven rewrites).
-  const [postUpdate] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.id, booking.id));
-  const billingChanges = diffBillingFields(
-    booking as unknown as Record<string, unknown>,
-    postUpdate as unknown as Record<string, unknown>,
-  );
-
-  // Re-issue the Stripe invoice (if any) so the PO + new billing details show.
-  let reissue: { alreadyPaid?: boolean; reissued?: boolean; error?: string } = {};
-  if (booking.stripeInvoiceId) {
-    const stripe = getStripe();
-    if (!stripe) {
-      reissue = { error: "Stripe is not configured" };
-    } else {
-      try {
-        const result = await reissueBookingInvoice(stripe, booking.id);
-        await db.transaction(async (tx) => {
-          await applyReissueInvoiceResultTx(tx, booking.id, result);
-        });
-        if (result.alreadyPaid) {
-          reissue = { alreadyPaid: true };
-        } else {
-          reissue = { reissued: true };
-          try {
-            await sendReissuedInvoiceEmail(booking.id);
-          } catch (err) {
-            logger.error({ err }, "Failed to send re-issued invoice email");
+    // Re-issue the Stripe invoice (if any) so the PO + new billing details show.
+    let reissue: { alreadyPaid?: boolean; reissued?: boolean; error?: string } = {};
+    if (booking.stripeInvoiceId) {
+      const stripe = getStripe();
+      if (!stripe) {
+        reissue = { error: "Stripe is not configured" };
+      } else {
+        try {
+          const result = await reissueAfterBillingEdit(stripe, booking);
+          if (result.alreadyPaid) {
+            reissue = { alreadyPaid: true };
+          } else {
+            reissue = { reissued: true };
+            try {
+              await sendReissuedInvoiceEmail(booking.id);
+            } catch (err) {
+              logger.error({ err }, "Failed to send re-issued invoice email");
+            }
           }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Failed to re-issue invoice";
+          reissue = { error: message };
+          logger.error(
+            { err, bookingId: booking.id },
+            "Failed to re-issue invoice on self-serve billing edit",
+          );
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to re-issue invoice";
-        reissue = { error: message };
-        logger.error(
-          { err, bookingId: booking.id },
-          "Failed to re-issue invoice on self-serve billing edit",
-        );
       }
     }
-  }
 
-  const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, booking.id));
+    const [refreshed] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, booking.id));
 
-  // Fire-and-forget organiser notification (best-effort; never block the
-  // customer-facing response on email delivery). Honours notifyBillingEdit
-  // opt-in flags on notificationEmailsTable.
-  if (billingChanges.length > 0) {
-    sendBillingEditNotification(booking.id, billingChanges).catch((err) => {
-      logger.error(
-        { err, bookingId: booking.id },
-        "Failed to send billing-edit organiser notification",
-      );
+    // Fire-and-forget organiser notification (best-effort; never block the
+    // customer-facing response on email delivery). Honours notifyBillingEdit
+    // opt-in flags on notificationEmailsTable.
+    if (billingChanges.length > 0) {
+      sendBillingEditNotification(booking.id, billingChanges).catch((err) => {
+        logger.error(
+          { err, bookingId: booking.id },
+          "Failed to send billing-edit organiser notification",
+        );
+      });
+    }
+
+    res.json({
+      ok: true,
+      reissue,
+      poNumber: refreshed.poNumber,
+      status: refreshed.status,
+      stripeInvoicePaymentUrl: refreshed.stripeInvoicePaymentUrl,
+      stripeInvoicePdfUrl: refreshed.stripeInvoicePdfUrl,
     });
-  }
-
-  res.json({
-    ok: true,
-    reissue,
-    poNumber: refreshed.poNumber,
-    status: refreshed.status,
-    stripeInvoicePaymentUrl: refreshed.stripeInvoicePaymentUrl,
-    stripeInvoicePdfUrl: refreshed.stripeInvoicePdfUrl,
-  });
-});
+  },
+);
 
 // ----- Self-serve invoice/receipt download + email re-send (token-authed) -----
 
@@ -820,43 +917,56 @@ router.post("/bookings/by-management-token/:token/billing", async (req, res): Pr
 const RESEND_WINDOW_MS = 60_000;
 const resendLastSentAt = new Map<string, number>();
 
-router.get("/bookings/by-management-token/:token/invoice-pdf", async (req, res): Promise<void> => {
-  const { token } = req.params;
-  const [booking] = await db
-    .select()
-    .from(bookingsTable)
-    .where(eq(bookingsTable.managementToken, token));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-  if (booking.status !== "invoiced" && booking.status !== "paid") {
-    res.status(409).json({ error: "No invoice available yet for this booking" });
-    return;
-  }
-  // Refresh Stripe-cached fields so we always serve the latest PDF (e.g.
-  // immediately after a re-issue) without waiting for the webhook.
-  if (booking.stripeInvoiceId) {
-    await refreshStripeInvoiceUrls(getStripe(), booking.id);
-  }
+router.get(
+  ["/bookings/manage/invoice-pdf", "/bookings/by-management-token/:token/invoice-pdf"],
+  async (req, res): Promise<void> => {
+    const token = managementCredential(req);
+    if (!token) {
+      res.status(403).json({ error: "Booking management link required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
+    const [booking] = await db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.managementToken, token));
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    if (booking.status !== "invoiced" && booking.status !== "paid") {
+      res.status(409).json({ error: "No invoice available yet for this booking" });
+      return;
+    }
+    // Refresh Stripe-cached fields so we always serve the latest PDF (e.g.
+    // immediately after a re-issue) without waiting for the webhook.
+    if (booking.stripeInvoiceId) {
+      await refreshStripeInvoiceUrls(getStripe(), booking.id);
+    }
 
-  const pdf = await resolveLatestBookingPdf(booking.id);
-  if (!pdf) {
-    res.status(500).json({ error: "Could not generate invoice PDF" });
-    return;
-  }
-  const safeName = pdf.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
-  res.setHeader("Content-Length", pdf.buffer.length.toString());
-  res.setHeader("Cache-Control", "private, no-store");
-  res.send(pdf.buffer);
-});
+    const pdf = await resolveLatestBookingPdf(booking.id);
+    if (!pdf) {
+      res.status(500).json({ error: "Could not generate invoice PDF" });
+      return;
+    }
+    const safeName = pdf.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+    res.setHeader("Content-Length", pdf.buffer.length.toString());
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(pdf.buffer);
+  },
+);
 
 router.post(
-  "/bookings/by-management-token/:token/resend-email",
+  ["/bookings/manage/resend-email", "/bookings/by-management-token/:token/resend-email"],
   async (req, res): Promise<void> => {
-    const { token } = req.params;
+    const token = managementCredential(req);
+    if (!token) {
+      res.status(403).json({ error: "Booking management link required" });
+      return;
+    }
+    res.set("Cache-Control", "private, no-store");
     const [booking] = await db
       .select()
       .from(bookingsTable)
@@ -974,33 +1084,6 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
     return;
   }
 
-  const pricing = await calculatePricing(existing.passType, existing.quantity, existing.promoCode);
-
-  if (pricing.total > 0) {
-    res.status(400).json({ error: "Booking total is not zero — payment required" });
-    return;
-  }
-
-  if (existing.promoCode) {
-    const [promo] = await db
-      .select()
-      .from(promoCodesTable)
-      .where(eq(promoCodesTable.code, existing.promoCode));
-    if (promo?.oncePerCustomer) {
-      const [lead] = await db
-        .select()
-        .from(attendeesTable)
-        .where(and(eq(attendeesTable.bookingId, id), eq(attendeesTable.isLead, true)));
-      const email = (lead?.workEmail || "").trim().toLowerCase();
-      if (email && (await isCodeUsedByEmail(existing.promoCode, email))) {
-        res.status(400).json({
-          error: "This promo code has already been used on a previous booking with this email",
-        });
-        return;
-      }
-    }
-  }
-
   // Reserve the promo seats AND atomically flip the booking from
   // partial/pending_payment → paid in a single transaction. The status
   // flip uses a `WHERE status IN (...)` claim so two concurrent
@@ -1018,10 +1101,42 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
 
   try {
     await db.transaction(async (tx) => {
-      if (existing.promoCode) {
+      const [current] = await tx
+        .select()
+        .from(bookingsTable)
+        .where(eq(bookingsTable.id, id))
+        .for("update");
+      if (!current || !CHECKOUT_EDITABLE_STATUSES.some((status) => status === current.status))
+        throw new ConfirmRaceLostError();
+      const pricing = await calculatePricing(
+        current.passType,
+        current.quantity,
+        current.promoCode,
+        tx,
+      );
+      if (pricing.total !== 0)
+        throw new CheckoutPaymentError(400, "Booking total is not zero — payment required");
+      await protectComplimentaryConfirmation(tx, current, getStripe());
+      if (current.promoCode) {
+        const [promo] = await tx
+          .select()
+          .from(promoCodesTable)
+          .where(eq(promoCodesTable.code, current.promoCode));
+        if (promo?.oncePerCustomer) {
+          const [lead] = await tx
+            .select()
+            .from(attendeesTable)
+            .where(and(eq(attendeesTable.bookingId, id), eq(attendeesTable.isLead, true)));
+          const email = (lead?.workEmail || "").trim().toLowerCase();
+          if (email && (await isCodeUsedByEmail(current.promoCode, email, id, tx)))
+            throw new CheckoutPaymentError(
+              400,
+              "This promo code has already been used with this email",
+            );
+        }
         const reserved = await reservePromoUsageForBooking(
-          existing.promoCode,
-          existing.quantity,
+          current.promoCode,
+          current.quantity,
           existing.id,
           tx,
         );
@@ -1029,7 +1144,7 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
           const [promo] = await tx
             .select()
             .from(promoCodesTable)
-            .where(eq(promoCodesTable.code, existing.promoCode));
+            .where(eq(promoCodesTable.code, current.promoCode));
           const remaining =
             promo && promo.maxUses !== null ? Math.max(0, promo.maxUses - promo.usedCount) : 0;
           const msg =
@@ -1047,6 +1162,9 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
         .set({
           status: "paid",
           currentStep: 5,
+          subtotalAmount: "0.00",
+          vatAmount: "0.00",
+          totalAmount: "0.00",
           orderReference: orderRef,
           paidAt: new Date(),
           updatedAt: new Date(),
@@ -1066,6 +1184,10 @@ router.post("/bookings/:id/confirm-free", async (req, res): Promise<void> => {
       }
     });
   } catch (err) {
+    if (err instanceof CheckoutPaymentError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
     if (err instanceof PromoCapExceededError) {
       res.status(400).json({ error: err.clientMessage });
       return;
@@ -1098,6 +1220,11 @@ router.get("/bookings/:id/pricing", async (req, res): Promise<void> => {
     return;
   }
 
+  if (req.get("x-booking-session") !== booking.sessionToken && !isAdminRequest(req)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  res.set("Cache-Control", "private, no-store");
   const promoCode = req.query.promoCode as string | undefined;
   const pricing = await calculatePricing(
     booking.passType,

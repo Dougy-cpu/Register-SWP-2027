@@ -207,9 +207,10 @@ export async function getScannerWindow(now = new Date()): Promise<{
     })
     .from(eventSettingsTable)
     .limit(1);
-  const closesAt = settings?.eventEndAt
-    ? new Date(settings.eventEndAt.getTime() + SCANNER_GRACE_MS)
-    : null;
+  const closesAt =
+    settings?.eventStartAt && settings.eventEndAt && settings.eventStartAt < settings.eventEndAt
+      ? new Date(settings.eventEndAt.getTime() + SCANNER_GRACE_MS)
+      : null;
   return {
     eventStartAt: settings?.eventStartAt?.toISOString() ?? null,
     eventEndAt: settings?.eventEndAt?.toISOString() ?? null,

@@ -13,17 +13,14 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
-  useGetBookingBySession: (
-    _token: string,
-    options: { query: { queryKey: string[]; enabled: boolean } },
-  ) =>
+  useGetCurrentBooking: (options: { query: { queryKey: string[]; enabled: boolean } }) =>
     useQuery<BookingWithAttendees>({
       ...options.query,
       queryFn: api.loadBooking,
       staleTime: Infinity,
       retry: false,
     }),
-  getBookingBySession: api.readBooking,
+  getCurrentBooking: api.readBooking,
   customFetch: api.confirmPayment,
 }));
 
@@ -211,8 +208,9 @@ describe("delayed payment confirmation", () => {
       const signals: AbortSignal[] = [];
       const requestMock = request === "confirmation" ? api.confirmPayment : api.readBooking;
       requestMock.mockImplementation(
-        (_token: string, { signal }: { signal: AbortSignal }) =>
+        (first: string | { signal: AbortSignal }, options?: { signal: AbortSignal }) =>
           new Promise<BookingWithAttendees>((_resolve, reject) => {
+            const signal = typeof first === "string" ? options!.signal : first.signal;
             signals.push(signal);
             outstanding += 1;
             maximumOutstanding = Math.max(maximumOutstanding, outstanding);

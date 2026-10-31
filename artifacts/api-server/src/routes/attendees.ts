@@ -32,25 +32,40 @@ function isAdminRequest(req: import("express").Request): boolean {
   return verifyAdminToken(token, password).valid;
 }
 
+type AttendeeTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Attendee = typeof attendeesTable.$inferSelect;
+type WriteResult = { error: string; status: number } | { attendee: Attendee; existing?: Attendee };
+
+async function writeAttendee(
+  bookingId: number,
+  admin: boolean,
+  sessionToken: string | undefined,
+  write: (tx: AttendeeTx, booking: typeof bookingsTable.$inferSelect) => Promise<WriteResult>,
+): Promise<WriteResult> {
+  return db.transaction(async (tx) => {
+    const [booking] = await tx
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, bookingId))
+      .for("update");
+    if (!booking) return { error: "Booking not found", status: 404 };
+    if (!admin && sessionToken !== booking.sessionToken)
+      return { error: "Forbidden — session token mismatch", status: 403 };
+    if (!admin && booking.status !== "partial" && booking.status !== "pending_payment")
+      return {
+        error:
+          "Checkout is closed for this booking. Use the attendee management link to make permitted changes.",
+        status: 409,
+      };
+    return write(tx, booking);
+  });
+}
+
 router.post("/bookings/:bookingId/attendees", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.bookingId) ? req.params.bookingId[0] : req.params.bookingId;
   const bookingId = parseInt(raw, 10);
 
-  const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-
   const admin = isAdminRequest(req);
-  if (!admin) {
-    const sessionToken = req.headers["x-booking-session"] as string | undefined;
-    if (!sessionToken || sessionToken !== booking.sessionToken) {
-      res.status(403).json({ error: "Forbidden — session token mismatch" });
-      return;
-    }
-  }
-
   const {
     firstName,
     lastName,
@@ -101,29 +116,49 @@ router.post("/bookings/:bookingId/attendees", async (req, res): Promise<void> =>
     gdprConsent: isTbc ? false : !!gdprConsent,
     gdprConsentAt: !isTbc && gdprConsent ? new Date() : null,
     ...(!admin ? { leadSharingNoticeAt: !isTbc && gdprConsent ? new Date() : null } : {}),
-    isLead: !!isLead,
+    isLead: isLead === undefined ? resolvedSeatIndex === 0 : !!isLead,
     seatIndex: resolvedSeatIndex,
   };
 
   // Upsert: check if an attendee already exists for this booking at this seatIndex
   // (or as lead if isLead is true). Update instead of inserting to prevent duplicates.
-  const whereClause = isLead
+  const whereClause = values.isLead
     ? and(eq(attendeesTable.bookingId, bookingId), eq(attendeesTable.isLead, true))
     : and(eq(attendeesTable.bookingId, bookingId), eq(attendeesTable.seatIndex, resolvedSeatIndex));
 
-  const [existing] = await db.select().from(attendeesTable).where(whereClause);
-
-  let attendee;
-  if (existing) {
-    [attendee] = await db
-      .update(attendeesTable)
-      .set(values)
-      .where(eq(attendeesTable.id, existing.id))
-      .returning();
-  } else {
-    [attendee] = await db.insert(attendeesTable).values(values).returning();
+  const result = await writeAttendee(
+    bookingId,
+    admin,
+    req.get("x-booking-session"),
+    async (tx, booking) => {
+      if (
+        !Number.isInteger(resolvedSeatIndex) ||
+        resolvedSeatIndex < 0 ||
+        (!admin && resolvedSeatIndex >= booking.quantity)
+      ) {
+        return { status: 400, error: "This seat is outside the booking's pass allocation." };
+      }
+      if (
+        !admin &&
+        ((resolvedSeatIndex === 0) !== values.isLead || (values.isLead && values.isTbc))
+      )
+        return { status: 400, error: "The first seat must belong to the named lead attendee." };
+      const [existing] = await tx.select().from(attendeesTable).where(whereClause);
+      const [attendee] = existing
+        ? await tx
+            .update(attendeesTable)
+            .set(values)
+            .where(eq(attendeesTable.id, existing.id))
+            .returning()
+        : await tx.insert(attendeesTable).values(values).returning();
+      return { attendee, existing };
+    },
+  );
+  if ("error" in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
   }
-
+  const { existing, attendee } = result;
   if (admin) {
     await logAdminAction({
       type: "admin_attendee_added",
@@ -162,102 +197,99 @@ router.patch("/bookings/:bookingId/attendees/:attendeeId", async (req, res): Pro
   const bookingId = parseInt(rawBooking, 10);
   const attendeeId = parseInt(rawAttendee, 10);
 
-  const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-  if (!booking) {
-    res.status(404).json({ error: "Booking not found" });
-    return;
-  }
-
   const admin = isAdminRequest(req);
-  if (!admin) {
-    const sessionToken = req.headers["x-booking-session"] as string | undefined;
-    if (!sessionToken || sessionToken !== booking.sessionToken) {
-      res.status(403).json({ error: "Forbidden — session token mismatch" });
-      return;
-    }
-  }
+  const result = await writeAttendee(
+    bookingId,
+    admin,
+    req.get("x-booking-session"),
+    async (tx, booking) => {
+      const [existing] = await tx
+        .select()
+        .from(attendeesTable)
+        .where(and(eq(attendeesTable.id, attendeeId), eq(attendeesTable.bookingId, bookingId)));
 
-  const [existing] = await db
-    .select()
-    .from(attendeesTable)
-    .where(and(eq(attendeesTable.id, attendeeId), eq(attendeesTable.bookingId, bookingId)));
+      if (!existing) {
+        return { status: 404, error: "Attendee not found" };
+      }
 
-  if (!existing) {
-    res.status(404).json({ error: "Attendee not found" });
+      if (!admin && (existing.seatIndex < 0 || existing.seatIndex >= booking.quantity))
+        return { status: 409, error: "This seat is no longer in the booking." };
+      const {
+        firstName,
+        lastName,
+        jobTitle,
+        company,
+        workEmail,
+        phone,
+        dietaryAccessibility,
+        gdprConsent,
+        isTbc,
+        notes,
+      } = req.body;
+
+      const updateData: Partial<typeof attendeesTable.$inferInsert> = {};
+
+      if (isTbc && existing.isLead) {
+        return { status: 400, error: "The lead attendee cannot be marked as TBC" };
+      }
+
+      if (isTbc !== undefined) {
+        updateData.isTbc = !!isTbc;
+        if (isTbc) {
+          updateData.firstName = "TBC";
+          updateData.lastName = "TBC";
+          updateData.jobTitle = "TBC";
+          updateData.company = company || existing.company || "TBC";
+          updateData.workEmail = `tbc-${bookingId}-${existing.seatIndex}@tbc.placeholder`;
+          updateData.phone = null;
+          updateData.dietaryAccessibility = null;
+          updateData.gdprConsent = false;
+          updateData.gdprConsentAt = null;
+          if (!admin) updateData.leadSharingNoticeAt = null;
+        }
+      }
+
+      if (!isTbc) {
+        if (firstName !== undefined) updateData.firstName = firstName;
+        if (lastName !== undefined) updateData.lastName = lastName;
+        if (jobTitle !== undefined) updateData.jobTitle = jobTitle;
+        if (company !== undefined) updateData.company = company;
+        if (workEmail !== undefined) updateData.workEmail = workEmail;
+        if (phone !== undefined) updateData.phone = phone || null;
+        if (dietaryAccessibility !== undefined)
+          updateData.dietaryAccessibility = dietaryAccessibility || null;
+        if (gdprConsent !== undefined) {
+          updateData.gdprConsent = !!gdprConsent;
+          updateData.gdprConsentAt = gdprConsent ? new Date() : null;
+          if (!admin) updateData.leadSharingNoticeAt = gdprConsent ? new Date() : null;
+        }
+      }
+
+      if (admin && notes !== undefined) {
+        if (notes !== null && typeof notes !== "string") {
+          return { status: 400, error: "notes must be a string" };
+        }
+        if (typeof notes === "string" && notes.length > 4000) {
+          return { status: 400, error: "notes must be 4,000 characters or fewer" };
+        }
+        updateData.notes = typeof notes === "string" ? notes.trim() || null : null;
+      }
+
+      const [updated] = await tx
+        .update(attendeesTable)
+        .set(updateData)
+        .where(eq(attendeesTable.id, attendeeId))
+        .returning();
+
+      return { attendee: updated, existing };
+    },
+  );
+  if ("error" in result) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
-
-  const {
-    firstName,
-    lastName,
-    jobTitle,
-    company,
-    workEmail,
-    phone,
-    dietaryAccessibility,
-    gdprConsent,
-    isTbc,
-    notes,
-  } = req.body;
-
-  const updateData: Partial<typeof attendeesTable.$inferInsert> = {};
-
-  if (isTbc && existing.isLead) {
-    res.status(400).json({ error: "The lead attendee cannot be marked as TBC" });
-    return;
-  }
-
-  if (isTbc !== undefined) {
-    updateData.isTbc = !!isTbc;
-    if (isTbc) {
-      updateData.firstName = "TBC";
-      updateData.lastName = "TBC";
-      updateData.jobTitle = "TBC";
-      updateData.company = company || existing.company || "TBC";
-      updateData.workEmail = `tbc-${bookingId}-${existing.seatIndex}@tbc.placeholder`;
-      updateData.phone = null;
-      updateData.dietaryAccessibility = null;
-      updateData.gdprConsent = false;
-      updateData.gdprConsentAt = null;
-      if (!admin) updateData.leadSharingNoticeAt = null;
-    }
-  }
-
-  if (!isTbc) {
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (jobTitle !== undefined) updateData.jobTitle = jobTitle;
-    if (company !== undefined) updateData.company = company;
-    if (workEmail !== undefined) updateData.workEmail = workEmail;
-    if (phone !== undefined) updateData.phone = phone || null;
-    if (dietaryAccessibility !== undefined)
-      updateData.dietaryAccessibility = dietaryAccessibility || null;
-    if (gdprConsent !== undefined) {
-      updateData.gdprConsent = !!gdprConsent;
-      updateData.gdprConsentAt = gdprConsent ? new Date() : null;
-      if (!admin) updateData.leadSharingNoticeAt = gdprConsent ? new Date() : null;
-    }
-  }
-
-  if (admin && notes !== undefined) {
-    if (notes !== null && typeof notes !== "string") {
-      res.status(400).json({ error: "notes must be a string" });
-      return;
-    }
-    if (typeof notes === "string" && notes.length > 4000) {
-      res.status(400).json({ error: "notes must be 4,000 characters or fewer" });
-      return;
-    }
-    updateData.notes = typeof notes === "string" ? notes.trim() || null : null;
-  }
-
-  const [updated] = await db
-    .update(attendeesTable)
-    .set(updateData)
-    .where(eq(attendeesTable.id, attendeeId))
-    .returning();
-
-  if (admin) {
+  const { attendee: updated, existing } = result;
+  if (admin && existing) {
     await logAdminAction({
       type: "admin_attendee_updated",
       bookingId,

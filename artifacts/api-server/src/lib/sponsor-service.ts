@@ -49,7 +49,7 @@ export function suggestedSponsorCodes(company: string): { vip: string; public: s
 
 export function sponsorAccessUrl(sponsor: typeof sponsorsTable.$inferSelect): string {
   const base = (process.env.APP_BASE_URL ?? "https://register.swpsummit.com").replace(/\/$/, "");
-  return `${base}/sponsor/access/${issueSponsorAccessToken(sponsor.id, sponsor.portalAccessVersion)}`;
+  return `${base}/sponsor/access#${issueSponsorAccessToken(sponsor.id, sponsor.portalAccessVersion)}`;
 }
 
 export interface SponsorContactInput {
@@ -422,8 +422,9 @@ export async function confirmSponsor(sponsorId: number) {
   return buildSponsorWorkspace(sponsorId, true);
 }
 
-async function activeStaffCount(sponsorId: number): Promise<number> {
-  const [row] = await db
+type SponsorTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function activeStaffCount(sponsorId: number, tx: SponsorTx): Promise<number> {
+  const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(bookingsTable)
     .where(
@@ -436,12 +437,17 @@ async function activeStaffCount(sponsorId: number): Promise<number> {
   return row?.count ?? 0;
 }
 
-async function activeVipUnits(sponsorId: number): Promise<number> {
-  const [row] = await db
+async function activeVipUnits(sponsorId: number, tx: SponsorTx): Promise<number> {
+  const [row] = await tx
     .select({ count: sql<number>`coalesce(sum(${sponsorRedemptionsTable.units}), 0)::int` })
     .from(sponsorRedemptionsTable)
+    .innerJoin(
+      sponsorPromoCodesTable,
+      eq(sponsorPromoCodesTable.promoCodeId, sponsorRedemptionsTable.promoCodeId),
+    )
     .where(
       and(
+        eq(sponsorPromoCodesTable.kind, "vip"),
         eq(sponsorRedemptionsTable.sponsorId, sponsorId),
         eq(sponsorRedemptionsTable.status, "reserved"),
       ),
@@ -451,37 +457,41 @@ async function activeVipUnits(sponsorId: number): Promise<number> {
 
 export async function updateSponsor(sponsorId: number, input: SponsorUpsertInput) {
   const clean = cleanInput(input);
-  const [existing] = await db.select().from(sponsorsTable).where(eq(sponsorsTable.id, sponsorId));
-  if (!existing) throw new SponsorNotFoundError();
-  if (existing.status === "draft" && input.status === "confirmed") {
-    throw new SponsorConflictError(
-      "Use Confirm sponsor so codes and the workspace are created together",
-    );
-  }
-  if (existing.status !== "draft" && input.status === "draft") {
-    throw new SponsorConflictError("A confirmed sponsor cannot be moved back to draft");
-  }
-  if (
-    existing.status === "draft" &&
-    input.status &&
-    !["draft", "cancelled"].includes(input.status)
-  ) {
-    throw new SponsorConflictError("Confirm the draft before using this sponsor status");
-  }
-  const [staffUsed, vipUsed] = await Promise.all([
-    activeStaffCount(sponsorId),
-    activeVipUnits(sponsorId),
-  ]);
-  if (clean.staffAllocation < staffUsed) {
-    throw new SponsorConflictError(
-      `Staff allocation cannot be below ${staffUsed} active registrations`,
-    );
-  }
-  if (clean.vipAllocation < vipUsed) {
-    throw new SponsorConflictError(`VIP allocation cannot be below ${vipUsed} active passes`);
-  }
-
   await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(sponsorsTable)
+      .where(eq(sponsorsTable.id, sponsorId))
+      .for("update");
+    if (!existing) throw new SponsorNotFoundError();
+    if (existing.status === "draft" && input.status === "confirmed") {
+      throw new SponsorConflictError(
+        "Use Confirm sponsor so codes and the workspace are created together",
+      );
+    }
+    if (existing.status !== "draft" && input.status === "draft") {
+      throw new SponsorConflictError("A confirmed sponsor cannot be moved back to draft");
+    }
+    if (
+      existing.status === "draft" &&
+      input.status &&
+      !["draft", "cancelled"].includes(input.status)
+    ) {
+      throw new SponsorConflictError("Confirm the draft before using this sponsor status");
+    }
+    const [staffUsed, vipUsed] = await Promise.all([
+      activeStaffCount(sponsorId, tx),
+      activeVipUnits(sponsorId, tx),
+    ]);
+    if (clean.staffAllocation < staffUsed) {
+      throw new SponsorConflictError(
+        `Staff allocation cannot be below ${staffUsed} active registrations`,
+      );
+    }
+    if (clean.vipAllocation < vipUsed) {
+      throw new SponsorConflictError(`VIP allocation cannot be below ${vipUsed} active passes`);
+    }
+
     await assertCodeAvailability(tx, [clean.vipCode, clean.publicCode], sponsorId);
     const nextStatus = input.status ?? existing.status;
     const now = new Date();

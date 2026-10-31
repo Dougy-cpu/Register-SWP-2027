@@ -173,7 +173,7 @@ describe("email image delivery", () => {
       expect(html.match(/src="cid:/g)).toHaveLength(3);
       expect(html).not.toContain("data:image");
       expect(text).toContain("People Strategy Hub");
-      expect(text).toContain("/manage/PREVIEW-ONLY-NOT-A-REAL-BOOKING");
+      expect(text).toContain("/manage#PREVIEW-ONLY-NOT-A-REAL-BOOKING");
       for (const original of approvedEmailImages(designed.html)) {
         const actual = imageParts.find((part) => part.headers.includes(`<${original.cid}>`))!;
         expect(actual).toBeDefined();

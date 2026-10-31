@@ -49,10 +49,12 @@ import type {
   ErrorResponse,
   EventSettings,
   EventSettingsUpdate,
+  ExchangePrivateSponsorLinkBody,
   ExportAdminSponsorLeadsParams,
   ExportRegistrationsParams,
   ExportSponsorLeadsParams,
   GetBookingPricingParams,
+  GetManagedBooking200,
   GetScannerRoster200,
   GetScannerRosterBody,
   GetSponsorAttention200,
@@ -132,6 +134,7 @@ import type {
   UpdateBookingBody,
   UpdateDiscountTiersBody,
   UpdateEmailTemplateBody,
+  UpdateManagedBillingBody,
   UpdatePromoCodeBody,
   UpdateScannerReadiness200,
   UpdateSponsorAssetStatusBody,
@@ -509,6 +512,373 @@ export const useUpdateBooking = <TError = ErrorType<ErrorResponse>, TContext = u
 };
 
 /**
+ * @summary Resume checkout using the private booking session header
+ */
+export const getGetCurrentBookingUrl = () => {
+  return `/api/bookings/current`;
+};
+
+export const getCurrentBooking = async (
+  options?: RequestInit,
+): Promise<BookingWithAttendees | null> => {
+  return customFetch<BookingWithAttendees | null>(getGetCurrentBookingUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCurrentBookingQueryKey = () => {
+  return [`/api/bookings/current`] as const;
+};
+
+export const getGetCurrentBookingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCurrentBooking>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getCurrentBooking>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCurrentBookingQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentBooking>>> = ({ signal }) =>
+    getCurrentBooking({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentBooking>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCurrentBookingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCurrentBooking>>
+>;
+export type GetCurrentBookingQueryError = ErrorType<void>;
+
+/**
+ * @summary Resume checkout using the private booking session header
+ */
+
+export function useGetCurrentBooking<
+  TData = Awaited<ReturnType<typeof getCurrentBooking>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getCurrentBooking>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCurrentBookingQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Read a booking through its management link
+ */
+export const getGetManagedBookingUrl = () => {
+  return `/api/bookings/manage`;
+};
+
+export const getManagedBooking = async (options?: RequestInit): Promise<GetManagedBooking200> => {
+  return customFetch<GetManagedBooking200>(getGetManagedBookingUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetManagedBookingQueryKey = () => {
+  return [`/api/bookings/manage`] as const;
+};
+
+export const getGetManagedBookingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getManagedBooking>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getManagedBooking>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetManagedBookingQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getManagedBooking>>> = ({ signal }) =>
+    getManagedBooking({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getManagedBooking>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetManagedBookingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getManagedBooking>>
+>;
+export type GetManagedBookingQueryError = ErrorType<void>;
+
+/**
+ * @summary Read a booking through its management link
+ */
+
+export function useGetManagedBooking<
+  TData = Awaited<ReturnType<typeof getManagedBooking>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getManagedBooking>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetManagedBookingQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getGetManagedBillingUrl = () => {
+  return `/api/bookings/manage/billing`;
+};
+
+export const getManagedBilling = async (options?: RequestInit): Promise<void> => {
+  return customFetch<void>(getGetManagedBillingUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetManagedBillingQueryKey = () => {
+  return [`/api/bookings/manage/billing`] as const;
+};
+
+export const getGetManagedBillingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getManagedBilling>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getManagedBilling>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetManagedBillingQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getManagedBilling>>> = ({ signal }) =>
+    getManagedBilling({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getManagedBilling>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetManagedBillingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getManagedBilling>>
+>;
+export type GetManagedBillingQueryError = ErrorType<void>;
+
+export function useGetManagedBilling<
+  TData = Awaited<ReturnType<typeof getManagedBilling>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getManagedBilling>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetManagedBillingQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getUpdateManagedBillingUrl = () => {
+  return `/api/bookings/manage/billing`;
+};
+
+export const updateManagedBilling = async (
+  updateManagedBillingBody: UpdateManagedBillingBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getUpdateManagedBillingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateManagedBillingBody),
+  });
+};
+
+export const getUpdateManagedBillingMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateManagedBilling>>,
+    TError,
+    { data: BodyType<UpdateManagedBillingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateManagedBilling>>,
+  TError,
+  { data: BodyType<UpdateManagedBillingBody> },
+  TContext
+> => {
+  const mutationKey = ["updateManagedBilling"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateManagedBilling>>,
+    { data: BodyType<UpdateManagedBillingBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateManagedBilling(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateManagedBillingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateManagedBilling>>
+>;
+export type UpdateManagedBillingMutationBody = BodyType<UpdateManagedBillingBody>;
+export type UpdateManagedBillingMutationError = ErrorType<void>;
+
+export const useUpdateManagedBilling = <TError = ErrorType<void>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateManagedBilling>>,
+    TError,
+    { data: BodyType<UpdateManagedBillingBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateManagedBilling>>,
+  TError,
+  { data: BodyType<UpdateManagedBillingBody> },
+  TContext
+> => {
+  return useMutation(getUpdateManagedBillingMutationOptions(options));
+};
+
+export const getDownloadManagedInvoiceUrl = () => {
+  return `/api/bookings/manage/invoice-pdf`;
+};
+
+export const downloadManagedInvoice = async (options?: RequestInit): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadManagedInvoiceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadManagedInvoiceQueryKey = () => {
+  return [`/api/bookings/manage/invoice-pdf`] as const;
+};
+
+export const getDownloadManagedInvoiceQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadManagedInvoice>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadManagedInvoice>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getDownloadManagedInvoiceQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadManagedInvoice>>> = ({ signal }) =>
+    downloadManagedInvoice({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadManagedInvoice>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadManagedInvoiceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadManagedInvoice>>
+>;
+export type DownloadManagedInvoiceQueryError = ErrorType<void>;
+
+export function useDownloadManagedInvoice<
+  TData = Awaited<ReturnType<typeof downloadManagedInvoice>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadManagedInvoice>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadManagedInvoiceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getResendManagedEmailUrl = () => {
+  return `/api/bookings/manage/resend-email`;
+};
+
+export const resendManagedEmail = async (options?: RequestInit): Promise<void> => {
+  return customFetch<void>(getResendManagedEmailUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResendManagedEmailMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendManagedEmail>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<Awaited<ReturnType<typeof resendManagedEmail>>, TError, void, TContext> => {
+  const mutationKey = ["resendManagedEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendManagedEmail>>, void> = () => {
+    return resendManagedEmail(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendManagedEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendManagedEmail>>
+>;
+
+export type ResendManagedEmailMutationError = ErrorType<void>;
+
+export const useResendManagedEmail = <TError = ErrorType<void>, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendManagedEmail>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<Awaited<ReturnType<typeof resendManagedEmail>>, TError, void, TContext> => {
+  return useMutation(getResendManagedEmailMutationOptions(options));
+};
+
+/**
+ * @deprecated
  * @summary Get or create a booking by session token
  */
 export const getGetBookingBySessionUrl = (sessionToken: string) => {
@@ -559,6 +929,7 @@ export type GetBookingBySessionQueryResult = NonNullable<
 export type GetBookingBySessionQueryError = ErrorType<unknown>;
 
 /**
+ * @deprecated
  * @summary Get or create a booking by session token
  */
 
@@ -580,7 +951,7 @@ export function useGetBookingBySession<
 }
 
 /**
- * @summary Get pricing breakdown for a booking
+ * @summary Get the pricing breakdown for an owned booking
  */
 export const getGetBookingPricingUrl = (id: number, params?: GetBookingPricingParams) => {
   const normalizedParams = new URLSearchParams();
@@ -615,7 +986,7 @@ export const getGetBookingPricingQueryKey = (id: number, params?: GetBookingPric
 
 export const getGetBookingPricingQueryOptions = <
   TData = Awaited<ReturnType<typeof getBookingPricing>>,
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<void | ErrorResponse>,
 >(
   id: number,
   params?: GetBookingPricingParams,
@@ -641,15 +1012,15 @@ export const getGetBookingPricingQueryOptions = <
 export type GetBookingPricingQueryResult = NonNullable<
   Awaited<ReturnType<typeof getBookingPricing>>
 >;
-export type GetBookingPricingQueryError = ErrorType<ErrorResponse>;
+export type GetBookingPricingQueryError = ErrorType<void | ErrorResponse>;
 
 /**
- * @summary Get pricing breakdown for a booking
+ * @summary Get the pricing breakdown for an owned booking
  */
 
 export function useGetBookingPricing<
   TData = Awaited<ReturnType<typeof getBookingPricing>>,
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<void | ErrorResponse>,
 >(
   id: number,
   params?: GetBookingPricingParams,
@@ -5495,6 +5866,91 @@ export const useDownloadAllSponsorBackupBatch = <
 };
 
 /**
+ * @summary Exchange the link credential without putting it in a request URL
+ */
+export const getExchangePrivateSponsorLinkUrl = () => {
+  return `/api/sponsor/access`;
+};
+
+export const exchangePrivateSponsorLink = async (
+  exchangePrivateSponsorLinkBody: ExchangePrivateSponsorLinkBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getExchangePrivateSponsorLinkUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(exchangePrivateSponsorLinkBody),
+  });
+};
+
+export const getExchangePrivateSponsorLinkMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exchangePrivateSponsorLink>>,
+    TError,
+    { data: BodyType<ExchangePrivateSponsorLinkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof exchangePrivateSponsorLink>>,
+  TError,
+  { data: BodyType<ExchangePrivateSponsorLinkBody> },
+  TContext
+> => {
+  const mutationKey = ["exchangePrivateSponsorLink"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof exchangePrivateSponsorLink>>,
+    { data: BodyType<ExchangePrivateSponsorLinkBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return exchangePrivateSponsorLink(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExchangePrivateSponsorLinkMutationResult = NonNullable<
+  Awaited<ReturnType<typeof exchangePrivateSponsorLink>>
+>;
+export type ExchangePrivateSponsorLinkMutationBody = BodyType<ExchangePrivateSponsorLinkBody>;
+export type ExchangePrivateSponsorLinkMutationError = ErrorType<void>;
+
+/**
+ * @summary Exchange the link credential without putting it in a request URL
+ */
+export const useExchangePrivateSponsorLink = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exchangePrivateSponsorLink>>,
+    TError,
+    { data: BodyType<ExchangePrivateSponsorLinkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof exchangePrivateSponsorLink>>,
+  TError,
+  { data: BodyType<ExchangePrivateSponsorLinkBody> },
+  TContext
+> => {
+  return useMutation(getExchangePrivateSponsorLinkMutationOptions(options));
+};
+
+/**
+ * @deprecated
  * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
  */
 export const getExchangeSponsorAccessTokenUrl = (token: string) => {
@@ -5554,6 +6010,7 @@ export type ExchangeSponsorAccessTokenMutationResult = NonNullable<
 export type ExchangeSponsorAccessTokenMutationError = ErrorType<ErrorResponse>;
 
 /**
+ * @deprecated
  * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
  */
 export const useExchangeSponsorAccessToken = <

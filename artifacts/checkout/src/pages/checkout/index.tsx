@@ -1,10 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import {
-  useGetBookingBySession,
-  getBookingBySession,
-  customFetch,
-} from "@workspace/api-client-react";
+import { useGetCurrentBooking, getCurrentBooking, customFetch } from "@workspace/api-client-react";
 import type { BookingWithAttendees } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { v4 as uuidv4 } from "uuid";
@@ -83,7 +79,7 @@ const COMPLETION_STEP_PARAM = "step";
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 60000;
 
-function paymentIsConfirmed(booking?: BookingWithAttendees) {
+function paymentIsConfirmed(booking?: BookingWithAttendees | null) {
   return booking?.status === "paid" || booking?.status === "invoiced";
 }
 
@@ -144,12 +140,15 @@ export default function CheckoutFlow() {
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const paymentCheckActiveRef = useRef(isStripeReturn);
 
-  const { data: booking, isLoading } = useGetBookingBySession(sessionToken, {
+  const { data: currentBooking, isLoading } = useGetCurrentBooking({
+    request: { headers: { "x-booking-session": sessionToken } },
     query: {
       queryKey: ["booking", sessionToken],
       enabled: !!sessionToken,
     },
   });
+
+  const booking = currentBooking ?? undefined;
 
   useEffect(() => {
     if (!pollingForPayment || !sessionToken) return;
@@ -197,7 +196,10 @@ export default function CheckoutFlow() {
           }
         }
         if (!active) return;
-        const latest = await getBookingBySession(sessionToken, { signal: controller.signal });
+        const latest = await getCurrentBooking({
+          signal: controller.signal,
+          headers: { "x-booking-session": sessionToken },
+        });
         if (!active) return;
         // A background refresh may have confirmed payment while this older
         // response was in flight. Never replace that result with pending data.
@@ -295,7 +297,7 @@ export default function CheckoutFlow() {
   }, [serverStep, viewBackStep, sessionToken, isLoading]);
 
   const currentStep =
-    isStripeReturn && paymentIsConfirmed(booking)
+    (isStripeReturn || isCompletionReturn) && paymentIsConfirmed(booking)
       ? 5
       : (optimisticStep ?? viewBackStep ?? serverStep);
 

@@ -4,11 +4,14 @@ import logoUrl from "@assets/swp-summit-logo.png";
 
 export default function SponsorAccess() {
   const params = useParams<{ token: string }>();
+  const token = window.location.hash.slice(1) || params.token;
   const [, navigate] = useLocation();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/sponsor/access/${encodeURIComponent(params.token)}`, {
+    fetch("/api/sponsor/access", {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
       method: "POST",
       credentials: "include",
     })
@@ -22,7 +25,7 @@ export default function SponsorAccess() {
       .catch((caught) =>
         setError(caught instanceof Error ? caught.message : "This sponsor link is not available"),
       );
-  }, [navigate, params.token]);
+  }, [navigate, token]);
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">

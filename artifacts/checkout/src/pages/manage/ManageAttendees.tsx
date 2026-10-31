@@ -352,19 +352,33 @@ function AttendeeCard({
   );
 }
 
-interface ManageBookingResponse extends BookingWithAttendees {
+interface ManageBookingResponse extends Pick<
+  BookingWithAttendees,
+  | "id"
+  | "status"
+  | "passType"
+  | "quantity"
+  | "orderReference"
+  | "paymentMethod"
+  | "billingEmail"
+  | "invoiceBadgeStatus"
+  | "attendees"
+> {
   changesLocked?: boolean;
   lockedMessage?: string | null;
 }
 
 export default function ManageAttendees() {
   const [, params] = useRoute("/manage/:token");
-  const token = params?.token ?? "";
+  const token = window.location.hash.slice(1) || params?.token || "";
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery<ManageBookingResponse>({
     queryKey: ["booking-by-token", token],
-    queryFn: () => customFetch<ManageBookingResponse>(`/api/bookings/by-management-token/${token}`),
+    queryFn: () =>
+      customFetch<ManageBookingResponse>("/api/bookings/manage", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
     enabled: !!token,
     retry: false,
   });

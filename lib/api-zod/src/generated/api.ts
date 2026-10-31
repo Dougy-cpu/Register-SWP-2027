@@ -239,6 +239,143 @@ export const UpdateBookingResponse = zod.object({
 });
 
 /**
+ * @summary Resume checkout using the private booking session header
+ */
+export const GetCurrentBookingResponse = zod.union([
+  zod
+    .object({
+      id: zod.number(),
+      sessionToken: zod.string(),
+      status: zod.enum([
+        "partial",
+        "pending_payment",
+        "paid",
+        "invoiced",
+        "transferred",
+        "cancelled",
+        "refunded",
+        "disputed",
+      ]),
+      passType: zod.enum(["single", "business"]),
+      attendeeType: zod.enum(["hr_professional", "consultant_vendor"]),
+      quantity: zod.number(),
+      promoCode: zod.string().nullish(),
+      promoDiscountAmount: zod.number().nullish(),
+      groupDiscountAmount: zod.number().nullish(),
+      subtotalAmount: zod.number(),
+      vatAmount: zod.number(),
+      totalAmount: zod.number(),
+      paymentMethod: zod
+        .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
+        .nullish(),
+      manualEntry: zod.boolean(),
+      registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
+      sponsorId: zod.number().nullish(),
+      stripeSessionId: zod.string().nullish(),
+      stripePaymentIntentId: zod.string().nullish(),
+      stripeInvoiceId: zod.string().nullish(),
+      stripeInvoicePdfUrl: zod.string().nullish(),
+      stripeInvoicePaymentUrl: zod.string().nullish(),
+      orderReference: zod.string().nullish(),
+      currentStep: zod.number(),
+      billingName: zod.string().nullish(),
+      billingCompany: zod.string().nullish(),
+      billingEmail: zod.string().nullish(),
+      billingAddress: zod.string().nullish(),
+      billingAddressLine1: zod.string().nullish(),
+      billingAddressLine2: zod.string().nullish(),
+      billingTown: zod.string().nullish(),
+      billingRegion: zod.string().nullish(),
+      billingPostcode: zod.string().nullish(),
+      billingCountry: zod.string().nullish(),
+      billingVatNumber: zod.string().nullish(),
+      billingPhone: zod.string().nullish(),
+      poNumber: zod.string().nullish(),
+      managementToken: zod.string().nullish(),
+      invoiceDueDate: zod.coerce.date().nullish(),
+      paidAt: zod.coerce.date().nullish(),
+      stripeInvoiceStatus: zod.string().nullish(),
+      stripeInvoiceStatusSyncedAt: zod.coerce.date().nullish(),
+      invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
+      confirmationEmailSent: zod.boolean().optional(),
+      welcomeEmailsSent: zod.boolean().optional(),
+      organiserNotified: zod.boolean().optional(),
+      sheetsSynced: zod.boolean().optional(),
+      needsAttention: zod.boolean().optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    })
+    .and(
+      zod.object({
+        attendees: zod.array(
+          zod.object({
+            id: zod.number(),
+            bookingId: zod.number(),
+            isLead: zod.boolean(),
+            firstName: zod.string(),
+            lastName: zod.string(),
+            jobTitle: zod.string(),
+            company: zod.string(),
+            workEmail: zod.string(),
+            phone: zod.string().nullish(),
+            isTbc: zod.boolean(),
+            gdprConsent: zod.boolean(),
+            gdprConsentAt: zod.coerce.date().nullish(),
+            leadSharingExcluded: zod.boolean(),
+            leadSharingNoticeAt: zod.coerce.date().nullish(),
+            dietaryAccessibility: zod.string().nullish(),
+            seatIndex: zod.number().optional(),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          }),
+        ),
+      }),
+    ),
+  zod.null(),
+]);
+
+/**
+ * @summary Read a booking through its management link
+ */
+export const GetManagedBookingResponse = zod.object({
+  id: zod.number(),
+  status: zod.string(),
+  passType: zod.string(),
+  quantity: zod.number(),
+  orderReference: zod.string().nullish(),
+  paymentMethod: zod.string().nullish(),
+  billingEmail: zod.string().nullish(),
+  invoiceBadgeStatus: zod.string().nullish(),
+  changesLocked: zod.boolean(),
+  lockedMessage: zod.string().nullish(),
+  attendees: zod.array(
+    zod.object({
+      id: zod.number(),
+      bookingId: zod.number(),
+      isLead: zod.boolean(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      jobTitle: zod.string(),
+      company: zod.string(),
+      workEmail: zod.string(),
+      phone: zod.string().nullish(),
+      isTbc: zod.boolean(),
+      gdprConsent: zod.boolean(),
+      gdprConsentAt: zod.coerce.date().nullish(),
+      leadSharingExcluded: zod.boolean(),
+      leadSharingNoticeAt: zod.coerce.date().nullish(),
+      dietaryAccessibility: zod.string().nullish(),
+      seatIndex: zod.number().optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+export const UpdateManagedBillingBody = zod.record(zod.string(), zod.unknown());
+
+/**
+ * @deprecated
  * @summary Get or create a booking by session token
  */
 export const GetBookingBySessionParams = zod.object({
@@ -336,7 +473,7 @@ export const GetBookingBySessionResponse = zod
   );
 
 /**
- * @summary Get pricing breakdown for a booking
+ * @summary Get the pricing breakdown for an owned booking
  */
 export const GetBookingPricingParams = zod.object({
   id: zod.coerce.number(),
@@ -2979,6 +3116,14 @@ export const DownloadAllSponsorBackupBatchBody = zod.object({
 });
 
 /**
+ * @summary Exchange the link credential without putting it in a request URL
+ */
+export const ExchangePrivateSponsorLinkBody = zod.object({
+  token: zod.string(),
+});
+
+/**
+ * @deprecated
  * @summary Exchange a private signed link for an HttpOnly SameSite session cookie
  */
 export const ExchangeSponsorAccessTokenParams = zod.object({

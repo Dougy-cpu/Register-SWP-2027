@@ -158,7 +158,7 @@ describe("approved confirmation design", () => {
       "13 November 2026",
       "Pay invoice online",
       "https://invoice.stripe.com/i/test",
-      "/manage/DEMONSTRATION-ONLY/billing",
+      "/manage/billing#DEMONSTRATION-ONLY",
       "automatically re-issue",
       "bank transfer",
       "remittance",

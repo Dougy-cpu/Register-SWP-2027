@@ -88,12 +88,15 @@ function Router() {
       <Route path="/admin/sponsors" component={AdminSponsors} />
       <Route path="/admin/sponsor-assets" component={AdminSponsorAssets} />
       <Route path="/admin/lead-scanner" component={AdminLeadScanner} />
+      <Route path="/sponsor/access" component={SponsorAccess} />
       <Route path="/sponsor/access/:token" component={SponsorAccess} />
       <Route path="/sponsor/scanner" component={SponsorScanner} />
       <Route path="/sponsor/leads" component={SponsorLeads} />
       <Route path="/sponsor" component={SponsorPortal} />
       <Route path="/scanner-test/badges" component={ScannerTestBadges} />
       <Route path="/scanner-test" component={ScannerTest} />
+      <Route path="/manage" component={ManageAttendees} />
+      <Route path="/manage/billing" component={EditBilling} />
       <Route path="/manage/:token/billing" component={EditBilling} />
       <Route path="/manage/:token" component={ManageAttendees} />
       <Route component={NotFound} />

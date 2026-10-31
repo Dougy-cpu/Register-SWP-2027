@@ -1,6 +1,13 @@
+import { invoiceSettlementMatches } from "./invoice";
 import { and, eq, inArray, not, or, isNull, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { attendeesTable, bookingsTable } from "@workspace/db";
+import type Stripe from "stripe";
+import {
+  PaymentSettlementConflict,
+  validateCompletedCheckoutSession,
+  checkoutQuoteHash,
+} from "./stripe-checkout-validation";
 import { logger } from "./logger";
 import {
   sendConfirmationAndReceiptEmail,
@@ -43,6 +50,7 @@ export async function claimBookingConfirmation(
     "partial",
     "pending_payment",
   ],
+  evidence?: { card: Stripe.Checkout.Session } | { invoice: Stripe.Invoice },
 ): Promise<typeof bookingsTable.$inferSelect | null> {
   const now = new Date();
   const setFields: Partial<typeof bookingsTable.$inferInsert> = {
@@ -60,6 +68,31 @@ export async function claimBookingConfirmation(
     // important when the Stripe webhook and browser confirmation race.
     await tx.execute(sql`SELECT id FROM bookings WHERE id = ${bookingId} FOR UPDATE`);
     const [current] = await tx.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+    // Validate the Stripe evidence against the locked row, including on a replay.
+    if (
+      current &&
+      evidence &&
+      "invoice" in evidence &&
+      !invoiceSettlementMatches(evidence.invoice, current)
+    )
+      throw new PaymentSettlementConflict(
+        "Paid invoice does not match the booking reference, total or currency",
+      );
+    if (current && evidence && "card" in evidence) {
+      const cardSession = evidence.card;
+      const checked = validateCompletedCheckoutSession(cardSession, current);
+      if (!checked.ok) throw new PaymentSettlementConflict(checked.reason);
+      if (
+        cardSession.metadata?.checkoutQuote &&
+        cardSession.metadata.checkoutQuote !== checkoutQuoteHash(current)
+      )
+        throw new PaymentSettlementConflict("The booking terms changed after card checkout opened");
+      if (
+        !currentStatuses.includes(current.status as (typeof currentStatuses)[number]) &&
+        !(current.status === "paid" && current.stripePaymentIntentId === checked.paymentIntentId)
+      )
+        throw new PaymentSettlementConflict("The booking is no longer awaiting this payment");
+    }
     if (!current || !currentStatuses.includes(current.status as (typeof currentStatuses)[number])) {
       return null;
     }

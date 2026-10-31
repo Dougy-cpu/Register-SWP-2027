@@ -1,7 +1,7 @@
 ﻿import type Stripe from "stripe";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookingsTable, attendeesTable } from "@workspace/db";
+import { bookingsTable, attendeesTable, type Booking } from "@workspace/db";
 import { logger } from "./logger";
 import type { DbExecutor } from "./pricing";
 import { defaultOrderRef } from "./order-reference";
@@ -60,12 +60,29 @@ async function getOrCreateVatRate(stripe: Stripe): Promise<string | null> {
   }
 }
 
+type InvoiceBooking = Pick<Booking, "id" | "stripeInvoiceId" | "totalAmount">;
+export function invoiceSettlementMatches(invoice: Stripe.Invoice, booking: InvoiceBooking) {
+  return (
+    invoice.id === booking.stripeInvoiceId &&
+    invoice.currency === "gbp" &&
+    invoice.status === "paid" &&
+    invoice.total === Math.round(Number(booking.totalAmount) * 100)
+  );
+}
 export async function getStripeInvoiceStatus(
   stripe: Stripe,
   invoiceId: string,
+  booking: InvoiceBooking,
 ): Promise<{ status: Stripe.Invoice.Status | null; paid: boolean }> {
   try {
     const inv = await stripe.invoices.retrieve(invoiceId);
+    if (inv.status === "paid" && !invoiceSettlementMatches(inv, booking)) {
+      logger.warn(
+        { bookingId: booking.id, invoiceId },
+        "Paid invoice does not match the booking total or currency",
+      );
+      return { status: null, paid: false };
+    }
     return { status: inv.status ?? null, paid: inv.status === "paid" };
   } catch (err) {
     logger.warn({ err, invoiceId }, "Failed to retrieve Stripe invoice status");
@@ -102,13 +119,23 @@ export async function refreshStripeInvoiceUrls(
     };
     if (inv.invoice_pdf) updates.stripeInvoicePdfUrl = inv.invoice_pdf;
     if (inv.hosted_invoice_url) updates.stripeInvoicePaymentUrl = inv.hosted_invoice_url;
-    if (inv.status === "paid" && booking.status !== "paid") {
+    if (inv.status === "paid" && !invoiceSettlementMatches(inv, booking)) return;
+    if (inv.status === "paid" && booking.status === "invoiced") {
       updates.status = "paid";
       updates.paidAt = booking.paidAt ?? new Date();
-    } else if (inv.status === "void" && booking.status !== "cancelled") {
+    } else if (inv.status === "void" && booking.status === "invoiced") {
       updates.status = "cancelled";
     }
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, bookingId));
+    await db
+      .update(bookingsTable)
+      .set(updates)
+      .where(
+        and(
+          eq(bookingsTable.id, bookingId),
+          eq(bookingsTable.status, booking.status),
+          eq(bookingsTable.stripeInvoiceId, booking.stripeInvoiceId),
+        ),
+      );
   } catch (err) {
     logger.warn({ err, bookingId }, "refreshStripeInvoiceUrls failed");
   }
@@ -122,14 +149,19 @@ export async function refreshStripeInvoiceStatusIfStale(
   try {
     const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
     if (!booking || !booking.stripeInvoiceId) return;
-    if (booking.status === "paid" || booking.status === "cancelled") return;
+    if (
+      booking.status !== "invoiced" &&
+      booking.status !== "pending_payment" &&
+      booking.status !== "partial"
+    )
+      return;
 
     const last = booking.stripeInvoiceStatusSyncedAt
       ? booking.stripeInvoiceStatusSyncedAt.getTime()
       : 0;
     if (Date.now() - last < STALE_INVOICE_STATUS_MS) return;
 
-    const { status, paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
+    const { status, paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId, booking);
     if (status === null) return;
 
     // Note: the `if (booking.status === "paid" || "cancelled") return;` guard
@@ -147,7 +179,16 @@ export async function refreshStripeInvoiceStatusIfStale(
       updates.status = "cancelled";
     }
 
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, bookingId));
+    await db
+      .update(bookingsTable)
+      .set(updates)
+      .where(
+        and(
+          eq(bookingsTable.id, bookingId),
+          eq(bookingsTable.status, booking.status),
+          eq(bookingsTable.stripeInvoiceId, booking.stripeInvoiceId),
+        ),
+      );
   } catch (err) {
     logger.warn({ err, bookingId }, "refreshStripeInvoiceStatusIfStale failed");
   }
@@ -211,10 +252,16 @@ export async function applyReissueInvoiceResultTx(
 export async function reissueBookingInvoice(
   stripe: Stripe,
   bookingId: number,
+  conn: DbExecutor = db,
+  attemptKey?: string,
 ): Promise<ReissueInvoiceResult> {
-  const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+  const options = (step: string) =>
+    attemptKey ? { idempotencyKey: attemptKey + "-" + step } : undefined;
+  const [booking] = await conn.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
   if (!booking) throw new Error("Booking not found");
 
+  if (!["partial", "pending_payment", "invoiced", "paid"].includes(booking.status))
+    throw new Error("This booking is closed and cannot issue an invoice.");
   // Short-circuit if booking is already marked paid in our DB
   if (booking.status === "paid") {
     return { alreadyPaid: true };
@@ -222,10 +269,11 @@ export async function reissueBookingInvoice(
 
   // If we have an existing invoice, check its remote status
   if (booking.stripeInvoiceId) {
-    const { paid, status } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
+    const { paid, status } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId, booking);
     if (paid) {
       return { alreadyPaid: true };
     }
+    if (status === null) throw new Error("Could not verify the previous invoice. Please retry.");
     // Void the existing invoice if it's still open/finalized/uncollectible.
     // (Already-void invoices are skipped; paid is handled above.)
     if (status === "open" || status === "draft" || status === "uncollectible") {
@@ -236,15 +284,15 @@ export async function reissueBookingInvoice(
           await stripe.invoices.voidInvoice(booking.stripeInvoiceId);
         }
       } catch (err) {
-        logger.warn(
-          { err, invoiceId: booking.stripeInvoiceId, bookingId },
-          "Failed to void/delete previous Stripe invoice while re-issuing - continuing",
+        logger.error({ err, bookingId }, "Could not retire the previous invoice");
+        throw new Error(
+          "The previous invoice could not be retired. Please retry before issuing another.",
         );
       }
     }
   }
 
-  const attendees = await db
+  const attendees = await conn
     .select()
     .from(attendeesTable)
     .where(eq(attendeesTable.bookingId, bookingId));
@@ -301,10 +349,10 @@ export async function reissueBookingInvoice(
         { err, customerId: customer.id },
         "Failed to sync Stripe customer billing details, creating a replacement customer",
       );
-      customer = await stripe.customers.create(customerCreateParams);
+      customer = await stripe.customers.create(customerCreateParams, options("customer"));
     }
   } else {
-    customer = await stripe.customers.create(customerCreateParams);
+    customer = await stripe.customers.create(customerCreateParams, options("customer"));
   }
 
   // Look up - or bootstrap - the UK VAT 20% Stripe tax rate
@@ -326,53 +374,65 @@ export async function reissueBookingInvoice(
     baseCustomFields.push({ name: "Contact", value: "douglas@dynamicbusinessleaders.co.uk" });
   }
 
-  const invoiceObj = await stripe.invoices.create({
-    customer: customer.id,
-    collection_method: "send_invoice",
-    days_until_due: 14,
-    description: `SWP Summit 2027, ${orderRef}`,
-    footer: INVOICE_FOOTER,
-    custom_fields: baseCustomFields,
-    metadata: {
-      bookingId: String(bookingId),
-      orderRef,
-      ...(booking.poNumber ? { poNumber: booking.poNumber } : {}),
+  const invoiceObj = await stripe.invoices.create(
+    {
+      customer: customer.id,
+      collection_method: "send_invoice",
+      days_until_due: 14,
+      description: `SWP Summit 2027, ${orderRef}`,
+      footer: INVOICE_FOOTER,
+      custom_fields: baseCustomFields,
+      metadata: {
+        bookingId: String(bookingId),
+        orderRef,
+        ...(booking.poNumber ? { poNumber: booking.poNumber } : {}),
+      },
+      auto_advance: false,
     },
-    auto_advance: false,
-  });
+    options("invoice"),
+  );
 
-  await stripe.invoiceItems.create({
-    customer: customer.id,
-    invoice: invoiceObj.id,
-    description: `${PASS_LABELS[booking.passType] || booking.passType}, quantity ${booking.quantity}`,
-    amount: Math.round(baseAmount * 100),
-    currency: "gbp",
-    ...vatParams,
-  });
+  await stripe.invoiceItems.create(
+    {
+      customer: customer.id,
+      invoice: invoiceObj.id,
+      description: `${PASS_LABELS[booking.passType] || booking.passType}, quantity ${booking.quantity}`,
+      amount: Math.round(baseAmount * 100),
+      currency: "gbp",
+      ...vatParams,
+    },
+    options("passes"),
+  );
 
   if (groupDiscount > 0) {
-    await stripe.invoiceItems.create({
-      customer: customer.id,
-      invoice: invoiceObj.id,
-      description: "Group Discount",
-      amount: -Math.round(groupDiscount * 100),
-      currency: "gbp",
-      ...vatParams,
-    });
+    await stripe.invoiceItems.create(
+      {
+        customer: customer.id,
+        invoice: invoiceObj.id,
+        description: "Group Discount",
+        amount: -Math.round(groupDiscount * 100),
+        currency: "gbp",
+        ...vatParams,
+      },
+      options("group"),
+    );
   }
   if (promoDiscount > 0) {
-    await stripe.invoiceItems.create({
-      customer: customer.id,
-      invoice: invoiceObj.id,
-      description: `Promo Code: ${booking.promoCode}`,
-      amount: -Math.round(promoDiscount * 100),
-      currency: "gbp",
-      ...vatParams,
-    });
+    await stripe.invoiceItems.create(
+      {
+        customer: customer.id,
+        invoice: invoiceObj.id,
+        description: `Promo Code: ${booking.promoCode}`,
+        amount: -Math.round(promoDiscount * 100),
+        currency: "gbp",
+        ...vatParams,
+      },
+      options("promo"),
+    );
   }
 
-  const finalized = await stripe.invoices.finalizeInvoice(invoiceObj.id);
-  const sent = await stripe.invoices.sendInvoice(finalized.id);
+  const finalized = await stripe.invoices.finalizeInvoice(invoiceObj.id, {}, options("finalize"));
+  const sent = await stripe.invoices.sendInvoice(finalized.id, {}, options("send"));
 
   const dueDate = sent.due_date
     ? new Date(sent.due_date * 1000)

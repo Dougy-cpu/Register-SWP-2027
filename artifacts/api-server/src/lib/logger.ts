@@ -10,6 +10,9 @@ export const logger = pino({
     "req.headers.cookie",
     "req.headers.x-admin-token",
     "req.headers.x-booking-session",
+    "req.body.token",
+    "req.body.managementToken",
+    "req.body.sessionToken",
     "res.headers['set-cookie']",
   ],
   ...(isProduction
