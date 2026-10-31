@@ -166,7 +166,7 @@ export default function Confirmation({ booking }: ConfirmationProps) {
                     </div>
                     <div>
                       <p className="font-bold">{attendeeName}</p>
-                      {attendee.workEmail && (
+                      {!isTbc && attendee.workEmail && (
                         <p className="text-xs text-muted-foreground">{attendee.workEmail}</p>
                       )}
                     </div>

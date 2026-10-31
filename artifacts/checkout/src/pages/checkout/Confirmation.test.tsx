@@ -31,7 +31,7 @@ describe("<Confirmation />", () => {
           isTbc: true,
           firstName: null,
           lastName: null,
-          workEmail: null,
+          workEmail: "tbc-1-1@tbc.placeholder",
         },
       ],
     } as unknown as BookingWithAttendees;
@@ -40,5 +40,7 @@ describe("<Confirmation />", () => {
 
     expect(screen.getByRole("heading", { name: "You are registered!" })).toBeTruthy();
     expect(screen.getByText("Attendee 2 (TBC)")).toBeTruthy();
+    expect(screen.queryByText("tbc-1-1@tbc.placeholder")).toBeNull();
+    expect(screen.getByText("taylor.reed@example.com")).toBeTruthy();
   });
 });
