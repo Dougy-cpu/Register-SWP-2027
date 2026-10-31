@@ -35,6 +35,8 @@ type BackupPlan = { batches: { assetIds: string[] }[] };
 let pg: { exec: (sql: string) => Promise<unknown> };
 let server: Server;
 let origin: string;
+let fixtureAdmin: typeof import("@workspace/db").pool | undefined;
+let createdDatabase: string | undefined;
 const intercepted = vi.hoisted(() => ({
   createSession: vi.fn(),
   getSession: vi.fn(),
@@ -178,16 +180,16 @@ beforeAll(async () => {
     connectionTimeoutMillis: 4000,
   };
   const database = "registration_qa_" + randomUUID().replaceAll("-", "");
-  const bootstrap = new Pool({ ...local, database: "postgres" });
-  try {
-    const { rows } = await bootstrap.query(
-      "select current_user as usr,inet_server_addr()::text as addr,inet_server_port() as port",
-    );
-    expect(rows[0]).toEqual({ usr: "qa_runner", addr: "127.0.0.1/32", port: 54549 });
-    await bootstrap.query("CREATE DATABASE " + database);
-  } finally {
-    await bootstrap.end();
-  }
+  fixtureAdmin = new Pool({
+    ...local,
+    database: "postgres",
+  }) as typeof import("@workspace/db").pool;
+  const { rows } = await fixtureAdmin.query(
+    "select current_user as usr,inet_server_addr()::text as addr,inet_server_port() as port",
+  );
+  expect(rows[0]).toEqual({ usr: "qa_runner", addr: "127.0.0.1/32", port: 54549 });
+  await fixtureAdmin.query("CREATE DATABASE " + database);
+  createdDatabase = database;
   pool = new Pool({ ...local, database });
   pg = { exec: (sql) => pool.query(sql) };
   db = drizzle(pool, { schema });
@@ -287,9 +289,14 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
-  await pool?.end();
-  setSponsorObjectStorageForTests();
-  vi.unstubAllEnvs();
+  try {
+    await pool?.end();
+    if (createdDatabase) await fixtureAdmin?.query("DROP DATABASE " + createdDatabase);
+  } finally {
+    await fixtureAdmin?.end();
+    setSponsorObjectStorageForTests();
+    vi.unstubAllEnvs();
+  }
 });
 async function http(
   path: string,
@@ -1770,12 +1777,19 @@ if (process.env.QA_EDGE_SCANNER === "1") {
         .from(schema.sponsorLeadsTable)
         .where(eq(schema.sponsorLeadsTable.sponsorId, sp.s.id));
       if (leads.length) {
-        console.log("OBSERVED offline scan reached database", {
+        const notes = await db
+          .select()
+          .from(schema.sponsorLeadNotesTable)
+          .where(eq(schema.sponsorLeadNotesTable.leadId, leads[0].id));
+        if (!notes.some((item) => item.note?.trim())) continue;
+        console.log("OBSERVED offline scan and note reached database", {
+          notes: notes.length,
           leads: leads.length,
           scanCount: leads[0].scanCount,
         });
         expect(leads.length).toBe(1);
         expect(leads[0].scanCount).toBe(1);
+        expect(notes).toHaveLength(1);
         await new Promise((resolve) => setTimeout(resolve, 30000));
         return;
       }
@@ -1799,8 +1813,16 @@ if (process.env.QA_EDGE_BROWSER === "1") {
           bookings: facts.rows,
           providerSendCalls: intercepted.sendInvoice.mock.calls.length,
         });
+        expect(facts.rows).toHaveLength(1);
+        expect(facts.rows[0]).toMatchObject({
+          quantity: 3,
+          attendees: 3,
+          current_step: 5,
+          status: "invoiced",
+          notice_recorded: 1,
+        });
+        expect(intercepted.sendInvoice).toHaveBeenCalledTimes(1);
         await new Promise((resolve) => setTimeout(resolve, 45000));
-        expect(rows.rows.length).toBe(1);
         return;
       }
     }
