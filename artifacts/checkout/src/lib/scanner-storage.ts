@@ -706,20 +706,26 @@ export async function prepareScannerStorage(): Promise<{
   return result;
 }
 
-export async function otherScannerWork(credential: ScannerCredential): Promise<number> {
+export async function otherScannerWork(credential: ScannerCredential) {
   const db = await database();
   const scope = scannerScope(credential);
   const company = `swp-2027:${credential.sponsorId}:`;
-  const [scans, notes, rejected] = await boundStorageOperation(
+  const [scans, notes, rejected, profiles] = await boundStorageOperation(
     Promise.all([
       db.getAll("pendingScans"),
       db.getAll("pendingAnnotations"),
       db.getAll("rejectedItems"),
+      approvedProfiles(credential.sponsorId),
     ]),
   );
-  return [...scans.filter((scan) => scan.code !== "FFFFFFFFFFFF"), ...notes, ...rejected].filter(
-    (item) => item.scope?.startsWith(company) && item.scope !== scope,
-  ).length;
+  const other = (item: { scope?: string }) =>
+    item.scope?.startsWith(company) && item.scope !== scope;
+  const waiting = [...scans.filter((scan) => scan.code !== "FFFFFFFFFFFF"), ...notes].filter(other);
+  const approved = new Set(profiles.map(scannerScope));
+  return {
+    pending: waiting.filter((item) => item.scope && approved.has(item.scope)).length,
+    total: waiting.length + rejected.filter(other).length,
+  };
 }
 
 export async function scannerHasUnsettledWork(): Promise<boolean> {

@@ -72,7 +72,7 @@ vi.mock("@/lib/scanner-api", () => ({
 vi.mock("@/lib/scanner-storage", () => ({
   approvedProfiles: async () => [],
   watchOtherScannerTabs: () => () => {},
-  otherScannerWork: async () => 0,
+  otherScannerWork: async () => ({ total: 0, pending: 0 }),
   getScannerCredential: vi.fn(async () => credential),
   getOfflinePack: vi.fn(async () => pack),
   cachedScannerBootstrap: vi.fn(async () => state),
@@ -227,7 +227,8 @@ describe("fast scanner failure paths", () => {
   it("updates connectivity feedback without requiring another scan", async () => {
     render(<SponsorScanner />);
     await screen.findByRole("button", { name: "Start scanning" });
-    const offlineMessage = "Connection unavailable. Saved leads stay on this phone.";
+    const offlineMessage =
+      "Connection unavailable. Saved scans and notes stay on this device. We’ll retry automatically.";
     expect(screen.queryByText(offlineMessage)).toBeNull();
     act(() => window.dispatchEvent(new Event("offline")));
     expect(await screen.findByText(offlineMessage)).toBeTruthy();

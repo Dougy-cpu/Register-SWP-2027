@@ -20,7 +20,7 @@ vi.mock("@/lib/scanner-api", () => ({
 vi.mock("@/lib/scanner-storage", () => ({
   approvedProfiles: async () => [],
   watchOtherScannerTabs: () => () => {},
-  otherScannerWork: async () => 0,
+  otherScannerWork: async () => ({ total: 0, pending: 0 }),
   getScannerCredential: async () => owner,
   cachedScannerLeads: async () => [],
   pendingScannerItems: async () => ({ scans: [], annotations: [] }),

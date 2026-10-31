@@ -8,6 +8,7 @@ import { LeadNotes } from "@/components/scanner-lead-notes";
 import { ScannerRecoveryTools } from "@/components/scanner-recovery-tools";
 import { ScannerSaveStatus } from "@/components/scanner-save-status";
 import { useScannerSummary } from "@/hooks/use-scanner-summary";
+import { isScannerNetworkFailure } from "@/lib/scanner-connection";
 import { syncPendingScannerItems, refreshScannerLeads, ScannerApiError } from "@/lib/scanner-api";
 import {
   cachedScannerLeads,
@@ -182,6 +183,16 @@ export default function SponsorLeads() {
     [leads, search, organiser, view, credential],
   );
   const confirmed = leads.filter((lead) => !lead.localStatus).length;
+  const syncNow = async () => {
+    try {
+      await syncPendingScannerItems({ force: true });
+      await loadLocal();
+      setError("");
+    } catch (caught) {
+      if (!isScannerNetworkFailure(caught))
+        setError("Saved work is still on this phone. Reconnect and try again.");
+    }
+  };
   const download = async (format: "csv" | "xlsx") => {
     if (!organiser || exporting) return;
     setExporting(true);
@@ -223,7 +234,7 @@ export default function SponsorLeads() {
         </div>
       </header>
       <main className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-        {credential && <ScannerSaveStatus summary={summary} />}
+        {credential && <ScannerSaveStatus summary={summary} onSync={syncNow} />}
         {error && (
           <Card className="p-4 border-amber-300 bg-amber-50">
             <p role="alert">{error}</p>
@@ -390,19 +401,6 @@ export default function SponsorLeads() {
                   ? "Keep this phone's saved work until the status above shows everything is backed up. You can download an offline recovery file if the connection has not returned."
                   : "All your saved leads and notes are backed up. Your coordinator can download the company report."}
               </p>
-              <Button
-                className="mt-3 min-h-11"
-                variant="outline"
-                onClick={() =>
-                  void syncPendingScannerItems({ force: true })
-                    .then(() => refresh())
-                    .catch(() =>
-                      setError("Saved work is still on this phone. Reconnect and try again."),
-                    )
-                }
-              >
-                Back up waiting items now
-              </Button>
             </details>
             <ScannerRecoveryTools credential={credential} />
           </Card>

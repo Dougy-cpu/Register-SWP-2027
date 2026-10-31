@@ -12,6 +12,7 @@ export interface ScannerSummary {
   pendingScans: number;
   pendingNotes: number;
   otherWork: number;
+  otherPending: number;
   rejected: number;
   error: string;
   loaded: boolean;
@@ -22,6 +23,7 @@ export function useScannerSummary(credential: ScannerCredential | null) {
     pendingScans: 0,
     pendingNotes: 0,
     otherWork: 0,
+    otherPending: 0,
     rejected: 0,
     error: "",
     loaded: false,
@@ -47,7 +49,8 @@ export function useScannerSummary(credential: ScannerCredential | null) {
           rejected: rejected.length,
           error: "",
           loaded: true,
-          otherWork,
+          otherWork: otherWork.total,
+          otherPending: otherWork.pending,
         });
       } catch {
         if (active && current === generation)

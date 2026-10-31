@@ -33,7 +33,6 @@ const scan: PendingScan = {
 vi.mock("./scanner-storage", () => ({
   approvedProfiles: async () => fake.other,
   watchOtherScannerTabs: () => () => {},
-  otherScannerWork: async () => 0,
   getScannerCredential: async () => credential,
   pendingScannerItems: async (c: typeof credential) => ({
     scans: c.id === credential.id ? fake.scans : fake.otherScans,

@@ -28,7 +28,7 @@ import { useScannerSummary } from "@/hooks/use-scanner-summary";
 import { useScannerAwake } from "@/hooks/use-scanner-awake";
 import { mergeScannerLeads } from "@/lib/scanner-leads";
 import { applyScannerUpdate, checkScannerUpdate, scannerUpdateState } from "@/lib/scanner-updates";
-import { scannerRetryDue } from "@/lib/scanner-connection";
+import { isScannerNetworkFailure, scannerRetryDue } from "@/lib/scanner-connection";
 import { SCANNER_RELEASE } from "@/lib/scanner-release";
 import { ScannerStorageError } from "@/lib/scanner-storage-guard";
 import { prepareScannerDecoder } from "@/lib/scanner-decoder";
@@ -286,10 +286,10 @@ function PhoneSponsorScanner({
   }, []);
 
   const syncNow = useCallback(
-    async (quiet = false) => {
-      if (quiet && !scannerRetryDue()) return;
+    async (quiet = false, force = !quiet) => {
+      if (!scannerRetryDue(force)) return;
       try {
-        const result = await syncPendingScannerItems({ force: !quiet });
+        const result = await syncPendingScannerItems({ force });
         await refreshCounts();
         if (result.rejected > 0) {
           setError(
@@ -304,7 +304,7 @@ function PhoneSponsorScanner({
         }
         await refreshBootstrap().catch(() => undefined);
       } catch (caught) {
-        if (!quiet) setError(scannerErrorMessage(caught));
+        if (!quiet && !isScannerNetworkFailure(caught)) setError(scannerErrorMessage(caught));
       }
     },
     [refreshBootstrap, refreshCounts],
@@ -470,7 +470,7 @@ function PhoneSponsorScanner({
     const handleOnline = () => {
       void (async () => {
         await finaliseObservedOfflineTest().catch(() => undefined);
-        await syncNow(true);
+        await syncNow(true, true);
       })();
     };
     const handleVisibility = () => {
@@ -831,7 +831,7 @@ function PhoneSponsorScanner({
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
-        <ScannerSaveStatus summary={summary} dark />
+        <ScannerSaveStatus summary={summary} onSync={() => syncNow()} dark />
         {!storageReady && !error && (
           <p role="status" className="text-sm text-slate-200">
             Preparing saving on this phone…
@@ -1057,9 +1057,6 @@ function PhoneSponsorScanner({
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${preparing ? "animate-spin" : ""}`} />
               Refresh badge details
-            </Button>
-            <Button variant="outline" className="w-full min-h-11" onClick={() => void syncNow()}>
-              Back up waiting items now
             </Button>
             <ScannerRecoveryTools credential={credential} />
             <details className="border-t border-slate-200 text-sm pt-2">
