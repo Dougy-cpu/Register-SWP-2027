@@ -33,11 +33,9 @@ export function sponsorFileUpload(maxFields: number): RequestHandler {
     single(req, res, (err: unknown) => {
       if (err instanceof multer.MulterError) {
         if (err.code === "LIMIT_FILE_SIZE") {
-          res
-            .status(413)
-            .json({
-              error: "This file is too large. Images can be up to 10 MB and documents up to 25 MB.",
-            });
+          res.status(413).json({
+            error: "This file is too large. Images can be up to 10 MB and documents up to 25 MB.",
+          });
           return;
         }
         res.status(400).json({ error: "Choose one file and try the upload again." });
@@ -319,6 +317,13 @@ async function assetFamily(conn: AssetTx | typeof db, sponsorId: number, assetId
   return result.rows;
 }
 
+export function currentSponsorAsset() {
+  return or(
+    eq(sponsorAssetsTable.status, "active"),
+    and(eq(sponsorAssetsTable.status, "missing"), isNull(sponsorAssetsTable.archivedAt)),
+  );
+}
+
 export async function setSponsorAssetStatus(asset: SponsorAsset, status: "archived" | "active") {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT id FROM sponsors WHERE id=${asset.sponsorId} FOR UPDATE`);
@@ -330,9 +335,7 @@ export async function setSponsorAssetStatus(asset: SponsorAsset, status: "archiv
       await tx
         .update(sponsorAssetsTable)
         .set({ status: "archived", archivedAt: new Date() })
-        .where(
-          and(inArray(sponsorAssetsTable.id, otherIds), eq(sponsorAssetsTable.status, "active")),
-        );
+        .where(and(inArray(sponsorAssetsTable.id, otherIds), currentSponsorAsset()));
       await tx
         .update(sponsorDocumentsTable)
         .set({
@@ -346,14 +349,12 @@ export async function setSponsorAssetStatus(asset: SponsorAsset, status: "archiv
       .set({ status, archivedAt: status === "archived" ? new Date() : null })
       .where(eq(sponsorAssetsTable.id, asset.id))
       .returning();
-    await tx
-      .insert(sponsorActivityTable)
-      .values({
-        sponsorId: asset.sponsorId,
-        type: status === "archived" ? "asset_archived" : "asset_restored",
-        actorType: "admin",
-        data: { assetId: asset.id },
-      });
+    await tx.insert(sponsorActivityTable).values({
+      sponsorId: asset.sponsorId,
+      type: status === "archived" ? "asset_archived" : "asset_restored",
+      actorType: "admin",
+      data: { assetId: asset.id },
+    });
     return updated;
   });
 }
@@ -401,7 +402,7 @@ export async function createSponsorAsset(input: {
             and(
               eq(sponsorAssetsTable.id, input.replaces.id),
               eq(sponsorAssetsTable.sponsorId, input.sponsorId),
-              eq(sponsorAssetsTable.status, "active"),
+              currentSponsorAsset(),
             ),
           )
           .returning({ id: sponsorAssetsTable.id });
@@ -580,19 +581,30 @@ export async function preflightSponsorAssets(assets: SponsorAsset[]): Promise<st
   return missing;
 }
 
+export async function sponsorDownloadsAvailable(res: Response, assets: SponsorAsset[]) {
+  try {
+    const missing = await preflightSponsorAssets(assets);
+    if (!missing.length) return true;
+    res.status(409).json({
+      error:
+        "The download cannot start because a stored file is missing. Replace it or check Needs attention.",
+      missingAssetIds: missing,
+    });
+  } catch (error) {
+    if (!(error instanceof SponsorStorageError)) throw error;
+    res.status(503).json({
+      error: "File storage could not be reached. Retry the download or check Needs attention.",
+    });
+  }
+  return false;
+}
+
 export async function streamSponsorAssetsZip(
   res: Response,
   assets: SponsorAsset[],
   filename: string,
 ): Promise<boolean> {
-  const missing = await preflightSponsorAssets(assets);
-  if (missing.length) {
-    res.status(409).json({
-      error: `The download cannot start because ${missing.length} stored file${missing.length === 1 ? " is" : "s are"} missing. The issue is now shown in Needs attention.`,
-      missingAssetIds: missing,
-    });
-    return false;
-  }
+  if (!(await sponsorDownloadsAvailable(res, assets))) return false;
 
   const archive = archiver("zip", { zlib: { level: 6 } });
   const storage = getSponsorObjectStorage();
@@ -710,12 +722,7 @@ export async function activeSponsorAssets(
 ): Promise<SponsorAsset[]> {
   const filters = [
     eq(sponsorAssetsTable.sponsorId, sponsorId),
-    includeMissing
-      ? or(
-          eq(sponsorAssetsTable.status, "active"),
-          and(eq(sponsorAssetsTable.status, "missing"), isNull(sponsorAssetsTable.archivedAt)),
-        )
-      : eq(sponsorAssetsTable.status, "active"),
+    includeMissing ? currentSponsorAsset() : eq(sponsorAssetsTable.status, "active"),
   ];
   if (ids?.length) filters.push(inArray(sponsorAssetsTable.id, ids));
   return db

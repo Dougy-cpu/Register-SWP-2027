@@ -34,7 +34,9 @@ export function PortalEvent({
   const primary = workspace.contacts.find(
     (contact) => contact.isPrimary || contact.role === "primary",
   );
-  const files = workspace.assets.filter((asset) => asset.status === "active");
+  const files = workspace.assets.filter(
+    (asset) => asset.status === "active" || (asset.status === "missing" && !asset.archivedAt),
+  );
   const saveContact = async () => {
     if (busy) return;
     setBusy(true);
@@ -187,7 +189,9 @@ export function PortalEvent({
           <EventDocument
             key={`${document.id}-${document.acknowledgementVersion}`}
             document={document}
-            available={files.some((asset) => asset.id === document.assetId)}
+            available={files.some(
+              (asset) => asset.id === document.assetId && asset.status === "active",
+            )}
             onAcknowledged={onRefresh}
           />
         ))}

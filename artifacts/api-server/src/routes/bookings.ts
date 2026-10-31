@@ -514,6 +514,14 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     status,
   } = req.body;
 
+  if (
+    !admin &&
+    currentStep !== undefined &&
+    (!Number.isInteger(currentStep) || currentStep < 1 || currentStep > 4)
+  ) {
+    res.status(400).json({ error: "Confirmation is available after the booking is completed." });
+    return;
+  }
   const newPassType = passType ?? existing.passType;
   const newQuantity = quantity ?? existing.quantity;
 

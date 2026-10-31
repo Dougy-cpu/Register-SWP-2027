@@ -212,14 +212,12 @@ async function validateCheckoutPromo(booking: typeof bookingsTable.$inferSelect,
 function paymentError(res: import("express").Response, err: unknown, id: unknown) {
   const status = err instanceof CheckoutPaymentError ? err.status : 502;
   if (status >= 500) logger.error({ err, bookingId: id }, "Checkout provider request failed");
-  res
-    .status(status)
-    .json({
-      error:
-        err instanceof CheckoutPaymentError
-          ? err.message
-          : "Payment could not be completed. Please retry the same booking or contact the event team.",
-    });
+  res.status(status).json({
+    error:
+      err instanceof CheckoutPaymentError
+        ? err.message
+        : "Payment could not be completed. Please retry the same booking or contact the event team.",
+  });
 }
 
 async function recordCardMismatch(id: number, session: Stripe.Checkout.Session, reason: string) {
@@ -250,14 +248,12 @@ async function recordPaymentReview(id: number, providerId: string, reason: strin
       )
     )
       return;
-    await tx
-      .insert(activityLogTable)
-      .values({
-        bookingId: id,
-        actor: "stripe",
-        type,
-        data: { providerId, summary: "Payment needs reconciliation: " + reason },
-      });
+    await tx.insert(activityLogTable).values({
+      bookingId: id,
+      actor: "stripe",
+      type,
+      data: { providerId, summary: "Payment needs reconciliation: " + reason },
+    });
   });
 }
 
@@ -834,12 +830,10 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
     const validation = validateCompletedCheckoutSession(session, existing);
     if (!validation.ok) {
       await recordCardMismatch(id, session, validation.reason);
-      res
-        .status(409)
-        .json({
-          error:
-            "This payment does not match the booking. Check your confirmation or contact the event team.",
-        });
+      res.status(409).json({
+        error:
+          "This payment does not match the booking. Check your confirmation or contact the event team.",
+      });
       return;
     }
 

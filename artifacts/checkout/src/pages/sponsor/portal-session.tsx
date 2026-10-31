@@ -92,7 +92,9 @@ export function PortalSession({
   const draft = edit.draft;
   const missing = sessionMissingItems(draft, session, assets);
   const activeFiles = assets.filter(
-    (asset) => asset.status === "active" && asset.sessionId === session.id,
+    (asset) =>
+      (asset.status === "active" || (asset.status === "missing" && !asset.archivedAt)) &&
+      asset.sessionId === session.id,
   );
   useEffect(() => {
     if (!edit.modified && edit.baseRevision !== session.currentRevision)

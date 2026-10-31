@@ -287,6 +287,7 @@ export async function reissueBookingInvoice(
         logger.error({ err, bookingId }, "Could not retire the previous invoice");
         throw new Error(
           "The previous invoice could not be retired. Please retry before issuing another.",
+          { cause: err },
         );
       }
     }

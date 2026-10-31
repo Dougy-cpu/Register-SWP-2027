@@ -280,7 +280,8 @@ export default function CheckoutFlow() {
     }
   }, [booking?.currentStep, optimisticStep]);
 
-  const serverStep = booking?.currentStep ?? 1;
+  const serverStep =
+    booking?.currentStep === 5 && !paymentIsConfirmed(booking) ? 4 : (booking?.currentStep ?? 1);
 
   // If the server step ever advances past viewBackStep, the user has clearly
   // moved forward (e.g. a Continue handler succeeded) — drop the back view

@@ -1424,12 +1424,14 @@ export default function AdminSponsorDetail() {
                             >
                               <Download className="h-4 w-4" />
                             </Button>
-                            {asset.status === "active" && (
+                            {(asset.status === "active" ||
+                              (asset.status === "missing" && !asset.archivedAt)) && (
                               <ReplaceFileButton
                                 onFile={(file) => void replaceAsset(asset, file)}
                               />
                             )}
-                            {asset.status === "active" ? (
+                            {asset.status === "active" ||
+                            (asset.status === "missing" && !asset.archivedAt) ? (
                               <Button
                                 size="sm"
                                 variant="ghost"

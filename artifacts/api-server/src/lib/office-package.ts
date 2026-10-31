@@ -65,7 +65,8 @@ function packageParts(file: Buffer, main: string) {
     if (
       names.has(folded) ||
       name.startsWith("/") ||
-      /[\\:\x00-\x1f]/.test(name) ||
+      /[\\:]/.test(name) ||
+      [...name].some((char) => char.charCodeAt(0) < 32) ||
       name.split("/").some((x) => x === "." || x === "..") ||
       /(?:^|\/)(?:vbaProject[^/]*|[^/]+\.(?:exe|dll|cmd|bat|ps1|docm|pptm))$/i.test(name)
     )

@@ -30,6 +30,7 @@ import {
   formatSponsorAsset,
   isSafeRasterPreview,
   preflightSponsorAssets,
+  sponsorDownloadsAvailable,
   recordSponsorStorageFailure,
   safeDownloadFilename,
   SponsorAssetValidationError,
@@ -938,13 +939,7 @@ router.get(
       res.status(404).json({ error: "Asset not found" });
       return;
     }
-    const missing = await preflightSponsorAssets([asset]);
-    if (missing.length) {
-      res
-        .status(409)
-        .json({ error: "This file is missing from App Storage and is now in Needs attention" });
-      return;
-    }
+    if (!(await sponsorDownloadsAvailable(res, [asset]))) return;
     const preview = req.query.preview === "true" && isSafeRasterPreview(asset.mimeType);
     res.setHeader("Content-Type", preview ? asset.mimeType : "application/octet-stream");
     res.setHeader(
@@ -1085,13 +1080,11 @@ router.post("/admin/sponsor-assets/backup-plan", async (req, res): Promise<void>
     .orderBy(asc(sponsorAssetsTable.sponsorId), asc(sponsorAssetsTable.createdAt));
   const missing = assets.filter((asset) => asset.status === "missing" && !asset.archivedAt);
   if (missing.length) {
-    res
-      .status(409)
-      .json({
-        error:
-          "The complete backup contains missing files. Restore them or explicitly archive them before downloading.",
-        missingAssetIds: missing.map((a) => a.id),
-      });
+    res.status(409).json({
+      error:
+        "The complete backup contains missing files. Restore them or explicitly archive them before downloading.",
+      missingAssetIds: missing.map((a) => a.id),
+    });
     return;
   }
   const batches: Array<{ sponsorIds: number[]; assetIds: string[]; byteSize: number }> = [];

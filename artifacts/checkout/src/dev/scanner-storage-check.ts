@@ -7,14 +7,6 @@ const assert = (condition: unknown, label: string) => {
   if (!condition) throw new Error(label);
   output.textContent += `PASS ${label}\n`;
 };
-const credential: ScannerCredential = {
-  id: "preview-phone",
-  sponsorId: 90001,
-  sponsorCompany: "Sample Preview Sponsor",
-  operatorName: "Alex Preview",
-  token: "p".repeat(43),
-  activatedAt: new Date().toISOString(),
-};
 const attendee = {
   attendeeId: 90001,
   firstName: "Jamie",
@@ -29,6 +21,14 @@ document.querySelector("button")!.addEventListener(
   () =>
     void (async () => {
       output.textContent = "";
+      const credential: ScannerCredential = {
+        id: "preview-" + crypto.randomUUID(),
+        sponsorId: 90001,
+        sponsorCompany: "Sample Preview Sponsor",
+        operatorName: "Alex Preview",
+        token: "p".repeat(43),
+        activatedAt: new Date().toISOString(),
+      };
       const legacy = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open("swp-sponsor-scanner");
         request.onupgradeneeded = () => {
@@ -369,6 +369,14 @@ document.getElementById("reopen-check")?.addEventListener(
   () =>
     void (async () => {
       output.textContent = "";
+      const credential: ScannerCredential = {
+        id: "preview-" + crypto.randomUUID(),
+        sponsorId: 90001,
+        sponsorCompany: "Sample Preview Sponsor",
+        operatorName: "Alex Preview",
+        token: "p".repeat(43),
+        activatedAt: new Date().toISOString(),
+      };
       const storage = await import("@/lib/scanner-storage");
       const saved = await storage.getScannerCredential();
       assert(saved?.id === credential.id, "scanner credential survived a real browser reload");

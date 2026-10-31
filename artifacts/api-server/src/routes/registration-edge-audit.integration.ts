@@ -1200,8 +1200,16 @@ it("control: scanner activation, unknown and opted-out badges, duplicate receipt
     };
     const annotated = await (await sync({ annotations: [note] })).json<SyncView>();
     expect(annotated.leads[0].notes[0].note).toBe(note.note);
-    const exp = await http("/scanner/leads/export?format=csv", "GET", undefined, auth);
-    expect(await exp.text()).toContain(note.note);
+    const staffExport = await http("/scanner/leads/export?format=csv", "GET", undefined, auth);
+    expect(staffExport.status).toBe(403);
+    const companyExport = await http(
+      "/sponsor/leads/export?format=csv",
+      "GET",
+      undefined,
+      sp.headers,
+    );
+    expect(companyExport.status).toBe(200);
+    expect(await companyExport.text()).toContain(note.note);
     const oth = await (
       await http("/sponsor/leads", "GET", undefined, other.headers)
     ).json<SyncView>();
@@ -1550,6 +1558,141 @@ it("keeps credentials out of new request URLs and accepts the original links", a
   expect((await http("/bookings/manage")).status).toBe(403);
   const sp = await sponsor();
   expect((await http("/sponsor/access", "POST", { token: sp.token })).status).toBe(204);
+});
+
+it("never reopens a refunded invoice through a receipt refresh or a late void webhook", async () => {
+  const { b, owner } = await makeBooking("refunded");
+  await db
+    .update(schema.bookingsTable)
+    .set({ stripeInvoiceId: "in_refunded_fixture", paymentMethod: "invoice" })
+    .where(eq(schema.bookingsTable.id, b.id));
+  expect((await http("/bookings/" + b.id, "GET", undefined, owner)).status).toBe(200);
+  await http("/stripe/webhook", "POST", {
+    type: "invoice.voided",
+    data: { object: { id: "in_refunded_fixture", status: "void" } },
+  });
+  expect((await readBooking(b.id)).status).toBe("refunded");
+});
+
+it("settles only an invoice whose amount and currency match the locked booking", async () => {
+  const { b } = await makeBooking("invoiced"),
+    invoiceId = "in_settle_fixture";
+  await db
+    .update(schema.bookingsTable)
+    .set({ stripeInvoiceId: invoiceId, paymentMethod: "invoice" })
+    .where(eq(schema.bookingsTable.id, b.id));
+  const paid = (total: number, currency: string) =>
+    http("/stripe/webhook", "POST", {
+      type: "invoice.paid",
+      data: { object: { id: invoiceId, status: "paid", currency, total } },
+    });
+  expect((await paid(1, "gbp")).status).toBe(200);
+  expect((await readBooking(b.id)).status).toBe("invoiced");
+  expect((await paid(22680, "usd")).status).toBe(200);
+  expect((await readBooking(b.id)).status).toBe("invoiced");
+  expect((await paid(22680, "gbp")).status).toBe(200);
+  expect((await readBooking(b.id)).status).toBe("paid");
+});
+
+it("restoring an earlier file and replacing it keeps one current version and a monotonic history", async () => {
+  const sp = await sponsor(),
+    initial = await addFile(sp.headers, "one.png");
+  const v2 = await (
+    await filePost(
+      "/sponsor/assets/" + initial.id + "/replace",
+      sp.headers,
+      png,
+      "two.png",
+      "image/png",
+    )
+  ).json<FileView>();
+  const restore = await http(
+    "/admin/sponsors/" + sp.s.id + "/assets/" + initial.id,
+    "PATCH",
+    { status: "active" },
+    admin(),
+  );
+  expect(restore.status).toBe(200);
+  const next = await filePost(
+    "/sponsor/assets/" + initial.id + "/replace",
+    sp.headers,
+    png,
+    "three.png",
+    "image/png",
+  );
+  expect(next.status).toBe(201);
+  const v3 = await next.json<FileView>();
+  expect(v3.version).toBe(3);
+  const rows = await db
+    .select()
+    .from(schema.sponsorAssetsTable)
+    .where(eq(schema.sponsorAssetsTable.sponsorId, sp.s.id));
+  expect(rows.filter((x) => x.status === "active").map((x) => x.id)).toEqual([v3.id]);
+  expect(rows.find((x) => x.id === v2.id)?.status).toBe("archived");
+});
+
+it("cannot display confirmation on an open booking by advancing its step directly", async () => {
+  const { b, owner } = await makeBooking();
+  expect((await http("/bookings/" + b.id, "PATCH", { currentStep: 5 }, owner)).status).toBe(400);
+  expect((await readBooking(b.id)).currentStep).toBe(3);
+});
+
+it("repairs a missing current asset by uploading a replacement", async () => {
+  const sp = await sponsor(),
+    file = await addFile(sp.headers);
+  const [stored] = await db
+    .select()
+    .from(schema.sponsorAssetsTable)
+    .where(eq(schema.sponsorAssetsTable.id, file.id));
+  await storage.delete(stored.storageKey);
+  expect(
+    (await http("/admin/sponsors/" + sp.s.id + "/assets/complete.zip", "GET", undefined, admin()))
+      .status,
+  ).toBe(409);
+  const replacement = await filePost(
+    "/sponsor/assets/" + file.id + "/replace",
+    sp.headers,
+    png,
+    "recovered.png",
+    "image/png",
+  );
+  expect(replacement.status).toBe(201);
+  const zip = await http(
+    "/admin/sponsors/" + sp.s.id + "/assets/complete.zip",
+    "GET",
+    undefined,
+    admin(),
+  );
+  expect(zip.status).toBe(200);
+  expect(openZip(Buffer.from(await zip.arrayBuffer())).has("logo/recovered.png")).toBe(true);
+});
+
+it("returns a retryable response and records attention when storage preflight is unavailable", async () => {
+  const sp = await sponsor();
+  await addFile(sp.headers);
+  const unavailable = vi
+    .spyOn(storage, "exists")
+    .mockRejectedValueOnce(new Error("Synthetic storage outage"));
+  try {
+    const zip = await http(
+      "/admin/sponsors/" + sp.s.id + "/assets/complete.zip",
+      "GET",
+      undefined,
+      admin(),
+    );
+    expect(zip.status).toBe(503);
+    expect(await zip.text()).toContain("Retry");
+    expect(
+      (
+        await pool.query(
+          "select id from sponsor_tasks where sponsor_id=$1 and task_key='storage_error'",
+          [sp.s.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+  } finally {
+    unavailable.mockRestore();
+  }
 });
 
 if (process.env.QA_STREAM_FAILURE === "1") {

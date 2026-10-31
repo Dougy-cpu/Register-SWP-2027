@@ -30,7 +30,8 @@ import {
 import {
   createSponsorAsset,
   formatSponsorAsset,
-  preflightSponsorAssets,
+  sponsorDownloadsAvailable,
+  currentSponsorAsset,
   recordSponsorStorageFailure,
   safeDownloadFilename,
   SponsorAssetValidationError,
@@ -720,7 +721,7 @@ router.post("/sponsor/assets/:assetId/replace", upload, async (req, res): Promis
       and(
         eq(sponsorAssetsTable.id, assetId),
         eq(sponsorAssetsTable.sponsorId, sponsorId),
-        eq(sponsorAssetsTable.status, "active"),
+        currentSponsorAsset(),
       ),
     );
   if (!existing) {
@@ -768,14 +769,7 @@ router.get("/sponsor/assets/:assetId/download", async (req, res): Promise<void> 
     res.status(404).json({ error: "File not found" });
     return;
   }
-  const missing = await preflightSponsorAssets([asset]);
-  if (missing.length) {
-    res.status(409).json({
-      error:
-        "This file is missing from App Storage. The event team has been notified in Needs attention.",
-    });
-    return;
-  }
+  if (!(await sponsorDownloadsAvailable(res, [asset]))) return;
   res.setHeader("Content-Type", "application/octet-stream");
   res.setHeader(
     "Content-Disposition",

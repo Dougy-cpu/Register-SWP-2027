@@ -122,6 +122,7 @@ export interface SponsorAsset {
   checksumSha256: string;
   version: number;
   status: "active" | "archived" | "missing";
+  archivedAt?: string | null;
   uploaderType: string;
   uploaderLabel: string | null;
   createdAt: string;
