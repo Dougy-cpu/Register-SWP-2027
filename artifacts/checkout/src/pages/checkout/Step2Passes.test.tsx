@@ -165,15 +165,18 @@ afterEach(() => {
 
 describe("checkout pass reliability", () => {
   it.each([
-    ["hr_professional", "single", "£578.34", "Add 2 passes"],
-    ["consultant_vendor", "business", "£861.84", "Add 1 pass"],
-  ])(
-    "uses the server total for the %s group offer",
-    async (attendeeType, passType, total, action) => {
-      renderPasses({ attendeeType, passType } as Partial<BookingWithAttendees>);
+    ["hr_professional", "single", 1, "£481.95", "Add 2 passes"],
+    ["hr_professional", "single", 3, "£756.00", "Add 2 passes"],
+    ["consultant_vendor", "business", 1, "£718.20", "Add 1 pass"],
+  ] as const)(
+    "shows the quoted price excluding VAT for %s (%s, booking quantity %i)",
+    async (attendeeType, passType, quantity, subtotal, action) => {
+      renderPasses({ attendeeType, passType, quantity });
       await settlePricing();
 
-      expect(within(groupOffer()!).getByText(total)).toBeTruthy();
+      const offer = within(groupOffer()!);
+      expect(offer.getByText(subtotal)).toBeTruthy();
+      expect(offer.getByText(/excluding VAT/)).toBeTruthy();
       expect(screen.getByRole("button", { name: action })).toBeTruthy();
       expect(summary().getByText("VAT (20%)")).toBeTruthy();
       expect(screen.queryByText(/more passs/)).toBeNull();
@@ -321,14 +324,14 @@ describe("checkout pass reliability", () => {
 });
 
 describe("truthful group savings offer", () => {
-  it("quotes the complete next-tier total with stacked public discount and VAT, then adds the offered passes", async () => {
+  it("quotes the next tier after the public discount and before VAT, then shows VAT in the booking summary", async () => {
     renderPasses({ quantity: 3, promoCode: "PUBLIC20" });
     await settlePricing();
 
     const offer = within(groupOffer()!);
     expect(offer.getByText("Add 2 more passes for 20% off all 5")).toBeTruthy();
-    expect(offer.getByText("£725.76")).toBeTruthy();
-    expect(offer.getByText(/including VAT, with your promo code/)).toBeTruthy();
+    expect(offer.getByText("£604.80")).toBeTruthy();
+    expect(offer.getByText(/excluding VAT, with your promo code/)).toBeTruthy();
     expect(api.calculate).toHaveBeenCalledWith(
       { passType: "single", quantity: 5, promoCode: "PUBLIC20" },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -340,6 +343,8 @@ describe("truthful group savings offer", () => {
     await settlePricing();
 
     expect(summary().getByText("5 × Workforce Pass")).toBeTruthy();
+    expect(summary().getByText("£604.80")).toBeTruthy();
+    expect(summary().getByText("£120.96")).toBeTruthy();
     expect(summary().getByText("£725.76")).toBeTruthy();
     fireEvent.click(nextButton());
     await advance();
@@ -366,7 +371,7 @@ describe("truthful group savings offer", () => {
     renderPasses({ quantity: 3 });
     await settlePricing();
     expect(within(groupOffer()!).getByText("Add 2 more passes for 25% off all 5")).toBeTruthy();
-    expect(within(groupOffer()!).getByText("£850.50")).toBeTruthy();
+    expect(within(groupOffer()!).getByText("£708.75")).toBeTruthy();
   });
 
   it.each(["VIP", "ZERO100"])("does not upsell a zero-value %s booking", async (promoCode) => {
@@ -493,6 +498,9 @@ describe("truthful group savings offer", () => {
         return Promise.resolve({
           ...quote(request),
           groupDiscountPercent: 25,
+          groupDiscountAmount: 236.25,
+          subtotalAfterDiscounts: 708.75,
+          vatAmount: 141.75,
           total: 850.5,
         });
       }
@@ -506,8 +514,8 @@ describe("truthful group savings offer", () => {
     await settlePricing();
     expect(within(groupOffer()!).getByText("Add 1 more pass for 25% off all 5")).toBeTruthy();
     await act(async () => finishOld(quote({ quantity: 5 })));
-    expect(within(groupOffer()!).getByText("£850.50")).toBeTruthy();
-    expect(within(groupOffer()!).queryByText("£907.20")).toBeNull();
+    expect(within(groupOffer()!).getByText("£708.75")).toBeTruthy();
+    expect(within(groupOffer()!).queryByText("£756.00")).toBeNull();
   });
 
   it("does not show the old undiscounted offer after applying a public promo", async () => {
@@ -529,9 +537,9 @@ describe("truthful group savings offer", () => {
     expect(groupOffer()).toBeNull();
     await advance();
     await settlePricing();
-    expect(within(groupOffer()!).getByText("£725.76")).toBeTruthy();
+    expect(within(groupOffer()!).getByText("£604.80")).toBeTruthy();
     await act(async () => finishOld(quote({ quantity: 5 })));
-    expect(within(groupOffer()!).getByText("£725.76")).toBeTruthy();
-    expect(within(groupOffer()!).queryByText("£907.20")).toBeNull();
+    expect(within(groupOffer()!).getByText("£604.80")).toBeTruthy();
+    expect(within(groupOffer()!).queryByText("£756.00")).toBeNull();
   });
 });

@@ -532,8 +532,10 @@ export default function Step2Passes({ booking, onAdvance }: Step2PassesProps) {
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {nextQuantity} passes total:{" "}
-                <span className="font-semibold text-foreground">{money(groupOffer.total)}</span>{" "}
-                including VAT{appliedPromoCode ? ", with your promo code" : ""}
+                <span className="font-semibold text-foreground">
+                  {money(groupOffer.subtotalAfterDiscounts)}
+                </span>{" "}
+                excluding VAT{appliedPromoCode ? ", with your promo code" : ""}
               </p>
             </div>
             <Button
