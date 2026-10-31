@@ -75,7 +75,7 @@ type AssetCategory = typeof sponsorAssetsTable.$inferInsert.category;
 interface AllowedFile {
   mimeTypes: string[];
   maxBytes: number;
-  signature: (buffer: Buffer) => boolean;
+  signature: (buffer: Buffer) => boolean | Promise<boolean>;
 }
 
 function begins(buffer: Buffer, bytes: number[]): boolean {
@@ -154,12 +154,12 @@ export class SponsorAssetValidationError extends Error {
   }
 }
 
-export function validateSponsorAssetFile(file: {
+export async function validateSponsorAssetFile(file: {
   originalname: string;
   mimetype: string;
   size: number;
   buffer: Buffer;
-}): { extension: string; mimeType: string; checksumSha256: string } {
+}): Promise<{ extension: string; mimeType: string; checksumSha256: string }> {
   const extension = path.extname(file.originalname).toLowerCase();
   if (BLOCKED_EXTENSIONS.has(extension)) {
     throw new SponsorAssetValidationError("Executable and macro-enabled files are not accepted");
@@ -182,7 +182,7 @@ export function validateSponsorAssetFile(file: {
     const maxMb = Math.round(allowed.maxBytes / 1024 / 1024);
     throw new SponsorAssetValidationError(`${extension} files must be ${maxMb} MB or smaller`);
   }
-  if (!allowed.signature(file.buffer)) {
+  if (!(await allowed.signature(file.buffer))) {
     throw new SponsorAssetValidationError(
       "The file signature does not match its name and content type",
     );
@@ -369,7 +369,7 @@ export async function createSponsorAsset(input: {
   uploaderLabel?: string | null;
   replaces?: SponsorAsset | null;
 }): Promise<SponsorAsset> {
-  const validated = validateSponsorAssetFile(input.file);
+  const validated = await validateSponsorAssetFile(input.file);
   const relationships = input.replaces
     ? {
         sessionId: input.sessionId ?? input.replaces.sessionId,

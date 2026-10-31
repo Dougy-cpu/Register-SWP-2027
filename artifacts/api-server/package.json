@@ -34,8 +34,10 @@
     "pdfkit": "^0.18.0",
     "pino": "^9",
     "pino-http": "^10",
+    "saxes": "6.0.0",
     "sharp": "0.35.5",
     "stripe": "^21.0.1",
+    "unzipper": "0.10.14",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
