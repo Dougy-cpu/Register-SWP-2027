@@ -16,8 +16,6 @@ export interface SponsorStaff {
   workEmail: string;
   phone?: string | null;
   dietaryAccessibility?: string | null;
-  communitySocialAttending?: boolean | null;
-  communitySocialDietary?: string | null;
   marketingConsent: boolean;
   status: string;
   registeredAt: Date;

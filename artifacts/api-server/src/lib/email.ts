@@ -236,7 +236,7 @@ const FROM_NAME = process.env.FROM_NAME || "SWP Summit";
 async function logEmail(
   bookingId: number | null,
   recipient: string,
-  type: "confirmation" | "receipt" | "welcome" | "invoice" | "community_social" | "test",
+  type: "confirmation" | "receipt" | "welcome" | "invoice" | "test",
   status: "sent" | "failed" | "pending",
   errorMessage?: string,
 ) {
@@ -572,14 +572,10 @@ export async function buildConfirmationEmailHtml(
       };
       const calPh = getCalendarPlaceholders(settings);
       vars["{{eventCalendarLinks}}"] = calPh.eventCalendarLinks;
-      vars["{{socialCalendarLinks}}"] = calPh.socialCalendarLinks;
       vars["{{calendarLinks}}"] = calPh.calendarLinks;
       vars["{{googleCalendarUrl}}"] = calPh.googleCalendarUrl;
       vars["{{outlookCalendarUrl}}"] = calPh.outlookCalendarUrl;
       vars["{{icsCalendarUrl}}"] = calPh.icsCalendarUrl;
-      vars["{{socialGoogleCalendarUrl}}"] = calPh.socialGoogleCalendarUrl;
-      vars["{{socialOutlookCalendarUrl}}"] = calPh.socialOutlookCalendarUrl;
-      vars["{{socialIcsCalendarUrl}}"] = calPh.socialIcsCalendarUrl;
 
       // Subject is a plain-text email header - must use raw values, not
       // HTML-escaped ones, otherwise users see literal "&amp;" in their inbox.
@@ -595,7 +591,7 @@ export async function buildConfirmationEmailHtml(
         "{{poNumber}}": booking.poNumber || "",
       };
 
-      let body = dbTemplate.htmlBody;
+      let body = stripRetiredSocialCopy(dbTemplate.htmlBody);
       // If the DB template predates the new PO/billing-edit placeholders,
       // append a default block so invoice customers always see the link.
       if (
@@ -1747,16 +1743,25 @@ function formatCalendarRangeLabel(start: Date, end: Date, tz: string): string {
   }
 }
 
+// Older saved templates can contain the original RSVP sentence or optional social tokens.
+export function stripRetiredSocialCopy(template: string): string {
+  return template
+    .replaceAll(
+      "including whether they will join the Community Social and any dietary or accessibility information",
+      "including any dietary or accessibility information",
+    )
+    .replace(
+      /\{\{social(?:CalendarLinks|GoogleCalendarUrl|OutlookCalendarUrl|IcsCalendarUrl|Name|Date|Time|Venue|Description|DetailsUrl|MapUrl)\}\}/g,
+      "",
+    );
+}
+
 export type CalendarPlaceholders = {
   eventCalendarLinks: string;
-  socialCalendarLinks: string;
-  calendarLinks: string; // backward-compat: event + social concatenated
+  calendarLinks: string;
   googleCalendarUrl: string;
   outlookCalendarUrl: string;
   icsCalendarUrl: string;
-  socialGoogleCalendarUrl: string;
-  socialOutlookCalendarUrl: string;
-  socialIcsCalendarUrl: string;
 };
 
 function renderCalendarBlockHtml(opts: {
@@ -1819,179 +1824,18 @@ export function getCalendarPlaceholders(settings: EventSettings): CalendarPlaceh
     });
   }
 
-  let socialCalendarLinks = "";
-  let socialGoogleCalendarUrl = "";
-  let socialOutlookCalendarUrl = "";
-  let socialIcsCalendarUrl = "";
-
-  if (settings.socialEnabled && settings.socialStartAt && settings.socialEndAt) {
-    const start = new Date(settings.socialStartAt);
-    const end = new Date(settings.socialEndAt);
-    const name = settings.socialName || "Additional Networking Social";
-    const ev: CalendarEvent = {
-      uid: `event-settings-${settings.id}-social@swpsummit.com`,
-      title: name,
-      description: settings.socialDescription || null,
-      location: settings.socialVenue || null,
-      startAt: start,
-      endAt: end,
-      url: settings.orgWebsite,
-    };
-    socialGoogleCalendarUrl = buildGoogleCalendarUrl(ev, tz);
-    socialOutlookCalendarUrl = buildOutlookCalendarUrl(ev);
-    socialIcsCalendarUrl = `${appBaseUrl}/api/calendar/social.ics`;
-    socialCalendarLinks = renderCalendarBlockHtml({
-      heading: "Additional networking social",
-      title: name,
-      subtitle:
-        formatCalendarRangeLabel(start, end, tz) +
-        (settings.socialVenue ? ` - ${settings.socialVenue}` : ""),
-      google: socialGoogleCalendarUrl,
-      outlook: socialOutlookCalendarUrl,
-      icsUrl: socialIcsCalendarUrl,
-    });
-  }
-
   return {
     eventCalendarLinks,
-    socialCalendarLinks,
-    calendarLinks: eventCalendarLinks + socialCalendarLinks,
+    calendarLinks: eventCalendarLinks,
     googleCalendarUrl,
     outlookCalendarUrl,
     icsCalendarUrl,
-    socialGoogleCalendarUrl,
-    socialOutlookCalendarUrl,
-    socialIcsCalendarUrl,
   };
 }
 
-// Backward-compat shim - returns combined block
+// Older templates use calendarLinks for the summit calendar.
 export function buildCalendarLinksSection(settings: EventSettings): string {
   return getCalendarPlaceholders(settings).calendarLinks;
-}
-
-export function getCommunitySocialTemplateVars(
-  settings: EventSettings,
-  firstName: string,
-): Record<string, string> {
-  const configuredVenue = settings.socialVenue?.trim() || "";
-  const venue = configuredVenue || "To be confirmed";
-  const startAt = settings.socialStartAt ? new Date(settings.socialStartAt) : null;
-  const hasValidStart = startAt !== null && !Number.isNaN(startAt.getTime());
-  const timeZone = settings.eventTimezone || "Europe/London";
-
-  let socialDate = "To be confirmed";
-  let socialTime = "To be confirmed";
-  if (hasValidStart) {
-    try {
-      socialDate = startAt.toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        timeZone,
-      });
-      socialTime = startAt
-        .toLocaleTimeString("en-GB", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-          timeZone,
-        })
-        .replace(" ", "")
-        .toLowerCase();
-    } catch {
-      socialDate = startAt.toLocaleDateString("en-GB", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-      socialTime = startAt
-        .toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true })
-        .replace(" ", "")
-        .toLowerCase();
-    }
-  }
-
-  const detailsUrl = settings.orgWebsite || "https://swpsummit.com";
-  const socialMapUrl = configuredVenue
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(configuredVenue)}`
-    : detailsUrl;
-  const calendar = getCalendarPlaceholders(settings);
-
-  return {
-    "{{firstName}}": escHtml(firstName || "there"),
-    "{{eventName}}": escHtml(settings.eventName || "SWP Summit"),
-    "{{socialName}}": escHtml(
-      settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
-    ),
-    "{{socialVenue}}": escHtml(venue),
-    "{{socialDate}}": escHtml(socialDate),
-    "{{socialTime}}": escHtml(socialTime),
-    "{{socialDescription}}": escHtml(settings.socialDescription || ""),
-    "{{socialDetailsUrl}}": escHtml(detailsUrl),
-    "{{socialMapUrl}}": escHtml(socialMapUrl),
-    "{{socialCalendarLinks}}":
-      settings.socialEnabled && settings.socialStartAt && settings.socialEndAt
-        ? calendar.socialCalendarLinks
-        : "",
-  };
-}
-
-/**
- * Send the manually triggered Community Social invitation to one attendee.
- * This function is never called by the automatic booking confirmation flow.
- */
-export async function sendCommunitySocialEmail(
-  bookingId: number,
-  firstName: string,
-  toEmail: string,
-): Promise<boolean> {
-  try {
-    const [template] = await db
-      .select()
-      .from(emailTemplatesTable)
-      .where(eq(emailTemplatesTable.type, "community_social"));
-
-    if (!template) {
-      logger.warn({ bookingId }, "No Community Social email template found");
-      return false;
-    }
-
-    const settings = await getEventSettings();
-    const vars = getCommunitySocialTemplateVars(settings, firstName);
-    let personalised = template.htmlBody;
-    for (const [key, value] of Object.entries(vars)) {
-      personalised = personalised.replaceAll(key, value);
-    }
-
-    const subject = applySubjectVars(template.subject, {
-      firstName: firstName || "there",
-      eventName: settings.eventName || "SWP Summit",
-      socialName: settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
-    });
-    const html = wrapInBrandedLayout(personalised, settings);
-    const sent = await sendMail({
-      to: toEmail,
-      subject,
-      html,
-      fromName: settings.fromName,
-      fromEmail: settings.fromEmail,
-    });
-
-    await logEmail(
-      bookingId,
-      toEmail,
-      "community_social",
-      sent ? "sent" : "failed",
-      sent ? undefined : "SMTP not configured or send failed",
-    );
-    return sent;
-  } catch (err) {
-    logger.error({ err, bookingId, toEmail }, "Failed to send Community Social email");
-    return false;
-  }
 }
 
 function buildManageLinkSection(manageUrl: string): string {
@@ -2063,19 +1907,15 @@ export async function sendWelcomeEmail(
     const calPh = getCalendarPlaceholders(settings);
 
     const safeFirstName = escHtml(firstName);
-    const personalised = template.htmlBody
+    const personalised = stripRetiredSocialCopy(template.htmlBody)
       .replace(/\{\{firstName\}\}/g, safeFirstName)
       .replace(/\{\{name\}\}/g, safeFirstName)
       .replace(/\{\{managementLink\}\}/g, manageLinkHtml)
       .replace(/\{\{eventCalendarLinks\}\}/g, calPh.eventCalendarLinks)
-      .replace(/\{\{socialCalendarLinks\}\}/g, calPh.socialCalendarLinks)
       .replace(/\{\{calendarLinks\}\}/g, calPh.calendarLinks)
       .replace(/\{\{googleCalendarUrl\}\}/g, calPh.googleCalendarUrl)
       .replace(/\{\{outlookCalendarUrl\}\}/g, calPh.outlookCalendarUrl)
-      .replace(/\{\{icsCalendarUrl\}\}/g, calPh.icsCalendarUrl)
-      .replace(/\{\{socialGoogleCalendarUrl\}\}/g, calPh.socialGoogleCalendarUrl)
-      .replace(/\{\{socialOutlookCalendarUrl\}\}/g, calPh.socialOutlookCalendarUrl)
-      .replace(/\{\{socialIcsCalendarUrl\}\}/g, calPh.socialIcsCalendarUrl);
+      .replace(/\{\{icsCalendarUrl\}\}/g, calPh.icsCalendarUrl);
 
     const leadSharingNotice = personalised.includes("Badge scanning and sponsor leads")
       ? ""

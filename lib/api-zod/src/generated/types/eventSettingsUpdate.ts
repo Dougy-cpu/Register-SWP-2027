@@ -34,11 +34,5 @@ export interface EventSettingsUpdate {
   eventEndAt?: Date | null;
   eventTimezone?: string;
   eventDescription?: string | null;
-  socialEnabled?: boolean;
-  socialName?: string | null;
-  socialStartAt?: Date | null;
-  socialEndAt?: Date | null;
-  socialVenue?: string | null;
-  socialDescription?: string | null;
   invoiceHelpContent?: string | null;
 }

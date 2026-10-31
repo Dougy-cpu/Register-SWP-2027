@@ -12,5 +12,4 @@ export type RegistrationEmailResendResultResendType =
 export const RegistrationEmailResendResultResendType = {
   confirmation: "confirmation",
   welcome: "welcome",
-  community_social: "community_social",
 } as const;

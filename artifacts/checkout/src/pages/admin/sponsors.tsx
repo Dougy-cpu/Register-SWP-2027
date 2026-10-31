@@ -73,7 +73,6 @@ type CreateForm = {
   assetsRequired: boolean;
   logisticsRequired: boolean;
   onsiteContactsRequired: boolean;
-  communitySocialRequired: boolean;
 };
 
 const EMPTY_FORM: CreateForm = {
@@ -101,7 +100,6 @@ const EMPTY_FORM: CreateForm = {
   assetsRequired: true,
   logisticsRequired: true,
   onsiteContactsRequired: true,
-  communitySocialRequired: true,
 };
 
 function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
@@ -217,12 +215,6 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
           form.onsiteContactsRequired,
         ),
         task("slides", "Session slides", form.sessionDeadline, sessionRequirements.slidesRequired),
-        task(
-          "community_social",
-          "Community Social details",
-          form.logisticsDeadline,
-          form.communitySocialRequired,
-        ),
       ];
       const created = await adminJson<SponsorWorkspace>("/api/admin/sponsors", {
         method: "POST",
@@ -587,14 +579,6 @@ function SponsorCreatePanel({ onClose }: { onClose: () => void }) {
                     onChange={(e) => update("onsiteContactsRequired", e.target.checked)}
                   />{" "}
                   Onsite contact
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.communitySocialRequired}
-                    onChange={(e) => update("communitySocialRequired", e.target.checked)}
-                  />{" "}
-                  Community Social details
                 </label>
               </div>
               <div>

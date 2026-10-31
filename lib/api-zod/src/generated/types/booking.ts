@@ -86,7 +86,6 @@ export interface Booking {
   invoiceBadgeStatus?: BookingInvoiceBadgeStatus;
   confirmationEmailSent?: boolean;
   welcomeEmailsSent?: boolean;
-  communitySocialEmailSent?: boolean;
   organiserNotified?: boolean;
   sheetsSynced?: boolean;
   needsAttention?: boolean;

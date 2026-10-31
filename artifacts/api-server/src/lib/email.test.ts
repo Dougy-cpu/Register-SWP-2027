@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   escHtml,
-  getCommunitySocialTemplateVars,
+  getCalendarPlaceholders,
+  stripRetiredSocialCopy,
   renderAttendeeChangeTableHtml,
   wrapInBrandedLayout,
 } from "./email";
@@ -115,37 +116,33 @@ describe("wrapInBrandedLayout", () => {
   });
 });
 
-describe("Community Social email variables", () => {
-  it("uses existing SWP settings and does not invent event details", () => {
+describe("Summit-only emails", () => {
+  it("keeps the summit calendar even when an old Social configuration is enabled", () => {
     const settings = {
       id: 1,
       eventName: "SWP Summit",
-      eventStartAt: null,
-      eventEndAt: null,
+      eventStartAt: new Date("2027-03-03T09:00:00Z"),
+      eventEndAt: new Date("2027-03-03T17:00:00Z"),
       eventTimezone: "Europe/London",
-      eventDescription: null,
-      eventVenue: "1 Basinghall Avenue, London",
-      socialEnabled: false,
-      socialName: null,
-      socialStartAt: null,
-      socialEndAt: null,
-      socialVenue: null,
-      socialDescription: null,
+      eventVenue: "London",
+      socialEnabled: true,
+      socialName: "Community Social",
+      socialStartAt: new Date("2027-03-02T18:00:00Z"),
+      socialEndAt: new Date("2027-03-02T20:00:00Z"),
       orgWebsite: "https://swpsummit.com",
-      updatedAt: new Date(),
-    } as Parameters<typeof getCommunitySocialTemplateVars>[0];
+    } as Parameters<typeof getCalendarPlaceholders>[0];
+    const calendar = getCalendarPlaceholders(settings);
+    expect(calendar.calendarLinks).toBe(calendar.eventCalendarLinks);
+    expect(calendar.calendarLinks).toContain("/api/calendar/main.ics");
+    expect(JSON.stringify(calendar)).not.toMatch(/community social|social\.ics/i);
+  });
 
-    const vars = getCommunitySocialTemplateVars(settings, `<Douglas>`);
-
-    expect(vars["{{firstName}}"]).toBe("&lt;Douglas&gt;");
-    expect(vars["{{eventName}}"]).toBe("SWP Summit");
-    expect(vars["{{socialName}}"]).toBe("SWP Summit Community Social");
-    expect(vars["{{socialVenue}}"]).toBe("To be confirmed");
-    expect(vars["{{socialDate}}"]).toBe("To be confirmed");
-    expect(vars["{{socialTime}}"]).toBe("To be confirmed");
-    expect(vars["{{socialDetailsUrl}}"]).toBe("https://swpsummit.com");
-    expect(vars["{{socialMapUrl}}"]).toBe("https://swpsummit.com");
-    expect(vars["{{socialCalendarLinks}}"]).toBe("");
+  it("cleans the saved sponsor RSVP sentence and legacy tokens while retaining summit information", () => {
+    const saved =
+      "<p>Register the team, including whether they will join the Community Social and any dietary or accessibility information.</p>{{socialCalendarLinks}}{{socialIcsCalendarUrl}}{{eventCalendarLinks}} Share our code on social media.";
+    expect(stripRetiredSocialCopy(saved)).toBe(
+      "<p>Register the team, including any dietary or accessibility information.</p>{{eventCalendarLinks}} Share our code on social media.",
+    );
   });
 });
 

@@ -60,8 +60,9 @@ async function generateOrderRef(bookingId?: number): Promise<string> {
 }
 
 function formatBooking(b: typeof bookingsTable.$inferSelect) {
+  const { communitySocialEmailSent: _retired, ...booking } = b;
   return {
-    ...b,
+    ...booking,
     subtotalAmount: parseFloat(b.subtotalAmount?.toString() || "0"),
     vatAmount: parseFloat(b.vatAmount?.toString() || "0"),
     totalAmount: parseFloat(b.totalAmount?.toString() || "0"),
@@ -92,8 +93,12 @@ function formatBooking(b: typeof bookingsTable.$inferSelect) {
 }
 
 function formatAttendee(a: typeof attendeesTable.$inferSelect) {
-  const { notes, ...publicAttendee } = a;
-  void notes;
+  const {
+    notes: _notes,
+    communitySocialAttending: _social,
+    communitySocialDietary: _socialDietary,
+    ...publicAttendee
+  } = a;
   return {
     ...publicAttendee,
     gdprConsentAt: a.gdprConsentAt ? a.gdprConsentAt.toISOString() : null,

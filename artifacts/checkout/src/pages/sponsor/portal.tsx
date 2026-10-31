@@ -26,7 +26,6 @@ export default function SponsorPortal() {
   const [workspace, setWorkspace] = useState<SponsorWorkspace | null>(null);
   const [section, setSection] = useState<PortalSection>("home");
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
-  const [editSocialBookingId, setEditSocialBookingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
@@ -62,7 +61,6 @@ export default function SponsorPortal() {
 
   const openSection = (next: PortalSection, target?: string) => {
     setSection(next);
-    if (next !== "team") setEditSocialBookingId(null);
     requestAnimationFrame(() =>
       document.getElementById(target ?? "portal-content")?.scrollIntoView({ block: "start" }),
     );
@@ -301,11 +299,7 @@ export default function SponsorPortal() {
             )}
           </TabsContent>
           <TabsContent value="team" forceMount hidden={section !== "team"} className="mt-0">
-            <PortalTeam
-              workspace={workspace}
-              onRefresh={load}
-              editSocialBookingId={editSocialBookingId}
-            />
+            <PortalTeam workspace={workspace} onRefresh={load} />
           </TabsContent>
           <TabsContent value="sessions" forceMount hidden={section !== "sessions"} className="mt-0">
             {session ? (
@@ -375,15 +369,7 @@ export default function SponsorPortal() {
             )}
           </TabsContent>
           <TabsContent value="event" forceMount hidden={section !== "event"} className="mt-0">
-            <PortalEvent
-              workspace={workspace}
-              onRefresh={load}
-              onUploaded={uploaded}
-              onEditSocial={(bookingId) => {
-                setEditSocialBookingId(bookingId);
-                openSection("team");
-              }}
-            />
+            <PortalEvent workspace={workspace} onRefresh={load} onUploaded={uploaded} />
           </TabsContent>
           <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-4 text-sm text-muted-foreground">
             <span className="font-medium">At the event</span>

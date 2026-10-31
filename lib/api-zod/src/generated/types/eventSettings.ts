@@ -35,13 +35,6 @@ export interface EventSettings {
   /** IANA timezone identifier, default Europe London. */
   eventTimezone: string;
   eventDescription?: string | null;
-  /** When false the social block in emails reads as a placeholder note (details to follow). */
-  socialEnabled: boolean;
-  socialName?: string | null;
-  socialStartAt?: Date | null;
-  socialEndAt?: Date | null;
-  socialVenue?: string | null;
-  socialDescription?: string | null;
   /** Admin-editable how-invoicing-works copy shown on Step 4 (Pay by Invoice) and embedded into invoice confirmation emails. Null means use the built-in default. */
   invoiceHelpContent?: string | null;
   updatedAt: Date;

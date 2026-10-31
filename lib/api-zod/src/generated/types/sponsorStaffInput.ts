@@ -32,8 +32,5 @@ export interface SponsorStaffInput {
   phone?: string | null;
   /** @maxLength 2000 */
   dietaryAccessibility?: string | null;
-  communitySocialAttending?: boolean | null;
-  /** @maxLength 2000 */
-  communitySocialDietary?: string | null;
   marketingConsent?: boolean;
 }

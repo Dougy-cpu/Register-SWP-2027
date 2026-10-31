@@ -1,7 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
-  attendeesTable,
   bookingsTable,
   sponsorsTable,
   sponsorContactsTable,
@@ -196,8 +195,7 @@ export async function saveOnsiteContact(sponsorId: number, body: Record<string, 
 }
 
 export async function completePreparationTask(sponsorId: number, taskKey: string) {
-  if (!["staff", "community_social"].includes(taskKey))
-    throw new SponsorPortalError("That task cannot be confirmed here.", 404);
+  if (taskKey !== "staff") throw new SponsorPortalError("That task cannot be confirmed here.", 404);
   return db.transaction(async (tx) => {
     await tx
       .select({ id: sponsorsTable.id })
@@ -213,9 +211,8 @@ export async function completePreparationTask(sponsorId: number, taskKey: string
       .for("update");
     if (!task) throw new SponsorPortalError("This task is not in your sponsor workspace.", 404);
     const staff = await tx
-      .select({ attending: attendeesTable.communitySocialAttending })
-      .from(attendeesTable)
-      .innerJoin(bookingsTable, eq(attendeesTable.bookingId, bookingsTable.id))
+      .select({ id: bookingsTable.id })
+      .from(bookingsTable)
       .where(
         and(
           eq(bookingsTable.sponsorId, sponsorId),
@@ -223,9 +220,6 @@ export async function completePreparationTask(sponsorId: number, taskKey: string
           inArray(bookingsTable.status, ["paid", "invoiced"]),
         ),
       );
-    if (taskKey === "community_social" && staff.some((person) => person.attending === null)) {
-      throw new SponsorPortalError("Choose attending or not attending for each team member first.");
-    }
     if (task.status === "completed" || !task.required) return { task, changed: false };
     const [updated] = await tx
       .update(sponsorTasksTable)
@@ -238,7 +232,6 @@ export async function completePreparationTask(sponsorId: number, taskKey: string
       actorType: "sponsor",
       data: {
         staffCount: staff.length,
-        socialAttending: staff.filter((person) => person.attending).length,
       },
     });
     return { task: updated, changed: true };
@@ -255,7 +248,7 @@ export async function reopenStaffPreparationTasks(
     .where(
       and(
         eq(sponsorTasksTable.sponsorId, sponsorId),
-        inArray(sponsorTasksTable.taskKey, ["staff", "community_social"]),
+        eq(sponsorTasksTable.taskKey, "staff"),
         eq(sponsorTasksTable.required, true),
       ),
     );

@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { db, pool, sponsorActivityTable, sponsorsTable, sponsorTasksTable } from "@workspace/db";
 import { sendSponsorInternalNotification } from "../lib/sponsor-email";
 import { logger } from "../lib/logger";
+import { retiredSocialTask } from "../lib/sponsor-progress";
 import { buildSponsorWorkspace } from "../lib/sponsor-service";
 
 function londonDate(date = new Date()): string {
@@ -27,6 +28,7 @@ export async function runSponsorDeadlineCheck(now = new Date()): Promise<{
     .where(
       and(
         eq(sponsorTasksTable.required, true),
+        ne(sponsorTasksTable.taskKey, retiredSocialTask),
         lte(sponsorTasksTable.dueAt, now),
         inArray(sponsorTasksTable.status, ["todo", "submitted", "overdue", "completed"]),
         inArray(sponsorsTable.status, ["confirmed", "completed"]),

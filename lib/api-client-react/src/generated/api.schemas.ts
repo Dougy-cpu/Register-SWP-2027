@@ -145,8 +145,6 @@ export interface SponsorStaff {
   workEmail: string;
   phone?: string | null;
   dietaryAccessibility?: string | null;
-  communitySocialAttending?: boolean | null;
-  communitySocialDietary?: string | null;
   marketingConsent: boolean;
   status: string;
   registeredAt: string;
@@ -178,9 +176,6 @@ export interface SponsorStaffInput {
   phone?: string | null;
   /** @maxLength 2000 */
   dietaryAccessibility?: string | null;
-  communitySocialAttending?: boolean | null;
-  /** @maxLength 2000 */
-  communitySocialDietary?: string | null;
   marketingConsent?: boolean;
 }
 
@@ -836,7 +831,6 @@ export interface Booking {
   invoiceBadgeStatus?: BookingInvoiceBadgeStatus;
   confirmationEmailSent?: boolean;
   welcomeEmailsSent?: boolean;
-  communitySocialEmailSent?: boolean;
   organiserNotified?: boolean;
   sheetsSynced?: boolean;
   needsAttention?: boolean;
@@ -1428,7 +1422,6 @@ export const EmailLogType = {
   receipt: "receipt",
   welcome: "welcome",
   invoice: "invoice",
-  community_social: "community_social",
   sponsor_welcome: "sponsor_welcome",
   sponsor_staff: "sponsor_staff",
   sponsor_internal: "sponsor_internal",
@@ -1529,8 +1522,6 @@ export interface RegistrationSummary {
   confirmationEmailSent?: boolean;
   /** True once welcome emails have been sent to all attendees. */
   welcomeEmailsSent?: boolean;
-  /** True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking. */
-  communitySocialEmailSent?: boolean;
   /** True once the organiser has been notified of this booking. */
   organiserNotified?: boolean;
   /** True once this booking has been synced to the Google Sheet. */
@@ -1558,7 +1549,6 @@ export type RegistrationEmailResendResultResendType =
 export const RegistrationEmailResendResultResendType = {
   confirmation: "confirmation",
   welcome: "welcome",
-  community_social: "community_social",
 } as const;
 
 export type RegistrationEmailResendResultResend = {
@@ -1693,13 +1683,6 @@ export interface EventSettings {
   /** IANA timezone identifier, default Europe London. */
   eventTimezone: string;
   eventDescription?: string | null;
-  /** When false the social block in emails reads as a placeholder note (details to follow). */
-  socialEnabled: boolean;
-  socialName?: string | null;
-  socialStartAt?: string | null;
-  socialEndAt?: string | null;
-  socialVenue?: string | null;
-  socialDescription?: string | null;
   /** Admin-editable how-invoicing-works copy shown on Step 4 (Pay by Invoice) and embedded into invoice confirmation emails. Null means use the built-in default. */
   invoiceHelpContent?: string | null;
   updatedAt: string;
@@ -1741,12 +1724,6 @@ export interface EventSettingsUpdate {
   eventEndAt?: string | null;
   eventTimezone?: string;
   eventDescription?: string | null;
-  socialEnabled?: boolean;
-  socialName?: string | null;
-  socialStartAt?: string | null;
-  socialEndAt?: string | null;
-  socialVenue?: string | null;
-  socialDescription?: string | null;
   invoiceHelpContent?: string | null;
 }
 

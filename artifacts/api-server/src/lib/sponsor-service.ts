@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   attendeesTable,
   bookingsTable,
@@ -20,7 +20,7 @@ import {
   sponsorTasksTable,
 } from "@workspace/db";
 import { formatSponsorAsset } from "./sponsor-assets";
-import { deriveSponsorTasks } from "./sponsor-progress";
+import { deriveSponsorTasks, retiredSocialTask } from "./sponsor-progress";
 import { issueSponsorAccessToken } from "../middleware/sponsor-auth";
 
 export class SponsorConflictError extends Error {
@@ -151,7 +151,6 @@ const DEFAULT_TASKS: SponsorTaskInput[] = [
   { taskKey: "logistics", label: "Logistics", required: true },
   { taskKey: "onsite_contacts", label: "Onsite contacts", required: true },
   { taskKey: "slides", label: "Session slides", required: false },
-  { taskKey: "community_social", label: "Community Social details", required: true },
 ];
 
 function cleanInput(
@@ -244,6 +243,7 @@ async function insertTasks(
   const seen = new Set<string>();
   for (const task of tasks) {
     const taskKey = task.taskKey.trim();
+    if (taskKey === retiredSocialTask) continue;
     const label = task.label.trim();
     if (!taskKey || !label || seen.has(taskKey)) {
       throw new SponsorConflictError("Sponsor deliverables need a unique key and label");
@@ -581,8 +581,6 @@ function formatStaffRow(row: {
     workEmail: row.attendee.workEmail,
     phone: row.attendee.phone,
     dietaryAccessibility: row.attendee.dietaryAccessibility,
-    communitySocialAttending: row.attendee.communitySocialAttending,
-    communitySocialDietary: row.attendee.communitySocialDietary,
     marketingConsent: row.attendee.gdprConsent,
     status: row.booking.status,
     registeredAt: row.booking.createdAt.toISOString(),
@@ -739,7 +737,13 @@ export async function buildSponsorWorkspace(sponsorId: number, admin: boolean) {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(emailLogsTable)
-      .where(and(eq(emailLogsTable.sponsorId, sponsorId), eq(emailLogsTable.status, "failed"))),
+      .where(
+        and(
+          eq(emailLogsTable.sponsorId, sponsorId),
+          eq(emailLogsTable.status, "failed"),
+          ne(emailLogsTable.type, "community_social"),
+        ),
+      ),
     db
       .select()
       .from(sponsorPassRequestsTable)

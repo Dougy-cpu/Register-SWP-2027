@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sponsorJson } from "@/lib/sponsor-api";
 import type { SponsorAsset, SponsorContact, SponsorWorkspace } from "@/types/sponsor";
-import { activeStaff } from "./portal-helpers";
 import { EventDocument, InlineError, UploadField } from "./portal-ui";
 
 const contactForm = (contact?: SponsorContact) => ({
@@ -22,12 +20,10 @@ export function PortalEvent({
   workspace,
   onRefresh,
   onUploaded,
-  onEditSocial,
 }: {
   workspace: SponsorWorkspace;
   onRefresh: () => Promise<void>;
   onUploaded: (asset: SponsorAsset) => void;
-  onEditSocial: (bookingId: number) => void;
 }) {
   const [contact, setContact] = useState(() =>
     contactForm(workspace.contacts.find((contact) => contact.role === "onsite")),
@@ -35,20 +31,10 @@ export function PortalEvent({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [socialBusy, setSocialBusy] = useState(false);
-  const [socialError, setSocialError] = useState("");
   const primary = workspace.contacts.find(
     (contact) => contact.isPrimary || contact.role === "primary",
   );
   const files = workspace.assets.filter((asset) => asset.status === "active");
-  const staff = activeStaff(workspace);
-  const unanswered = staff.filter((person) => person.communitySocialAttending === null);
-  const socialComplete = workspace.tasks.some(
-    (task) => task.taskKey === "community_social" && task.status === "completed",
-  );
-  const socialTask = workspace.tasks.some(
-    (task) => task.taskKey === "community_social" && task.required,
-  );
   const saveContact = async () => {
     if (busy) return;
     setBusy(true);
@@ -66,24 +52,6 @@ export function PortalEvent({
       setError(caught instanceof Error ? caught.message : "The onsite contact could not be saved.");
     } finally {
       setBusy(false);
-    }
-  };
-  const confirmSocial = async () => {
-    if (socialBusy || unanswered.length) return;
-    setSocialBusy(true);
-    setSocialError("");
-    try {
-      await sponsorJson("/api/sponsor/tasks/community_social/complete", {
-        method: "POST",
-        body: "{}",
-      });
-      await onRefresh();
-    } catch (caught) {
-      setSocialError(
-        caught instanceof Error ? caught.message : "Your Social plans could not be confirmed.",
-      );
-    } finally {
-      setSocialBusy(false);
     }
   };
   return (
@@ -228,77 +196,6 @@ export function PortalEvent({
             The event team will add your documents here. There is nothing to do yet.
           </p>
         )}
-      </Card>
-      <Card id="community-social" className="scroll-mt-40 space-y-4 p-5 sm:p-6">
-        <h3 className="text-lg font-semibold">Community Social</h3>
-        <p className="text-sm text-muted-foreground">
-          Confirm whether each team member is joining us. Dietary details can be added with their
-          staff registration.
-        </p>
-        {staff.map((person) => (
-          <div
-            key={person.bookingId}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-          >
-            <div>
-              <p className="font-medium">
-                {person.firstName} {person.lastName}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {person.communitySocialAttending === null
-                  ? "Attendance to confirm"
-                  : person.communitySocialAttending
-                    ? "Attending"
-                    : "Not attending"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              className="min-h-11"
-              aria-label={`Update Social plans for ${person.firstName} ${person.lastName}`}
-              onClick={() => onEditSocial(person.bookingId)}
-            >
-              Update plans
-            </Button>
-          </div>
-        ))}
-        {!staff.length && (
-          <p className="rounded-lg bg-slate-50 p-3 text-sm text-muted-foreground">
-            No staff are registered yet. Add your team first, or confirm below if nobody will
-            attend.
-          </p>
-        )}
-        <InlineError message={socialError} />
-        {socialTask &&
-          (socialComplete && !unanswered.length ? (
-            <p role="status" className="flex items-center gap-2 text-sm text-emerald-800">
-              <CheckCircle2 className="h-4 w-4" />
-              Social plans confirmed
-            </p>
-          ) : (
-            <>
-              <Button
-                className="min-h-11"
-                disabled={socialBusy || unanswered.length > 0}
-                onClick={() => void confirmSocial()}
-              >
-                {socialBusy
-                  ? "Saving…"
-                  : staff.some((person) => person.communitySocialAttending)
-                    ? "Confirm Social plans"
-                    : "Confirm no one attending"}
-              </Button>
-              {unanswered.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Update the{" "}
-                  {unanswered.length === 1
-                    ? "unanswered attendance choice"
-                    : `${unanswered.length} unanswered attendance choices`}{" "}
-                  above before confirming.
-                </p>
-              )}
-            </>
-          ))}
       </Card>
       <details id="additional-materials" className="scroll-mt-40 rounded-xl border bg-white p-5">
         <summary className="cursor-pointer py-1 font-semibold">Other requested files</summary>

@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Response } from "express";
 import multer from "multer";
-import { and, asc, desc, eq, gte, ilike, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, ne } from "drizzle-orm";
+import { retiredSocialTask } from "../lib/sponsor-progress";
 import {
   db,
   sponsorActivityTable,
@@ -388,7 +389,13 @@ router.patch("/admin/sponsors/:sponsorId/tasks/:taskId", async (req, res): Promi
       completedAt: status === "completed" ? new Date() : null,
       updatedAt: new Date(),
     })
-    .where(and(eq(sponsorTasksTable.id, taskId), eq(sponsorTasksTable.sponsorId, sponsorId)))
+    .where(
+      and(
+        eq(sponsorTasksTable.id, taskId),
+        eq(sponsorTasksTable.sponsorId, sponsorId),
+        ne(sponsorTasksTable.taskKey, retiredSocialTask),
+      ),
+    )
     .returning();
   if (!updated) {
     res.status(404).json({ error: "Deliverable not found" });

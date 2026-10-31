@@ -9,7 +9,7 @@ import { PortalTeam } from "./portal-team";
 import { PortalEvent } from "./portal-event";
 import { UploadField, EventDocument } from "./portal-ui";
 import { preparationSteps, sessionDraft, sessionMissingItems } from "./portal-helpers";
-import { createPortalFixture, makeAsset, makeSession, makeStaff } from "./__fixtures__/portal";
+import { createPortalFixture, makeAsset, makeSession } from "./__fixtures__/portal";
 
 vi.mock("@/lib/sponsor-api", () => ({ sponsorJson: vi.fn() }));
 const api = vi.mocked(sponsorJson);
@@ -190,25 +190,26 @@ describe("Simple preparation steps and forms", () => {
       ["Work email", "sam@example.invalid"],
     ])
       fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.click(screen.getByText("Contact, dietary and accessibility details (optional)"));
+    fireEvent.change(screen.getByLabelText(/Dietary or accessibility requirements/), {
+      target: { value: "Step-free access" },
+    });
+    expect(screen.queryByLabelText(/Community Social/i)).toBeNull();
     expect(api).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm registration" }));
     await screen.findByText("Team member registered.");
-    expect(JSON.parse(String(api.mock.calls[0][1]?.body))).toMatchObject({
+    const payload = JSON.parse(String(api.mock.calls[0][1]?.body));
+    expect(payload).toMatchObject({
       marketingConsent: false,
-      communitySocialAttending: null,
+      dietaryAccessibility: "Step-free access",
     });
+    expect(payload).not.toHaveProperty("communitySocialAttending");
+    expect(payload).not.toHaveProperty("communitySocialDietary");
   });
   it("updates the main contact as onsite without creating a duplicate contact", async () => {
     const fixture = createPortalFixture();
     api.mockResolvedValue({ ...fixture.contacts[0], role: "onsite" });
-    render(
-      <PortalEvent
-        workspace={fixture}
-        onRefresh={vi.fn()}
-        onUploaded={vi.fn()}
-        onEditSocial={vi.fn()}
-      />,
-    );
+    render(<PortalEvent workspace={fixture} onRefresh={vi.fn()} onUploaded={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Use main contact" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm onsite contact" }));
     await screen.findByText("Onsite contact confirmed.");
@@ -217,16 +218,12 @@ describe("Simple preparation steps and forms", () => {
       email: "jamie@example.invalid",
     });
   });
-  it("cannot confirm Social while a staff member has not answered", () => {
+  it("shows event details without an RSVP form", () => {
     render(
-      <PortalEvent
-        workspace={createPortalFixture()}
-        onRefresh={vi.fn()}
-        onUploaded={vi.fn()}
-        onEditSocial={vi.fn()}
-      />,
+      <PortalEvent workspace={createPortalFixture()} onRefresh={vi.fn()} onUploaded={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Confirm no one attending" }));
+    expect(screen.queryByText("Community Social")).toBeNull();
+    expect(screen.getByRole("button", { name: "Confirm onsite contact" })).toBeTruthy();
     expect(api).not.toHaveBeenCalled();
   });
   it("keeps all four tabs accessible and preserves an open staff form across navigation", async () => {
@@ -299,16 +296,16 @@ describe("Simple preparation steps and forms", () => {
     );
     expect(screen.getByRole("button", { name: "I've read this" })).toBeTruthy();
   });
-  it("keeps a completed Social step complete only while all active staff have answered", () => {
+  it("keeps a previously required Social task out of the sponsor checklist", () => {
     const fixture = createPortalFixture();
-    fixture.tasks.find((task) => task.taskKey === "community_social")!.status = "completed";
-    fixture.staff = [makeStaff({ communitySocialAttending: false })];
-    expect(preparationSteps(fixture).find((step) => step.key === "community_social")?.state).toBe(
-      "complete",
-    );
-    fixture.staff.push(makeStaff({ bookingId: 32 }));
-    expect(preparationSteps(fixture).find((step) => step.key === "community_social")?.state).toBe(
-      "todo",
-    );
+    fixture.tasks.push({
+      ...fixture.tasks[0],
+      taskKey: "community_social",
+      label: "Community Social",
+      status: "overdue",
+    });
+    const steps = preparationSteps(fixture);
+    expect(steps.some((step) => step.key === "staff")).toBe(true);
+    expect(steps.some((step) => step.key === "community_social")).toBe(false);
   });
 });

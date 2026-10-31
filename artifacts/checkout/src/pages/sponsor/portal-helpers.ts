@@ -99,19 +99,6 @@ export function preparationSteps(workspace: SponsorWorkspace): PortalStep[] {
         ? "complete"
         : "todo",
   );
-  add(
-    "community_social",
-    "Confirm your Community Social plans",
-    staff.some((person) => person.communitySocialAttending === null)
-      ? "Choose attending or not attending for each team member, then confirm your plans."
-      : "Review who is joining the Social. You can also confirm that nobody is attending.",
-    "event",
-    "community-social",
-    task("community_social")?.status === "completed" &&
-      !staff.some((person) => person.communitySocialAttending === null)
-      ? "complete"
-      : "todo",
-  );
   if (!workspace.sessions.length && (task("sessions") || task("speakers") || task("slides"))) {
     steps.push({
       key: "session-setup",

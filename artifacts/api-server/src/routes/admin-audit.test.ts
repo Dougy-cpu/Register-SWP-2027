@@ -298,24 +298,18 @@ const {
   sendConfirmationAndReceiptEmailMock,
   sendAttendeeChangeNotificationMock,
   sendWelcomeEmailMock,
-  sendCommunitySocialEmailMock,
-  getEventSettingsMock,
   runConfirmationSideEffectsMock,
   resetDeliveryMocks,
 } = vi.hoisted(() => {
   const sendConfirmationAndReceiptEmailMock = vi.fn();
   const sendAttendeeChangeNotificationMock = vi.fn();
   const sendWelcomeEmailMock = vi.fn();
-  const sendCommunitySocialEmailMock = vi.fn();
-  const getEventSettingsMock = vi.fn();
   const runConfirmationSideEffectsMock = vi.fn();
 
   return {
     sendConfirmationAndReceiptEmailMock,
     sendAttendeeChangeNotificationMock,
     sendWelcomeEmailMock,
-    sendCommunitySocialEmailMock,
-    getEventSettingsMock,
     runConfirmationSideEffectsMock,
     resetDeliveryMocks: () => {
       sendConfirmationAndReceiptEmailMock.mockReset();
@@ -324,14 +318,6 @@ const {
       sendAttendeeChangeNotificationMock.mockResolvedValue(undefined);
       sendWelcomeEmailMock.mockReset();
       sendWelcomeEmailMock.mockResolvedValue(true);
-      sendCommunitySocialEmailMock.mockReset();
-      sendCommunitySocialEmailMock.mockResolvedValue(true);
-      getEventSettingsMock.mockReset();
-      getEventSettingsMock.mockResolvedValue({
-        socialEnabled: true,
-        socialStartAt: new Date("2027-03-02T18:00:00Z"),
-        socialVenue: "Configured SWP social venue",
-      });
       runConfirmationSideEffectsMock.mockReset();
       runConfirmationSideEffectsMock.mockResolvedValue({ ran: [], skipped: [], failed: [] });
     },
@@ -381,13 +367,11 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("../lib/email", () => ({
   sendAttendeeChangeNotification: sendAttendeeChangeNotificationMock,
   sendWelcomeEmail: sendWelcomeEmailMock,
-  sendCommunitySocialEmail: sendCommunitySocialEmailMock,
   sendConfirmationAndReceiptEmail: sendConfirmationAndReceiptEmailMock,
   sendIncompleteFormNotification: async () => undefined,
   sendReissuedInvoiceEmail: async () => undefined,
   sendBillingEditNotification: async () => undefined,
   diffBillingFields: () => ({}),
-  getEventSettings: getEventSettingsMock,
   resolveLatestBookingPdf: async () => null,
   resendConfirmationAndReceipt: async () => undefined,
 }));
@@ -1184,88 +1168,15 @@ describe("admin audit trail — integration", () => {
     expect(booking.sheetsSynced).toBe(false);
   });
 
-  it("POST /admin/registrations/:id/send-community-social-email sends only to non-TBC attendees", async () => {
-    seedBooking({
-      id: 101,
-      status: "paid",
-      confirmationEmailSent: true,
-      welcomeEmailsSent: true,
-      communitySocialEmailSent: false,
-      organiserNotified: true,
-      sheetsSynced: true,
-    });
-    seedAttendee({
-      id: 201,
-      bookingId: 101,
-      isLead: true,
-      firstName: "Alice",
-      workEmail: "alice@example.test",
-    });
-    seedAttendee({
-      id: 202,
-      bookingId: 101,
-      isLead: false,
-      firstName: "Ben",
-      workEmail: "ben@example.test",
-      seatIndex: 1,
-    });
-    seedAttendee({
-      id: 203,
-      bookingId: 101,
-      isLead: false,
-      firstName: "TBC",
-      workEmail: "tbc@example.test",
-      isTbc: true,
-      seatIndex: 2,
-    });
-
-    const res = await fetch(`${baseUrl}/admin/registrations/101/send-community-social-email`, {
+  it("does not send an invitation from the retired registration action", async () => {
+    seedBooking({ id: 101, status: "paid", communitySocialEmailSent: false });
+    const response = await fetch(`${baseUrl}/admin/registrations/101/send-community-social-email`, {
       method: "POST",
       headers: { "x-admin-token": adminToken },
     });
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.resend).toEqual({
-      type: "community_social",
-      sent: true,
-      recipients: ["alice@example.test", "ben@example.test"],
-      failedRecipients: [],
-    });
-    expect(sendCommunitySocialEmailMock).toHaveBeenCalledTimes(2);
-    expect(sendCommunitySocialEmailMock).toHaveBeenNthCalledWith(
-      1,
-      101,
-      "Alice",
-      "alice@example.test",
-    );
-    expect(sendCommunitySocialEmailMock).toHaveBeenNthCalledWith(2, 101, "Ben", "ben@example.test");
-    expect(sendConfirmationAndReceiptEmailMock).not.toHaveBeenCalled();
+    expect(response.status).toBe(404);
     expect(sendWelcomeEmailMock).not.toHaveBeenCalled();
-    expect(runConfirmationSideEffectsMock).not.toHaveBeenCalled();
-
-    const booking = getRows({ _name: "bookingsTable" })[0];
-    expect(booking.communitySocialEmailSent).toBe(true);
-    expect(booking.organiserNotified).toBe(true);
-    expect(booking.sheetsSynced).toBe(true);
-  });
-
-  it("Community Social send is blocked until its SWP settings are configured", async () => {
-    seedBooking({ id: 101, status: "invoiced", communitySocialEmailSent: false });
-    seedAttendee({ bookingId: 101, firstName: "Alice", workEmail: "alice@example.test" });
-    getEventSettingsMock.mockResolvedValue({
-      socialEnabled: false,
-      socialStartAt: null,
-      socialVenue: null,
-    });
-
-    const res = await fetch(`${baseUrl}/admin/registrations/101/send-community-social-email`, {
-      method: "POST",
-      headers: { "x-admin-token": adminToken },
-    });
-
-    expect(res.status).toBe(409);
-    expect(sendCommunitySocialEmailMock).not.toHaveBeenCalled();
+    expect(sendConfirmationAndReceiptEmailMock).not.toHaveBeenCalled();
     expect(getRows({ _name: "bookingsTable" })[0].communitySocialEmailSent).toBe(false);
   });
 

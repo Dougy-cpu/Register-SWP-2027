@@ -184,7 +184,7 @@ router.post("/sponsor/tasks/:taskKey/complete", async (req, res): Promise<void> 
       await sendSponsorInternalNotification({
         sponsorId,
         category: "passes",
-        event: key === "staff" ? "Sponsor team confirmed" : "Community Social details confirmed",
+        event: "Sponsor team confirmed",
         summary: "The sponsor reviewed and confirmed their current team details.",
       });
     res.json(result.task);
@@ -201,8 +201,6 @@ interface StaffBody {
   workEmail?: string;
   phone?: string | null;
   dietaryAccessibility?: string | null;
-  communitySocialAttending?: boolean | null;
-  communitySocialDietary?: string | null;
   marketingConsent?: boolean;
 }
 
@@ -222,8 +220,6 @@ function validateStaff(body: StaffBody) {
     workEmail: email,
     phone: body.phone?.trim() || null,
     dietaryAccessibility: body.dietaryAccessibility?.trim() || null,
-    communitySocialAttending: body.communitySocialAttending ?? null,
-    communitySocialDietary: body.communitySocialDietary?.trim() || null,
     gdprConsent: body.marketingConsent === true,
     gdprConsentAt: body.marketingConsent === true ? new Date() : null,
   };

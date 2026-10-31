@@ -39,12 +39,6 @@ interface EventSettings {
   eventEndAt: string | null;
   eventTimezone: string;
   eventDescription: string | null;
-  socialEnabled: boolean;
-  socialName: string | null;
-  socialStartAt: string | null;
-  socialEndAt: string | null;
-  socialVenue: string | null;
-  socialDescription: string | null;
   invoiceHelpContent: string | null;
 }
 
@@ -204,12 +198,6 @@ export default function AdminSettings() {
     eventEndAt: null,
     eventTimezone: "Europe/London",
     eventDescription: null,
-    socialEnabled: false,
-    socialName: null,
-    socialStartAt: null,
-    socialEndAt: null,
-    socialVenue: null,
-    socialDescription: null,
     invoiceHelpContent: null,
   });
 
@@ -285,12 +273,6 @@ export default function AdminSettings() {
             eventEndAt: data.eventEndAt ?? null,
             eventTimezone: data.eventTimezone ?? "Europe/London",
             eventDescription: data.eventDescription ?? null,
-            socialEnabled: data.socialEnabled ?? false,
-            socialName: data.socialName ?? null,
-            socialStartAt: data.socialStartAt ?? null,
-            socialEndAt: data.socialEndAt ?? null,
-            socialVenue: data.socialVenue ?? null,
-            socialDescription: data.socialDescription ?? null,
             invoiceHelpContent:
               (data as { invoiceHelpContent?: string | null }).invoiceHelpContent ?? null,
           });
@@ -484,12 +466,6 @@ export default function AdminSettings() {
           eventEndAt: form.eventEndAt,
           eventTimezone: form.eventTimezone,
           eventDescription: form.eventDescription,
-          socialEnabled: form.socialEnabled,
-          socialName: form.socialName,
-          socialStartAt: form.socialStartAt,
-          socialEndAt: form.socialEndAt,
-          socialVenue: form.socialVenue,
-          socialDescription: form.socialDescription,
         }),
       });
       if (res.ok) {
@@ -783,109 +759,6 @@ export default function AdminSettings() {
                     placeholder="Join the UK's leading HR analytics conference…"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-4 pt-2 border-t border-border">
-                <div className="flex items-center justify-between pt-4">
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                    Additional Networking Social (Optional)
-                  </h3>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.socialEnabled}
-                      onChange={(e) => setForm((f) => ({ ...f, socialEnabled: e.target.checked }))}
-                      className="w-4 h-4 accent-primary"
-                    />
-                    <span className="font-semibold">Enabled</span>
-                  </label>
-                </div>
-                <fieldset
-                  disabled={!form.socialEnabled}
-                  className={form.socialEnabled ? "space-y-4" : "space-y-4 opacity-50"}
-                >
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                      Event Name
-                    </label>
-                    <Input
-                      value={form.socialName ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, socialName: e.target.value || null }))
-                      }
-                      placeholder="Optional Networking Drinks"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                        Starts At
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={isoToTzWallClock(
-                          form.socialStartAt,
-                          form.eventTimezone || "Europe/London",
-                        )}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            socialStartAt: tzWallClockToIso(
-                              e.target.value,
-                              f.eventTimezone || "Europe/London",
-                            ),
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                        Ends At
-                      </label>
-                      <Input
-                        type="datetime-local"
-                        value={isoToTzWallClock(
-                          form.socialEndAt,
-                          form.eventTimezone || "Europe/London",
-                        )}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            socialEndAt: tzWallClockToIso(
-                              e.target.value,
-                              f.eventTimezone || "Europe/London",
-                            ),
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                      Venue
-                    </label>
-                    <Input
-                      value={form.socialVenue ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, socialVenue: e.target.value || null }))
-                      }
-                      placeholder="The Botanist, Broadgate Circle"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                      Description
-                    </label>
-                    <Textarea
-                      rows={2}
-                      value={form.socialDescription ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, socialDescription: e.target.value || null }))
-                      }
-                      placeholder="Drinks &amp; networking the evening before the summit."
-                    />
-                  </div>
-                </fieldset>
               </div>
 
               {calError && <p className="text-sm text-destructive">{calError}</p>}

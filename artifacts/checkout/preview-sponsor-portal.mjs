@@ -161,7 +161,7 @@ const vite = await createServer({
               Object.assign(contact, body, { role: "onsite" });
               return reply(contact);
             }
-            if (path.match(/^\/api\/sponsor\/tasks\/(staff|community_social)\/complete$/)) {
+            if (path.match(/^\/api\/sponsor\/tasks\/staff\/complete$/)) {
               const task = fixture.tasks.find((item) => item.taskKey === path.split("/")[4]);
               Object.assign(task, { status: "completed", completedAt: new Date().toISOString() });
               return reply(task);
@@ -171,7 +171,7 @@ const vite = await createServer({
               fixture.staff.push(member);
               fixture.sponsor.staffUsed++;
               fixture.tasks
-                .filter((task) => ["staff", "community_social"].includes(task.taskKey))
+                .filter((task) => task.taskKey === "staff")
                 .forEach((task) => {
                   task.status = "todo";
                 });
@@ -187,7 +187,7 @@ const vite = await createServer({
                 fixture.sponsor.staffUsed--;
               } else Object.assign(member, body);
               fixture.tasks
-                .filter((task) => ["staff", "community_social"].includes(task.taskKey))
+                .filter((task) => task.taskKey === "staff")
                 .forEach((task) => {
                   task.status = "todo";
                 });

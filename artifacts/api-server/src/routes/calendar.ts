@@ -31,24 +31,9 @@ router.get("/calendar/main.ics", async (_req, res): Promise<void> => {
   sendIcs(res, "swp-summit.ics", buildIcs(event));
 });
 
-router.get("/calendar/social.ics", async (_req, res): Promise<void> => {
-  const settings = await getEventSettings();
-  if (!settings.socialEnabled || !settings.socialStartAt || !settings.socialEndAt) {
-    res.status(404).type("text/plain").send("Additional networking social is not configured.");
-    return;
-  }
-  const start = new Date(settings.socialStartAt);
-  const end = new Date(settings.socialEndAt);
-  const event: CalendarEvent = {
-    uid: `event-settings-${settings.id}-social@swpsummit.com`,
-    title: settings.socialName || "Additional Networking Social",
-    description: settings.socialDescription || null,
-    location: settings.socialVenue || null,
-    startAt: start,
-    endAt: end,
-    url: settings.orgWebsite,
-  };
-  sendIcs(res, "swp-summit-social.ics", buildIcs(event));
+// Old invitations may still contain this URL.
+router.get("/calendar/social.ics", (_req, res) => {
+  res.sendStatus(410);
 });
 
 export default router;

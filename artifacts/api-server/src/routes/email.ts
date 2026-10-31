@@ -5,8 +5,9 @@ import {
 } from "../lib/approved-email-design";
 import { renderApprovedEmailSample } from "../lib/approved-email-sample";
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { GetAdminEventSettingsResponse } from "@workspace/api-zod";
 import {
   bookingsTable,
   emailTemplatesTable,
@@ -16,7 +17,7 @@ import {
 import {
   getEventSettings,
   DEFAULT_INVOICE_HELP_CONTENT,
-  getCommunitySocialTemplateVars,
+  stripRetiredSocialCopy,
 } from "../lib/email";
 import { DEFAULT_REF_PREFIX, DEFAULT_REF_OFFSET } from "../lib/order-reference";
 import { adminAuth } from "../middleware/admin-auth";
@@ -27,6 +28,7 @@ const router: IRouter = Router();
 function formatTemplate(t: typeof emailTemplatesTable.$inferSelect) {
   return {
     ...t,
+    htmlBody: stripRetiredSocialCopy(t.htmlBody),
     updatedAt: t.updatedAt.toISOString(),
   };
 }
@@ -42,10 +44,7 @@ function formatLog(l: typeof emailLogsTable.$inferSelect) {
 
 router.get("/admin/event-settings", adminAuth, async (_req, res): Promise<void> => {
   const settings = await getEventSettings();
-  res.json({
-    ...settings,
-    updatedAt: settings.updatedAt.toISOString(),
-  });
+  res.json(GetAdminEventSettingsResponse.parse(settings));
 });
 
 // Public, unauthenticated subset of event-settings - only the fields needed
@@ -81,12 +80,6 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
     eventEndAt,
     eventTimezone,
     eventDescription,
-    socialEnabled,
-    socialName,
-    socialStartAt,
-    socialEndAt,
-    socialVenue,
-    socialDescription,
     invoiceHelpContent,
   } = req.body;
 
@@ -115,7 +108,7 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
 
   const existing = await db.select().from(eventSettingsTable);
 
-  // Validate start < end for event and social once we know the merged values.
+  // Validate start < end for the summit once we know the merged values.
   const current = existing[0];
   const mergedEventStart =
     eventStartAt !== undefined ? parseTs(eventStartAt) : (current?.eventStartAt ?? null);
@@ -129,19 +122,6 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
     res.status(400).json({ error: "eventEndAt must be after eventStartAt" });
     return;
   }
-  const mergedSocialStart =
-    socialStartAt !== undefined ? parseTs(socialStartAt) : (current?.socialStartAt ?? null);
-  const mergedSocialEnd =
-    socialEndAt !== undefined ? parseTs(socialEndAt) : (current?.socialEndAt ?? null);
-  if (
-    mergedSocialStart &&
-    mergedSocialEnd &&
-    mergedSocialEnd.getTime() <= mergedSocialStart.getTime()
-  ) {
-    res.status(400).json({ error: "socialEndAt must be after socialStartAt" });
-    return;
-  }
-
   let updated;
   if (existing.length > 0) {
     [updated] = await db
@@ -184,12 +164,6 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
           eventTimezone: String(eventTimezone).trim() || "Europe/London",
         }),
         ...(eventDescription !== undefined && { eventDescription: eventDescription || null }),
-        ...(socialEnabled !== undefined && { socialEnabled: socialEnabled === true }),
-        ...(socialName !== undefined && { socialName: socialName || null }),
-        ...(socialStartAt !== undefined && { socialStartAt: parseTs(socialStartAt) }),
-        ...(socialEndAt !== undefined && { socialEndAt: parseTs(socialEndAt) }),
-        ...(socialVenue !== undefined && { socialVenue: socialVenue || null }),
-        ...(socialDescription !== undefined && { socialDescription: socialDescription || null }),
         ...(invoiceHelpContent !== undefined && {
           invoiceHelpContent: invoiceHelpContent || null,
         }),
@@ -217,12 +191,6 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
         eventTimezone:
           (typeof eventTimezone === "string" && eventTimezone.trim()) || "Europe/London",
         eventDescription: eventDescription || null,
-        socialEnabled: socialEnabled === true,
-        socialName: socialName || null,
-        socialStartAt: parseTs(socialStartAt) ?? null,
-        socialEndAt: parseTs(socialEndAt) ?? null,
-        socialVenue: socialVenue || null,
-        socialDescription: socialDescription || null,
         invoiceHelpContent: invoiceHelpContent || null,
       })
       .returning();
@@ -238,10 +206,7 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
     },
   });
 
-  res.json({
-    ...updated,
-    updatedAt: updated.updatedAt.toISOString(),
-  });
+  res.json(GetAdminEventSettingsResponse.parse(updated));
 });
 
 // ─── Generic Template Routes ──────────────────────────────────────────────────
@@ -252,12 +217,7 @@ router.put("/admin/event-settings", adminAuth, async (req, res): Promise<void> =
 // hitting the endpoint with a valid `type`. Now we either return the
 // persisted row or, if absent, the in-memory default - the row is only
 // created when an admin explicitly saves via PUT.
-const EDITABLE_TEMPLATE_TYPES = [
-  "welcome",
-  "confirmation",
-  "invoice_reminder",
-  "community_social",
-] as const;
+const EDITABLE_TEMPLATE_TYPES = ["welcome", "confirmation", "invoice_reminder"] as const;
 type EditableTemplateType = (typeof EDITABLE_TEMPLATE_TYPES)[number];
 
 function isEditableTemplateType(value: string): value is EditableTemplateType {
@@ -271,25 +231,6 @@ const TEMPLATE_DEFAULTS: Record<EditableTemplateType, { subject: string; htmlBod
     subject: "Invoice Reminder - {{orderReference}} - SWP Summit 2027",
     htmlBody:
       '<p>Dear {{recipientName}},</p><p>This is a friendly reminder that invoice <strong>{{orderReference}}</strong> for your registration to the <strong>SWP Summit 2027</strong> is due on <strong>{{dueDate}}</strong>.</p><p>Please arrange payment at your earliest convenience using the bank transfer details below. A copy of the invoice PDF is attached for your reference.</p>{{payOnlineButton}}<p>If you have already arranged payment, please disregard this email. For any queries, please contact <a href="mailto:douglas@dynamicbusinessleaders.co.uk">douglas@dynamicbusinessleaders.co.uk</a>.</p>',
-  },
-  community_social: {
-    subject: "{{socialName}} invitation - {{eventName}}",
-    htmlBody: `<h2>You're invited to the Community Social</h2>
-<p>Hi {{firstName}},</p>
-<p>We'd like to invite you to <strong>{{socialName}}</strong>, connected with {{eventName}}.</p>
-<div class="info-box">
-  <strong>{{socialName}}</strong><br>
-  <strong>Date:</strong> {{socialDate}}<br>
-  <strong>Time:</strong> {{socialTime}}<br>
-  <strong>Venue:</strong> {{socialVenue}}
-</div>
-<p>{{socialDescription}}</p>
-{{socialCalendarLinks}}
-<p style="text-align:center;margin:28px 0;">
-  <a href="{{socialDetailsUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Visit the SWP Summit website</a>
-</p>
-<p><a href="{{socialMapUrl}}">View the venue on Google Maps</a></p>
-<p>Best,<br><strong>The SWP Summit Team</strong></p>`,
   },
 };
 
@@ -468,28 +409,15 @@ async function buildSampleVars(
 
   const calPh = getCalendarPlaceholders(settings);
   vars["{{eventCalendarLinks}}"] = calPh.eventCalendarLinks;
-  vars["{{socialCalendarLinks}}"] = calPh.socialCalendarLinks;
   vars["{{calendarLinks}}"] = calPh.calendarLinks;
   vars["{{googleCalendarUrl}}"] = calPh.googleCalendarUrl;
   vars["{{outlookCalendarUrl}}"] = calPh.outlookCalendarUrl;
   vars["{{icsCalendarUrl}}"] = calPh.icsCalendarUrl;
-  vars["{{socialGoogleCalendarUrl}}"] = calPh.socialGoogleCalendarUrl;
-  vars["{{socialOutlookCalendarUrl}}"] = calPh.socialOutlookCalendarUrl;
-  vars["{{socialIcsCalendarUrl}}"] = calPh.socialIcsCalendarUrl;
-  if (type === "community_social") {
-    Object.assign(
-      vars,
-      getCommunitySocialTemplateVars(settings, toName?.split(" ")[0] || toName || "Test"),
-    );
-  }
-
   const subjectVars: Record<string, string> = {
     "{{orderReference}}": "SWP27-TEST-001",
     "{{recipientName}}": toName || "Test User",
     "{{firstName}}": toName?.split(" ")[0] || "Test",
     "{{eventName}}": settings.eventName || "SWP Summit",
-    "{{socialName}}":
-      settings.socialName || `${settings.eventName || "SWP Summit"} Community Social`,
   };
 
   return { vars, subjectVars };
@@ -525,7 +453,7 @@ router.post("/email-templates/:type/test-send", adminAuth, async (req, res): Pro
   const { sendMail, wrapInBrandedLayout: wrap } = await import("../lib/email");
   const { vars, subjectVars } = await buildSampleVars(type, toName, toEmail);
 
-  let personalised = template.htmlBody;
+  let personalised = stripRetiredSocialCopy(template.htmlBody);
   for (const [key, val] of Object.entries(vars)) {
     personalised = personalised.replaceAll(key, val);
   }
@@ -588,7 +516,7 @@ router.post("/email-templates/:type/preview", adminAuth, async (req, res): Promi
       `<div style="background:#f0f6ff;border:2px solid #004eb9;border-radius:6px;padding:20px;margin:24px 0;"><p style="margin:0;text-align:center;color:#004eb9;font-weight:700;">[SAMPLE - Manage attendees button appears here in real emails]</p></div>`;
   }
 
-  let personalised = String(htmlBody);
+  let personalised = stripRetiredSocialCopy(String(htmlBody));
   for (const [key, val] of Object.entries(vars)) {
     personalised = personalised.replaceAll(key, val);
   }
@@ -622,11 +550,15 @@ router.get("/admin/email-logs", adminAuth, async (req, res): Promise<void> => {
   const allLogs = await db
     .select()
     .from(emailLogsTable)
+    .where(ne(emailLogsTable.type, "community_social"))
     .orderBy(desc(emailLogsTable.sentAt))
     .limit(limit)
     .offset(offset);
 
-  const total = await db.select().from(emailLogsTable);
+  const total = await db
+    .select()
+    .from(emailLogsTable)
+    .where(ne(emailLogsTable.type, "community_social"));
 
   res.json({
     logs: allLogs.map(formatLog),

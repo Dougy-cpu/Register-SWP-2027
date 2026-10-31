@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
+import { retiredSocialTask } from "./sponsor-progress";
 import {
   attendeesTable,
   db,
@@ -18,6 +19,7 @@ import {
   escHtml,
   getEventSettings,
   sendMail,
+  stripRetiredSocialCopy,
   wrapInBrandedLayout,
 } from "./email";
 import { sponsorAccessUrl, SponsorConflictError, SponsorNotFoundError } from "./sponsor-service";
@@ -42,7 +44,15 @@ async function sponsorEmailData(sponsorId: number) {
       .from(sponsorPromoCodesTable)
       .innerJoin(promoCodesTable, eq(sponsorPromoCodesTable.promoCodeId, promoCodesTable.id))
       .where(eq(sponsorPromoCodesTable.sponsorId, sponsorId)),
-    db.select().from(sponsorTasksTable).where(eq(sponsorTasksTable.sponsorId, sponsorId)),
+    db
+      .select()
+      .from(sponsorTasksTable)
+      .where(
+        and(
+          eq(sponsorTasksTable.sponsorId, sponsorId),
+          ne(sponsorTasksTable.taskKey, retiredSocialTask),
+        ),
+      ),
   ]);
   const primary = contacts.filter((contact) => contact.isPrimary || contact.role === "primary");
   if (!primary.length) throw new SponsorConflictError("A primary contact is required");
@@ -122,7 +132,7 @@ export async function buildSponsorWelcomePreview(sponsorId: number) {
     variables,
   );
   const body = template?.htmlBody
-    ? replaceVariables(template.htmlBody, variables)
+    ? replaceVariables(stripRetiredSocialCopy(template.htmlBody), variables)
     : sponsorWelcomeDefaultBody(data);
   const html = wrapInBrandedLayout(body, settings);
   const to = [...new Set(data.primary.map((contact) => contact.email.trim().toLowerCase()))];

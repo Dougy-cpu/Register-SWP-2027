@@ -209,73 +209,6 @@ export function useDownloadMainCalendarIcs<
 }
 
 /**
- * Returns an RFC-5545 iCalendar file for the optional pre-event social.
-Public endpoint — no authentication. Returns 404 with a plain-text
-body when the social is not enabled or its times are unset.
-
- * @summary Download .ics file for the pre-event social
- */
-export const getDownloadSocialCalendarIcsUrl = () => {
-  return `/api/calendar/social.ics`;
-};
-
-export const downloadSocialCalendarIcs = async (options?: RequestInit): Promise<string> => {
-  return customFetch<string>(getDownloadSocialCalendarIcsUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getDownloadSocialCalendarIcsQueryKey = () => {
-  return [`/api/calendar/social.ics`] as const;
-};
-
-export const getDownloadSocialCalendarIcsQueryOptions = <
-  TData = Awaited<ReturnType<typeof downloadSocialCalendarIcs>>,
-  TError = ErrorType<string>,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadSocialCalendarIcs>>, TError, TData>;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getDownloadSocialCalendarIcsQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadSocialCalendarIcs>>> = ({
-    signal,
-  }) => downloadSocialCalendarIcs({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof downloadSocialCalendarIcs>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type DownloadSocialCalendarIcsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof downloadSocialCalendarIcs>>
->;
-export type DownloadSocialCalendarIcsQueryError = ErrorType<string>;
-
-/**
- * @summary Download .ics file for the pre-event social
- */
-
-export function useDownloadSocialCalendarIcs<
-  TData = Awaited<ReturnType<typeof downloadSocialCalendarIcs>>,
-  TError = ErrorType<string>,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof downloadSocialCalendarIcs>>, TError, TData>;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getDownloadSocialCalendarIcsQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
  * Returns server health status
  * @summary Health check
  */
@@ -2039,247 +1972,6 @@ export const useSendTestWelcomeEmail = <
 };
 
 /**
- * @summary Get the Community Social email template
- */
-export const getGetCommunitySocialEmailTemplateUrl = () => {
-  return `/api/email-templates/community_social`;
-};
-
-export const getCommunitySocialEmailTemplate = async (
-  options?: RequestInit,
-): Promise<EmailTemplate> => {
-  return customFetch<EmailTemplate>(getGetCommunitySocialEmailTemplateUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetCommunitySocialEmailTemplateQueryKey = () => {
-  return [`/api/email-templates/community_social`] as const;
-};
-
-export const getGetCommunitySocialEmailTemplateQueryOptions = <
-  TData = Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetCommunitySocialEmailTemplateQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>> = ({
-    signal,
-  }) => getCommunitySocialEmailTemplate({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetCommunitySocialEmailTemplateQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>
->;
-export type GetCommunitySocialEmailTemplateQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get the Community Social email template
- */
-
-export function useGetCommunitySocialEmailTemplate<
-  TData = Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getCommunitySocialEmailTemplate>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetCommunitySocialEmailTemplateQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Update the Community Social email template
- */
-export const getUpdateCommunitySocialEmailTemplateUrl = () => {
-  return `/api/email-templates/community_social`;
-};
-
-export const updateCommunitySocialEmailTemplate = async (
-  updateEmailTemplateBody: UpdateEmailTemplateBody,
-  options?: RequestInit,
-): Promise<EmailTemplate> => {
-  return customFetch<EmailTemplate>(getUpdateCommunitySocialEmailTemplateUrl(), {
-    ...options,
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(updateEmailTemplateBody),
-  });
-};
-
-export const getUpdateCommunitySocialEmailTemplateMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
-    TError,
-    { data: BodyType<UpdateEmailTemplateBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
-  TError,
-  { data: BodyType<UpdateEmailTemplateBody> },
-  TContext
-> => {
-  const mutationKey = ["updateCommunitySocialEmailTemplate"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
-    { data: BodyType<UpdateEmailTemplateBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return updateCommunitySocialEmailTemplate(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type UpdateCommunitySocialEmailTemplateMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>
->;
-export type UpdateCommunitySocialEmailTemplateMutationBody = BodyType<UpdateEmailTemplateBody>;
-export type UpdateCommunitySocialEmailTemplateMutationError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Update the Community Social email template
- */
-export const useUpdateCommunitySocialEmailTemplate = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
-    TError,
-    { data: BodyType<UpdateEmailTemplateBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof updateCommunitySocialEmailTemplate>>,
-  TError,
-  { data: BodyType<UpdateEmailTemplateBody> },
-  TContext
-> => {
-  return useMutation(getUpdateCommunitySocialEmailTemplateMutationOptions(options));
-};
-
-/**
- * @summary Send a test Community Social email
- */
-export const getSendTestCommunitySocialEmailUrl = () => {
-  return `/api/email-templates/community_social/test-send`;
-};
-
-export const sendTestCommunitySocialEmail = async (
-  testEmailBody: TestEmailBody,
-  options?: RequestInit,
-): Promise<SuccessResponse> => {
-  return customFetch<SuccessResponse>(getSendTestCommunitySocialEmailUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(testEmailBody),
-  });
-};
-
-export const getSendTestCommunitySocialEmailMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
-    TError,
-    { data: BodyType<TestEmailBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
-  TError,
-  { data: BodyType<TestEmailBody> },
-  TContext
-> => {
-  const mutationKey = ["sendTestCommunitySocialEmail"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
-    { data: BodyType<TestEmailBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return sendTestCommunitySocialEmail(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type SendTestCommunitySocialEmailMutationResult = NonNullable<
-  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>
->;
-export type SendTestCommunitySocialEmailMutationBody = BodyType<TestEmailBody>;
-export type SendTestCommunitySocialEmailMutationError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Send a test Community Social email
- */
-export const useSendTestCommunitySocialEmail = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
-    TError,
-    { data: BodyType<TestEmailBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof sendTestCommunitySocialEmail>>,
-  TError,
-  { data: BodyType<TestEmailBody> },
-  TContext
-> => {
-  return useMutation(getSendTestCommunitySocialEmailMutationOptions(options));
-};
-
-/**
  * @summary List all email logs (admin)
  */
 export const getListEmailLogsUrl = (params?: ListEmailLogsParams) => {
@@ -3265,95 +2957,6 @@ export const useResendRegistrationWelcomeEmails = <
 };
 
 /**
- * Manually sends the Community Social email to every non-TBC attendee on
-a paid or invoiced booking. This endpoint is not part of automatic
-booking confirmation, redelivery, organiser notification or Sheets sync.
-
- * @summary Send the Community Social email to attendees (admin)
- */
-export const getSendRegistrationCommunitySocialEmailUrl = (id: number) => {
-  return `/api/admin/registrations/${id}/send-community-social-email`;
-};
-
-export const sendRegistrationCommunitySocialEmail = async (
-  id: number,
-  options?: RequestInit,
-): Promise<RegistrationEmailResendResult> => {
-  return customFetch<RegistrationEmailResendResult>(
-    getSendRegistrationCommunitySocialEmailUrl(id),
-    {
-      ...options,
-      method: "POST",
-    },
-  );
-};
-
-export const getSendRegistrationCommunitySocialEmailMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  const mutationKey = ["sendRegistrationCommunitySocialEmail"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
-    { id: number }
-  > = (props) => {
-    const { id } = props ?? {};
-
-    return sendRegistrationCommunitySocialEmail(id, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type SendRegistrationCommunitySocialEmailMutationResult = NonNullable<
-  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>
->;
-
-export type SendRegistrationCommunitySocialEmailMutationError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Send the Community Social email to attendees (admin)
- */
-export const useSendRegistrationCommunitySocialEmail = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof sendRegistrationCommunitySocialEmail>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  return useMutation(getSendRegistrationCommunitySocialEmailMutationOptions(options));
-};
-
-/**
  * Updates the local booking status. When an invoice booking with a
 Stripe invoice is marked paid, the server first syncs Stripe by paying
 open invoices with `paid_out_of_band: true`. If Stripe is unavailable
@@ -3806,8 +3409,7 @@ export function useGetAdminEventSettings<
 
 /**
  * Partial update — any field omitted is left unchanged. Calendar
-timestamps (`eventStartAt`, `eventEndAt`, `socialStartAt`,
-`socialEndAt`) accept ISO-8601 strings, `null`, or empty strings
+timestamps (`eventStartAt` and `eventEndAt`) accept ISO-8601 strings, `null`, or empty strings
 (treated as null).
 
  * @summary Update event/organisation settings (admin)
@@ -6167,15 +5769,15 @@ export const useSaveSponsorOnsiteContact = <
 };
 
 /**
- * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Community Social confirmation requires an answer for every active staff member; an empty roster may explicitly confirm that nobody is attending. Repeated confirmation is idempotent.
- * @summary Explicitly confirm the current team list or its Community Social answers
+ * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Repeated confirmation is idempotent.
+ * @summary Confirm the current sponsor team
  */
-export const getCompleteSponsorPreparationTaskUrl = (taskKey: "staff" | "community_social") => {
+export const getCompleteSponsorPreparationTaskUrl = (taskKey: "staff") => {
   return `/api/sponsor/tasks/${taskKey}/complete`;
 };
 
 export const completeSponsorPreparationTask = async (
-  taskKey: "staff" | "community_social",
+  taskKey: "staff",
   options?: RequestInit,
 ): Promise<SponsorTask> => {
   return customFetch<SponsorTask>(getCompleteSponsorPreparationTaskUrl(taskKey), {
@@ -6191,14 +5793,14 @@ export const getCompleteSponsorPreparationTaskMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
     TError,
-    { taskKey: "staff" | "community_social" },
+    { taskKey: "staff" },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
   TError,
-  { taskKey: "staff" | "community_social" },
+  { taskKey: "staff" },
   TContext
 > => {
   const mutationKey = ["completeSponsorPreparationTask"];
@@ -6210,7 +5812,7 @@ export const getCompleteSponsorPreparationTaskMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
-    { taskKey: "staff" | "community_social" }
+    { taskKey: "staff" }
   > = (props) => {
     const { taskKey } = props ?? {};
 
@@ -6227,7 +5829,7 @@ export type CompleteSponsorPreparationTaskMutationResult = NonNullable<
 export type CompleteSponsorPreparationTaskMutationError = ErrorType<void>;
 
 /**
- * @summary Explicitly confirm the current team list or its Community Social answers
+ * @summary Confirm the current sponsor team
  */
 export const useCompleteSponsorPreparationTask = <
   TError = ErrorType<void>,
@@ -6236,14 +5838,14 @@ export const useCompleteSponsorPreparationTask = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
     TError,
-    { taskKey: "staff" | "community_social" },
+    { taskKey: "staff" },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof completeSponsorPreparationTask>>,
   TError,
-  { taskKey: "staff" | "community_social" },
+  { taskKey: "staff" },
   TContext
 > => {
   return useMutation(getCompleteSponsorPreparationTaskMutationOptions(options));

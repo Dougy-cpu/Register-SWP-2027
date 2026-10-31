@@ -73,36 +73,6 @@ const DEFAULT_CONFIRMATION_BODY = approvedEmailTemplates.confirmation.htmlBody;
 const DEFAULT_WELCOME_SUBJECT = approvedEmailTemplates.welcome.subject;
 const DEFAULT_WELCOME_BODY = approvedEmailTemplates.welcome.htmlBody;
 
-const DEFAULT_COMMUNITY_SOCIAL_SUBJECT = "{{socialName}} invitation - {{eventName}}";
-
-const DEFAULT_COMMUNITY_SOCIAL_BODY = `
-<h2>You're invited to the Community Social</h2>
-
-<p>Hi {{firstName}},</p>
-
-<p>We'd like to invite you to <strong>{{socialName}}</strong>, connected with {{eventName}}.</p>
-
-<div class="info-box">
-  <strong>{{socialName}}</strong><br>
-  <strong>Date:</strong> {{socialDate}}<br>
-  <strong>Time:</strong> {{socialTime}}<br>
-  <strong>Venue:</strong> {{socialVenue}}
-</div>
-
-<p>{{socialDescription}}</p>
-
-{{socialCalendarLinks}}
-
-<p style="text-align:center;margin:28px 0;">
-  <a href="{{socialDetailsUrl}}" style="display:inline-block;background:#004eb9;color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Visit the SWP Summit website</a>
-</p>
-
-<p><a href="{{socialMapUrl}}">View the venue on Google Maps</a></p>
-
-<p>Best,<br>
-<strong>The SWP Summit Team</strong></p>
-`;
-
 const DEFAULT_SPONSOR_WELCOME_SUBJECT =
   "SWP Summit 2027 | {{company}} sponsor welcome and workspace";
 
@@ -116,7 +86,7 @@ const DEFAULT_SPONSOR_WELCOME_BODY = `
 <div class="info-box"><strong>Private VIP Workforce passes</strong><br>Code: <strong>{{vipCode}}</strong><br>Allocation: {{vipAllocation}}<br>Maximum per booking: {{vipMaxPerBooking}}<br><a href="{{vipUrl}}">Open the VIP registration link</a></div>
 <div class="info-box" style="margin-top:16px;"><strong>Public Workforce discount</strong><br>Code: <strong>{{publicCode}}</strong><br>Discount: 20% after any group discount<br><a href="{{publicUrl}}">Open the public registration link</a></div>
 <h3>Your sponsor team</h3>
-<p>You have <strong>{{staffAllocation}}</strong> sponsor staff places. Please register each person in the workspace once their details are confirmed, including whether they will join the Community Social and any dietary or accessibility information.</p>
+<p>You have <strong>{{staffAllocation}}</strong> sponsor staff places. Please register each person in the workspace once their details are confirmed, including any dietary or accessibility information.</p>
 <h3>Content, assets and logistics</h3>
 <p>Any session, speaker, slides, artwork or logistics actions included in your package are listed in the workspace. Where a session is included, you can submit the title, a concise description, presenter details, headshot and up to three takeaways there.</p>
 <p>Please open the workspace, check the actions and confirm any logistics documents once reviewed. If you need more passes or anything is unclear, you can send us a request directly from the workspace.</p>
@@ -309,24 +279,6 @@ export async function seed() {
       logger.info("Seeded confirmation email template");
     } else {
       logger.debug("Confirmation email template already present, skipping seed");
-    }
-
-    // This template is available for manual sends only. It is intentionally
-    // not part of the automatic post-booking email sequence.
-    const existingCommunitySocial = await db
-      .select()
-      .from(emailTemplatesTable)
-      .where(eq(emailTemplatesTable.type, "community_social"));
-
-    if (existingCommunitySocial.length === 0) {
-      await db.insert(emailTemplatesTable).values({
-        type: "community_social",
-        subject: DEFAULT_COMMUNITY_SOCIAL_SUBJECT,
-        htmlBody: DEFAULT_COMMUNITY_SOCIAL_BODY,
-      });
-      logger.info("Seeded Community Social email template");
-    } else {
-      logger.debug("Community Social email template already present, skipping seed");
     }
 
     const sponsorTemplates = [

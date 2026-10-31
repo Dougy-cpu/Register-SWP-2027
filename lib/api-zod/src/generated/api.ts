@@ -90,7 +90,6 @@ export const GetBookingResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -232,7 +231,6 @@ export const UpdateBookingResponse = zod.object({
   invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
   confirmationEmailSent: zod.boolean().optional(),
   welcomeEmailsSent: zod.boolean().optional(),
-  communitySocialEmailSent: zod.boolean().optional(),
   organiserNotified: zod.boolean().optional(),
   sheetsSynced: zod.boolean().optional(),
   needsAttention: zod.boolean().optional(),
@@ -304,7 +302,6 @@ export const GetBookingBySessionResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -712,46 +709,6 @@ export const SendTestWelcomeEmailResponse = zod.object({
 });
 
 /**
- * @summary Get the Community Social email template
- */
-export const GetCommunitySocialEmailTemplateResponse = zod.object({
-  id: zod.number(),
-  type: zod.string(),
-  subject: zod.string(),
-  htmlBody: zod.string(),
-  updatedAt: zod.coerce.date(),
-});
-
-/**
- * @summary Update the Community Social email template
- */
-export const UpdateCommunitySocialEmailTemplateBody = zod.object({
-  subject: zod.string(),
-  htmlBody: zod.string(),
-});
-
-export const UpdateCommunitySocialEmailTemplateResponse = zod.object({
-  id: zod.number(),
-  type: zod.string(),
-  subject: zod.string(),
-  htmlBody: zod.string(),
-  updatedAt: zod.coerce.date(),
-});
-
-/**
- * @summary Send a test Community Social email
- */
-export const SendTestCommunitySocialEmailBody = zod.object({
-  toEmail: zod.string(),
-  toName: zod.string().optional(),
-});
-
-export const SendTestCommunitySocialEmailResponse = zod.object({
-  success: zod.boolean(),
-  message: zod.string().optional(),
-});
-
-/**
  * @summary List all email logs (admin)
  */
 export const ListEmailLogsQueryParams = zod.object({
@@ -773,7 +730,6 @@ export const ListEmailLogsResponse = zod.object({
         "receipt",
         "welcome",
         "invoice",
-        "community_social",
         "sponsor_welcome",
         "sponsor_staff",
         "sponsor_internal",
@@ -953,12 +909,6 @@ export const ListRegistrationsResponse = zod.object({
         .boolean()
         .optional()
         .describe("True once welcome emails have been sent to all attendees."),
-      communitySocialEmailSent: zod
-        .boolean()
-        .optional()
-        .describe(
-          "True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking.",
-        ),
       organiserNotified: zod
         .boolean()
         .optional()
@@ -1079,7 +1029,6 @@ export const RedeliverRegistrationResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1163,7 +1112,6 @@ export const ResendRegistrationConfirmationEmailResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1173,7 +1121,7 @@ export const ResendRegistrationConfirmationEmailResponse = zod
   .and(
     zod.object({
       resend: zod.object({
-        type: zod.enum(["confirmation", "welcome", "community_social"]),
+        type: zod.enum(["confirmation", "welcome"]),
         sent: zod.boolean(),
         recipients: zod.array(zod.string()),
         failedRecipients: zod.array(zod.string()),
@@ -1248,7 +1196,6 @@ export const ResendRegistrationWelcomeEmailsResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1258,93 +1205,7 @@ export const ResendRegistrationWelcomeEmailsResponse = zod
   .and(
     zod.object({
       resend: zod.object({
-        type: zod.enum(["confirmation", "welcome", "community_social"]),
-        sent: zod.boolean(),
-        recipients: zod.array(zod.string()),
-        failedRecipients: zod.array(zod.string()),
-      }),
-    }),
-  );
-
-/**
- * Manually sends the Community Social email to every non-TBC attendee on
-a paid or invoiced booking. This endpoint is not part of automatic
-booking confirmation, redelivery, organiser notification or Sheets sync.
-
- * @summary Send the Community Social email to attendees (admin)
- */
-export const SendRegistrationCommunitySocialEmailParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const SendRegistrationCommunitySocialEmailResponse = zod
-  .object({
-    id: zod.number(),
-    sessionToken: zod.string(),
-    status: zod.enum([
-      "partial",
-      "pending_payment",
-      "paid",
-      "invoiced",
-      "transferred",
-      "cancelled",
-      "refunded",
-      "disputed",
-    ]),
-    passType: zod.enum(["single", "business"]),
-    attendeeType: zod.enum(["hr_professional", "consultant_vendor"]),
-    quantity: zod.number(),
-    promoCode: zod.string().nullish(),
-    promoDiscountAmount: zod.number().nullish(),
-    groupDiscountAmount: zod.number().nullish(),
-    subtotalAmount: zod.number(),
-    vatAmount: zod.number(),
-    totalAmount: zod.number(),
-    paymentMethod: zod
-      .union([zod.literal("card"), zod.literal("invoice"), zod.literal(null)])
-      .nullish(),
-    manualEntry: zod.boolean(),
-    registrationSource: zod.enum(["checkout", "manual", "sponsor_staff"]).optional(),
-    sponsorId: zod.number().nullish(),
-    stripeSessionId: zod.string().nullish(),
-    stripePaymentIntentId: zod.string().nullish(),
-    stripeInvoiceId: zod.string().nullish(),
-    stripeInvoicePdfUrl: zod.string().nullish(),
-    stripeInvoicePaymentUrl: zod.string().nullish(),
-    orderReference: zod.string().nullish(),
-    currentStep: zod.number(),
-    billingName: zod.string().nullish(),
-    billingCompany: zod.string().nullish(),
-    billingEmail: zod.string().nullish(),
-    billingAddress: zod.string().nullish(),
-    billingAddressLine1: zod.string().nullish(),
-    billingAddressLine2: zod.string().nullish(),
-    billingTown: zod.string().nullish(),
-    billingRegion: zod.string().nullish(),
-    billingPostcode: zod.string().nullish(),
-    billingCountry: zod.string().nullish(),
-    billingVatNumber: zod.string().nullish(),
-    billingPhone: zod.string().nullish(),
-    poNumber: zod.string().nullish(),
-    managementToken: zod.string().nullish(),
-    invoiceDueDate: zod.coerce.date().nullish(),
-    paidAt: zod.coerce.date().nullish(),
-    stripeInvoiceStatus: zod.string().nullish(),
-    stripeInvoiceStatusSyncedAt: zod.coerce.date().nullish(),
-    invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
-    confirmationEmailSent: zod.boolean().optional(),
-    welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
-    organiserNotified: zod.boolean().optional(),
-    sheetsSynced: zod.boolean().optional(),
-    needsAttention: zod.boolean().optional(),
-    createdAt: zod.coerce.date(),
-    updatedAt: zod.coerce.date(),
-  })
-  .and(
-    zod.object({
-      resend: zod.object({
-        type: zod.enum(["confirmation", "welcome", "community_social"]),
+        type: zod.enum(["confirmation", "welcome"]),
         sent: zod.boolean(),
         recipients: zod.array(zod.string()),
         failedRecipients: zod.array(zod.string()),
@@ -1435,7 +1296,6 @@ export const UpdateRegistrationStatusResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1518,7 +1378,6 @@ export const GetRegistrationResponse = zod
     invoiceBadgeStatus: zod.enum(["paid", "voided", "overdue", "sent", "pending"]).optional(),
     confirmationEmailSent: zod.boolean().optional(),
     welcomeEmailsSent: zod.boolean().optional(),
-    communitySocialEmailSent: zod.boolean().optional(),
     organiserNotified: zod.boolean().optional(),
     sheetsSynced: zod.boolean().optional(),
     needsAttention: zod.boolean().optional(),
@@ -1621,16 +1480,6 @@ export const GetAdminEventSettingsResponse = zod
     eventEndAt: zod.coerce.date().nullish(),
     eventTimezone: zod.string().describe("IANA timezone identifier, default Europe London."),
     eventDescription: zod.string().nullish(),
-    socialEnabled: zod
-      .boolean()
-      .describe(
-        "When false the social block in emails reads as a placeholder note (details to follow).",
-      ),
-    socialName: zod.string().nullish(),
-    socialStartAt: zod.coerce.date().nullish(),
-    socialEndAt: zod.coerce.date().nullish(),
-    socialVenue: zod.string().nullish(),
-    socialDescription: zod.string().nullish(),
     invoiceHelpContent: zod
       .string()
       .nullish()
@@ -1643,8 +1492,7 @@ export const GetAdminEventSettingsResponse = zod
 
 /**
  * Partial update — any field omitted is left unchanged. Calendar
-timestamps (`eventStartAt`, `eventEndAt`, `socialStartAt`,
-`socialEndAt`) accept ISO-8601 strings, `null`, or empty strings
+timestamps (`eventStartAt` and `eventEndAt`) accept ISO-8601 strings, `null`, or empty strings
 (treated as null).
 
  * @summary Update event/organisation settings (admin)
@@ -1672,12 +1520,6 @@ export const UpdateAdminEventSettingsBody = zod
     eventEndAt: zod.coerce.date().nullish(),
     eventTimezone: zod.string().optional(),
     eventDescription: zod.string().nullish(),
-    socialEnabled: zod.boolean().optional(),
-    socialName: zod.string().nullish(),
-    socialStartAt: zod.coerce.date().nullish(),
-    socialEndAt: zod.coerce.date().nullish(),
-    socialVenue: zod.string().nullish(),
-    socialDescription: zod.string().nullish(),
     invoiceHelpContent: zod.string().nullish(),
   })
   .describe(
@@ -1715,16 +1557,6 @@ export const UpdateAdminEventSettingsResponse = zod
     eventEndAt: zod.coerce.date().nullish(),
     eventTimezone: zod.string().describe("IANA timezone identifier, default Europe London."),
     eventDescription: zod.string().nullish(),
-    socialEnabled: zod
-      .boolean()
-      .describe(
-        "When false the social block in emails reads as a placeholder note (details to follow).",
-      ),
-    socialName: zod.string().nullish(),
-    socialStartAt: zod.coerce.date().nullish(),
-    socialEndAt: zod.coerce.date().nullish(),
-    socialVenue: zod.string().nullish(),
-    socialDescription: zod.string().nullish(),
     invoiceHelpContent: zod
       .string()
       .nullish()
@@ -1783,12 +1615,6 @@ export const GetAdminStatsResponse = zod.object({
         .boolean()
         .optional()
         .describe("True once welcome emails have been sent to all attendees."),
-      communitySocialEmailSent: zod
-        .boolean()
-        .optional()
-        .describe(
-          "True once the manually triggered Community Social email has been sent to every known non-TBC attendee on the booking.",
-        ),
       organiserNotified: zod
         .boolean()
         .optional()
@@ -2017,8 +1843,6 @@ export const GetAdminSponsorResponse = zod
           workEmail: zod.string().email(),
           phone: zod.string().nullish(),
           dietaryAccessibility: zod.string().nullish(),
-          communitySocialAttending: zod.boolean().nullish(),
-          communitySocialDietary: zod.string().nullish(),
           marketingConsent: zod.boolean(),
           status: zod.string(),
           registeredAt: zod.coerce.date(),
@@ -2296,8 +2120,6 @@ export const UpdateAdminSponsorResponse = zod
           workEmail: zod.string().email(),
           phone: zod.string().nullish(),
           dietaryAccessibility: zod.string().nullish(),
-          communitySocialAttending: zod.boolean().nullish(),
-          communitySocialDietary: zod.string().nullish(),
           marketingConsent: zod.boolean(),
           status: zod.string(),
           registeredAt: zod.coerce.date(),
@@ -2496,8 +2318,6 @@ export const ConfirmSponsorResponse = zod
           workEmail: zod.string().email(),
           phone: zod.string().nullish(),
           dietaryAccessibility: zod.string().nullish(),
-          communitySocialAttending: zod.boolean().nullish(),
-          communitySocialDietary: zod.string().nullish(),
           marketingConsent: zod.boolean(),
           status: zod.string(),
           registeredAt: zod.coerce.date(),
@@ -2810,8 +2630,6 @@ export const UpdateAdminSponsorSessionEntitlementResponse = zod
           workEmail: zod.string().email(),
           phone: zod.string().nullish(),
           dietaryAccessibility: zod.string().nullish(),
-          communitySocialAttending: zod.boolean().nullish(),
-          communitySocialDietary: zod.string().nullish(),
           marketingConsent: zod.boolean(),
           status: zod.string(),
           registeredAt: zod.coerce.date(),
@@ -3260,8 +3078,6 @@ export const GetSponsorWorkspaceResponse = zod
         workEmail: zod.string().email(),
         phone: zod.string().nullish(),
         dietaryAccessibility: zod.string().nullish(),
-        communitySocialAttending: zod.boolean().nullish(),
-        communitySocialDietary: zod.string().nullish(),
         marketingConsent: zod.boolean(),
         status: zod.string(),
         registeredAt: zod.coerce.date(),
@@ -3401,11 +3217,11 @@ export const SaveSponsorOnsiteContactResponse = zod.object({
 });
 
 /**
- * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Community Social confirmation requires an answer for every active staff member; an empty roster may explicitly confirm that nobody is attending. Repeated confirmation is idempotent.
- * @summary Explicitly confirm the current team list or its Community Social answers
+ * Cookie and CSRF authenticated. Team completion does not require using every allocated place. Repeated confirmation is idempotent.
+ * @summary Confirm the current sponsor team
  */
 export const CompleteSponsorPreparationTaskParams = zod.object({
-  taskKey: zod.enum(["staff", "community_social"]),
+  taskKey: zod.enum(["staff"]),
 });
 
 export const CompleteSponsorPreparationTaskResponse = zod.object({
@@ -3433,8 +3249,6 @@ export const registerSponsorStaffBodyPhoneMax = 100;
 
 export const registerSponsorStaffBodyDietaryAccessibilityMax = 2000;
 
-export const registerSponsorStaffBodyCommunitySocialDietaryMax = 2000;
-
 export const registerSponsorStaffBodyMarketingConsentDefault = false;
 
 export const RegisterSponsorStaffBody = zod.object({
@@ -3445,11 +3259,6 @@ export const RegisterSponsorStaffBody = zod.object({
   workEmail: zod.string().email(),
   phone: zod.string().max(registerSponsorStaffBodyPhoneMax).nullish(),
   dietaryAccessibility: zod.string().max(registerSponsorStaffBodyDietaryAccessibilityMax).nullish(),
-  communitySocialAttending: zod.boolean().nullish(),
-  communitySocialDietary: zod
-    .string()
-    .max(registerSponsorStaffBodyCommunitySocialDietaryMax)
-    .nullish(),
   marketingConsent: zod.boolean().default(registerSponsorStaffBodyMarketingConsentDefault),
 });
 
@@ -3472,8 +3281,6 @@ export const updateSponsorStaffBodyPhoneMax = 100;
 
 export const updateSponsorStaffBodyDietaryAccessibilityMax = 2000;
 
-export const updateSponsorStaffBodyCommunitySocialDietaryMax = 2000;
-
 export const updateSponsorStaffBodyMarketingConsentDefault = false;
 
 export const UpdateSponsorStaffBody = zod.object({
@@ -3484,11 +3291,6 @@ export const UpdateSponsorStaffBody = zod.object({
   workEmail: zod.string().email(),
   phone: zod.string().max(updateSponsorStaffBodyPhoneMax).nullish(),
   dietaryAccessibility: zod.string().max(updateSponsorStaffBodyDietaryAccessibilityMax).nullish(),
-  communitySocialAttending: zod.boolean().nullish(),
-  communitySocialDietary: zod
-    .string()
-    .max(updateSponsorStaffBodyCommunitySocialDietaryMax)
-    .nullish(),
   marketingConsent: zod.boolean().default(updateSponsorStaffBodyMarketingConsentDefault),
 });
 
@@ -3502,8 +3304,6 @@ export const UpdateSponsorStaffResponse = zod.object({
   workEmail: zod.string().email(),
   phone: zod.string().nullish(),
   dietaryAccessibility: zod.string().nullish(),
-  communitySocialAttending: zod.boolean().nullish(),
-  communitySocialDietary: zod.string().nullish(),
   marketingConsent: zod.boolean(),
   status: zod.string(),
   registeredAt: zod.coerce.date(),

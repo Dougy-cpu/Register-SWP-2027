@@ -10,8 +10,12 @@ import { createAttendeeChangeSnapshot, getAttendeeFieldChanges } from "../lib/at
 const router: IRouter = Router();
 
 function formatAttendee(a: typeof attendeesTable.$inferSelect) {
-  const { notes, ...publicAttendee } = a;
-  void notes;
+  const {
+    notes: _notes,
+    communitySocialAttending: _social,
+    communitySocialDietary: _socialDietary,
+    ...publicAttendee
+  } = a;
   return {
     ...publicAttendee,
     gdprConsentAt: a.gdprConsentAt ? a.gdprConsentAt.toISOString() : null,

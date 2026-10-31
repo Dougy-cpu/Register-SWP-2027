@@ -19,19 +19,15 @@ const emptyTeamMember = (company: string) => ({
   workEmail: "",
   phone: "",
   dietaryAccessibility: "",
-  communitySocialAttending: "unanswered",
-  communitySocialDietary: "",
   marketingConsent: false,
 });
 
 export function PortalTeam({
   workspace,
   onRefresh,
-  editSocialBookingId,
 }: {
   workspace: SponsorWorkspace;
   onRefresh: () => Promise<void>;
-  editSocialBookingId?: number | null;
 }) {
   const [form, setForm] = useState(() => emptyTeamMember(workspace.sponsor.company));
   const [baseline, setBaseline] = useState(() =>
@@ -40,7 +36,6 @@ export function PortalTeam({
   const [editing, setEditing] = useState<SponsorStaff | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
-  const [sameRequirements, setSameRequirements] = useState(false);
   const [busy, setBusy] = useState(false);
   const operation = useRef(false);
   const [error, setError] = useState("");
@@ -53,11 +48,10 @@ export function PortalTeam({
   const replacing = Boolean(
     editing && form.workEmail.trim().toLowerCase() !== editing.workEmail.toLowerCase(),
   );
-  const unsaved = showForm && (JSON.stringify(form) !== baseline || sameRequirements);
-  const openMember = (person: SponsorStaff, social = false) => {
+  const unsaved = showForm && JSON.stringify(form) !== baseline;
+  const openMember = (person: SponsorStaff) => {
     if (operation.current) return;
     if (showForm && editing?.bookingId === person.bookingId) {
-      if (social) setShowPreferences(true);
       requestAnimationFrame(() =>
         document.getElementById("staff-form")?.scrollIntoView({ block: "start" }),
       );
@@ -67,8 +61,7 @@ export function PortalTeam({
       return;
     setEditing(person);
     setShowForm(true);
-    setShowPreferences(social);
-    setSameRequirements(false);
+    setShowPreferences(false);
     setError("");
     const nextForm = {
       firstName: person.firstName,
@@ -78,13 +71,6 @@ export function PortalTeam({
       workEmail: person.workEmail,
       phone: person.phone ?? "",
       dietaryAccessibility: person.dietaryAccessibility ?? "",
-      communitySocialAttending:
-        person.communitySocialAttending === null
-          ? "unanswered"
-          : person.communitySocialAttending
-            ? "yes"
-            : "no",
-      communitySocialDietary: person.communitySocialDietary ?? "",
       marketingConsent: person.marketingConsent,
     };
     setForm(nextForm);
@@ -93,13 +79,6 @@ export function PortalTeam({
       document.getElementById("staff-form")?.scrollIntoView({ block: "start" }),
     );
   };
-  useEffect(() => {
-    if (!editSocialBookingId) return;
-    const person = workspace.staff.find((person) => person.bookingId === editSocialBookingId);
-    if (person) openMember(person, true);
-    // A newly requested member opens once; background refreshes must not overwrite their draft.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSocialBookingId]);
   useEffect(() => {
     if (!unsaved) return;
     const protect = (event: BeforeUnloadEvent) => {
@@ -120,19 +99,7 @@ export function PortalTeam({
         editing ? `/api/sponsor/staff/${editing.bookingId}` : "/api/sponsor/staff",
         {
           method: editing ? "PATCH" : "POST",
-          body: JSON.stringify({
-            ...form,
-            communitySocialAttending:
-              form.communitySocialAttending === "unanswered"
-                ? null
-                : form.communitySocialAttending === "yes",
-            communitySocialDietary:
-              form.communitySocialAttending === "yes"
-                ? sameRequirements
-                  ? form.dietaryAccessibility
-                  : form.communitySocialDietary
-                : "",
-          }),
+          body: JSON.stringify(form),
         },
       );
       setNotice(
@@ -231,7 +198,6 @@ export function PortalTeam({
               setBaseline(JSON.stringify(emptyTeamMember(workspace.sponsor.company)));
               setShowForm(true);
               setShowPreferences(false);
-              setSameRequirements(false);
               setError("");
               requestAnimationFrame(() =>
                 document.getElementById("staff-form")?.scrollIntoView({ block: "start" }),
@@ -255,14 +221,6 @@ export function PortalTeam({
                 <p className="break-all text-sm text-muted-foreground">{person.workEmail}</p>
                 <p className="text-sm text-muted-foreground">
                   {person.jobTitle} · {person.company}
-                </p>
-                <p className="mt-1 text-xs">
-                  Social:{" "}
-                  {person.communitySocialAttending === null
-                    ? "To confirm"
-                    : person.communitySocialAttending
-                      ? "Attending"
-                      : "Not attending"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -350,7 +308,6 @@ export function PortalTeam({
                     onClick={() => {
                       setForm(emptyTeamMember(workspace.sponsor.company));
                       setShowPreferences(false);
-                      setSameRequirements(false);
                     }}
                   >
                     Replace this person
@@ -390,7 +347,7 @@ export function PortalTeam({
                 className="rounded-xl border p-4"
               >
                 <summary className="cursor-pointer py-1 font-medium">
-                  Social, dietary and accessibility details (optional)
+                  Contact, dietary and accessibility details (optional)
                 </summary>
                 <div className="mt-4 space-y-4">
                   <div>
@@ -416,49 +373,6 @@ export function PortalTeam({
                       }
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="staff-social">Will they attend the Community Social?</Label>
-                    <select
-                      id="staff-social"
-                      className="mt-1 h-11 w-full rounded-md border bg-white px-3 text-sm"
-                      value={form.communitySocialAttending}
-                      onChange={(event) =>
-                        setForm({ ...form, communitySocialAttending: event.target.value })
-                      }
-                    >
-                      <option value="unanswered">I'll confirm later</option>
-                      <option value="yes">Yes, attending</option>
-                      <option value="no">Not attending</option>
-                    </select>
-                  </div>
-                  {form.communitySocialAttending === "yes" && (
-                    <div className="space-y-3">
-                      <label className="flex items-start gap-2 text-sm">
-                        <input
-                          className="mt-1"
-                          type="checkbox"
-                          checked={sameRequirements}
-                          onChange={(event) => setSameRequirements(event.target.checked)}
-                        />
-                        Use the same requirements for the Social
-                      </label>
-                      {!sameRequirements && (
-                        <div>
-                          <Label htmlFor="staff-social-dietary">
-                            Social dietary requirements (optional)
-                          </Label>
-                          <Input
-                            id="staff-social-dietary"
-                            maxLength={2000}
-                            value={form.communitySocialDietary}
-                            onChange={(event) =>
-                              setForm({ ...form, communitySocialDietary: event.target.value })
-                            }
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
                   <label className="flex items-start gap-2 text-sm">
                     <input
                       className="mt-1"

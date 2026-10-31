@@ -1050,7 +1050,6 @@ export default function AdminSponsorDetail() {
                       <th className="text-left p-3">Name</th>
                       <th className="text-left p-3">Role</th>
                       <th className="text-left p-3">Email</th>
-                      <th className="text-left p-3">Community Social</th>
                       <th className="text-left p-3">Status</th>
                     </tr>
                   </thead>
@@ -1067,20 +1066,13 @@ export default function AdminSponsorDetail() {
                         </td>
                         <td className="p-3">{person.workEmail}</td>
                         <td className="p-3">
-                          {person.communitySocialAttending === null
-                            ? "Not answered"
-                            : person.communitySocialAttending
-                              ? "Attending"
-                              : "Not attending"}
-                        </td>
-                        <td className="p-3">
                           <Badge className={statusClass(person.status)}>{person.status}</Badge>
                         </td>
                       </tr>
                     ))}
                     {workspace.staff.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                        <td colSpan={4} className="p-8 text-center text-muted-foreground">
                           The sponsor has not registered staff yet.
                         </td>
                       </tr>

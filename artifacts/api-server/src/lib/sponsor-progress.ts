@@ -1,3 +1,5 @@
+export const retiredSocialTask = "community_social";
+
 type TaskState = "todo" | "submitted" | "completed" | "overdue" | "not_required";
 interface Task {
   taskKey: string;
@@ -20,14 +22,15 @@ interface ProgressContext {
 }
 
 // Read models use the actual deliverables, not the status of the last individual upload/session.
-// Explicit team and Social confirmations stay in sponsor_tasks and reopen after roster changes.
+// Team confirmation reopens when the roster changes.
 export function deriveSponsorTasks<T extends Task>(
   tasks: T[],
   context: ProgressContext,
   now = new Date(),
 ): T[] {
   const files = context.assets.filter((asset) => asset.status === "active");
-  return tasks.map((task) => {
+  const activeTasks = tasks.filter((task) => task.taskKey !== retiredSocialTask);
+  return activeTasks.map((task) => {
     if (!task.required) return task;
     let status = task.status;
     switch (task.taskKey) {

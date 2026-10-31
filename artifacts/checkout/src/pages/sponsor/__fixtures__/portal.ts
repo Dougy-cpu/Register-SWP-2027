@@ -40,8 +40,6 @@ export function makeStaff(overrides: Partial<SponsorStaff> = {}): SponsorStaff {
     workEmail: "alex@example.invalid",
     phone: null,
     dietaryAccessibility: null,
-    communitySocialAttending: null,
-    communitySocialDietary: null,
     marketingConsent: false,
     status: "paid",
     registeredAt: "2026-09-04T09:00:00Z",
@@ -124,7 +122,6 @@ export function createPortalFixture(): SponsorWorkspace {
       "logistics",
       "onsite_contacts",
       "slides",
-      "community_social",
     ].map((taskKey, index) => ({
       id: index + 1,
       taskKey,

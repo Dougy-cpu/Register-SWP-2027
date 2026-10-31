@@ -19,6 +19,7 @@ import {
   saveSessionPresenters,
 } from "./sponsor-portal";
 import { deriveSponsorTasks } from "./sponsor-progress";
+import { runSponsorDeadlineCheck } from "../jobs/sponsor-deadlines";
 import { saveSessionDraft, sessionSubmissionErrors } from "./sponsor-session-draft";
 import { requestAdditionalPasses, resolvePassRequest } from "./sponsor-pass-requests";
 
@@ -244,20 +245,57 @@ describe("Sponsor portal persistence using the real PostgreSQL schema", () => {
       ).rows,
     ).toEqual([{ count: 1 }]);
   });
-  it("requires all active staff Social choices, allows nobody attending, then reopens after changes", async () => {
-    await expect(completePreparationTask(1, "community_social")).rejects.toThrow(
-      /each team member/,
+  it("rejects the retired Social task and only reopens the staff checklist after a roster change", async () => {
+    await database.exec(
+      "UPDATE sponsor_tasks SET status='completed' WHERE task_key IN ('staff', 'community_social')",
     );
-    await database.exec("UPDATE attendees SET community_social_attending=false WHERE id=41");
-    expect((await completePreparationTask(1, "community_social")).task.status).toBe("completed");
+    await expect(completePreparationTask(1, "community_social")).rejects.toMatchObject({
+      status: 404,
+    });
     await testDb.transaction((tx) => reopenStaffPreparationTasks(tx as never, 1));
+    const result = await database.query(
+      "SELECT task_key, status FROM sponsor_tasks WHERE task_key IN ('staff','community_social') ORDER BY task_key",
+    );
+    expect(result.rows).toEqual([
+      { task_key: "community_social", status: "completed" },
+      { task_key: "staff", status: "todo" },
+    ]);
+    const rows = [
+      { taskKey: "staff", required: true, status: "todo" as const, dueAt: null, completedAt: null },
+      {
+        taskKey: "community_social",
+        required: true,
+        status: "overdue" as const,
+        dueAt: new Date(0),
+        completedAt: null,
+      },
+    ];
+    expect(
+      deriveSponsorTasks(rows, { sessions: [], assets: [], contacts: [], documents: [] }).map(
+        (task) => task.taskKey,
+      ),
+    ).toEqual(["staff"]);
+  });
+  it("does not flag or notify for an overdue Social task saved before retirement", async () => {
+    await database.exec(
+      "UPDATE sponsors SET status='confirmed' WHERE id=1; UPDATE sponsor_tasks SET status='todo', due_at='2026-01-01' WHERE sponsor_id=1 AND task_key='community_social'",
+    );
+    const result = await runSponsorDeadlineCheck(new Date("2026-10-31T08:00:00Z"));
+    expect(result.overdueTaskIds).toEqual([]);
     expect(
       (
         await database.query(
-          "SELECT status FROM sponsor_tasks WHERE task_key IN ('staff','community_social')",
+          "SELECT status, last_deadline_check_on FROM sponsor_tasks WHERE sponsor_id=1 AND task_key='community_social'",
         )
       ).rows,
-    ).toEqual([{ status: "todo" }, { status: "todo" }]);
+    ).toEqual([{ status: "todo", last_deadline_check_on: null }]);
+    expect(
+      (
+        await database.query(
+          "SELECT count(*)::int AS count FROM sponsor_activity WHERE type='deadline_check'",
+        )
+      ).rows,
+    ).toEqual([{ count: 0 }]);
   });
   it("validates contact fields and safely maps older clients' speaker positions", () => {
     expect(() =>
