@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { scannerConnection } from "@/lib/scanner-connection";
+import { recordScannerContact, scannerConnection } from "@/lib/scanner-connection";
 import type { ScannerSummary } from "@/hooks/use-scanner-summary";
 
 export function ScannerSaveStatus({
@@ -12,9 +12,11 @@ export function ScannerSaveStatus({
   const [connection, setConnection] = useState(scannerConnection);
   useEffect(() => {
     const update = () => setConnection(scannerConnection());
-    const offline = () => setConnection("unavailable");
+    const offline = () => recordScannerContact(false);
     window.addEventListener("swp:scanner-connection", update);
     window.addEventListener("offline", offline);
+    if (!navigator.onLine) offline();
+    else update();
     return () => {
       window.removeEventListener("swp:scanner-connection", update);
       window.removeEventListener("offline", offline);

@@ -229,12 +229,21 @@ describe("fast scanner failure paths", () => {
     await screen.findByRole("button", { name: "Start scanning" });
     const offlineMessage = "Connection unavailable. Saved leads stay on this phone.";
     expect(screen.queryByText(offlineMessage)).toBeNull();
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
     act(() => window.dispatchEvent(new Event("offline")));
     expect(await screen.findByText(offlineMessage)).toBeTruthy();
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
     act(() => window.dispatchEvent(new Event("online")));
     expect(screen.getByText(offlineMessage)).toBeTruthy();
     act(() => recordScannerContact(true));
     await waitFor(() => expect(screen.queryByText(offlineMessage)).toBeNull());
+  });
+  it("shows the offline status when the phone reopens without a connection", async () => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    render(<SponsorScanner />);
+    expect(
+      await screen.findByText("Connection unavailable. Saved leads stay on this phone."),
+    ).toBeTruthy();
   });
   it("keeps desktop handoff separate without activating a scanner or opening storage", () => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Windows Chrome");
