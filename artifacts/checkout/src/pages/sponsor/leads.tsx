@@ -4,29 +4,23 @@ import { Download, Search, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LeadNotes } from "@/components/scanner-lead-notes";
 import { ScannerRecoveryTools } from "@/components/scanner-recovery-tools";
 import { ScannerSaveStatus } from "@/components/scanner-save-status";
 import { useScannerSummary } from "@/hooks/use-scanner-summary";
-import {
-  activateScanner,
-  scannerFetch,
-  syncPendingScannerItems,
-  refreshScannerLeads,
-  ScannerApiError,
-} from "@/lib/scanner-api";
+import { syncPendingScannerItems, refreshScannerLeads, ScannerApiError } from "@/lib/scanner-api";
 import {
   cachedScannerLeads,
   getScannerCredential,
   pendingScannerItems,
   rejectedScannerItems,
-  saveScannerCredential,
+  watchOtherScannerTabs,
 } from "@/lib/scanner-storage";
 import { mergeScannerLeads } from "@/lib/scanner-leads";
 import { sponsorFetch, sponsorJson } from "@/lib/sponsor-api";
 import type { ScannerCredential, SponsorLead } from "@/types/lead-scanner";
 
+import { ScannerReportSummary, type ScannerReport } from "@/components/scanner-report-summary";
 const date = (value: string | null) =>
   value
     ? new Date(value).toLocaleString("en-GB", {
@@ -49,15 +43,21 @@ export default function SponsorLeads() {
     [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null),
     [pending, setPending] = useState(0);
-  const [exporting, setExporting] = useState(false),
-    [operatorName, setOperatorName] = useState("");
-  const [activating, setActivating] = useState(false);
-  const organiserId = useRef<number | null>(null),
-    syncing = useRef(false);
+  const [view, setView] = useState<"mine" | "team">("mine");
+  const [report, setReport] = useState<ScannerReport | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const syncing = useRef(false);
+  const localGeneration = useRef(0);
   const hasLocal = useRef(false);
   const loadLocal = useCallback(async () => {
+    if (organiser) return;
+    const generation = ++localGeneration.current;
     const saved = await getScannerCredential();
-    if (!saved || (organiser && organiserId.current !== saved.sponsorId)) {
+    if (generation !== localGeneration.current) return;
+    if (!saved) {
+      setLeads([]);
+      setCredential(null);
+      setExpanded(null);
       setLoading(false);
       return;
     }
@@ -67,101 +67,126 @@ export default function SponsorLeads() {
     const [confirmed, queue, rejected] = await Promise.all([
       cachedScannerLeads(saved),
       pendingScannerItems(saved),
-      rejectedScannerItems(),
+      rejectedScannerItems(saved),
     ]);
+    if (generation !== localGeneration.current) return;
     const merged = mergeScannerLeads(confirmed, queue.scans, queue.annotations, rejected, saved);
     hasLocal.current = merged.length > 0;
     setLeads(merged);
     setPending(queue.scans.length + queue.annotations.length + rejected.length);
     setLoading(false);
   }, [organiser]);
-  const refresh = useCallback(async () => {
-    if (syncing.current) return;
-    syncing.current = true;
-    try {
-      const saved = await getScannerCredential();
-      if (organiser) {
-        // Validate the organiser's sponsor before showing any phone-local data.
-        const workspace = await sponsorJson<{ id: number }>("/api/sponsor/workspace");
-        organiserId.current = workspace.id;
-        if (!saved || saved.sponsorId !== workspace.id) {
-          setCredential(null);
-          const data = await sponsorJson<{ leads: SponsorLead[] }>("/api/sponsor/leads");
+  const refresh = useCallback(
+    async (force = false) => {
+      if (syncing.current) return;
+      syncing.current = true;
+      try {
+        if (organiser) {
+          const data = await sponsorJson<{ leads: SponsorLead[]; report: ScannerReport }>(
+            "/api/sponsor/leads",
+          );
+          setReport(data.report);
           setLeads(data.leads);
           setLoading(false);
           setError("");
           return;
         }
-      } else if (!saved) {
-        setError("Open your scanner link to view your leads.");
-        return;
+        const saved = await getScannerCredential();
+        if (!saved) {
+          setError("Open your scanner link to view your leads.");
+          return;
+        }
+        if (saved) {
+          await loadLocal();
+          // An unavailable lead download must never prevent queued work uploading.
+          const results = await Promise.allSettled([
+            refreshScannerLeads(saved),
+            syncPendingScannerItems({ force }),
+          ]);
+          await loadLocal();
+          for (const result of results) if (result.status === "rejected") throw result.reason;
+          setError("");
+        }
+      } catch (caught) {
+        if (!hasLocal.current || (caught instanceof ScannerApiError && caught.status === 401))
+          setError(
+            "We couldn't connect. Saved leads and notes stay on this phone. Try again or open Scan to reconnect.",
+          );
+      } finally {
+        syncing.current = false;
+        setLoading(false);
       }
-      if (saved) {
-        await loadLocal();
-        // An unavailable lead download must never prevent queued work uploading.
-        const results = await Promise.allSettled([
-          refreshScannerLeads(saved),
-          syncPendingScannerItems(),
-        ]);
-        await loadLocal();
-        for (const result of results) if (result.status === "rejected") throw result.reason;
-        setError("");
-      }
-    } catch (caught) {
-      if (!hasLocal.current || (caught instanceof ScannerApiError && caught.status === 401))
-        setError(
-          "We couldn't connect. Saved leads and notes stay on this phone. Try again or open Scan to reconnect.",
-        );
-    } finally {
-      syncing.current = false;
-      setLoading(false);
-    }
-  }, [loadLocal, organiser]);
+    },
+    [loadLocal, organiser],
+  );
   useEffect(() => {
     void loadLocal().catch(() => {
       setError("Phone storage is unavailable. Keep this page open and reconnect.");
       setLoading(false);
     });
-    void refresh();
+    void refresh(true);
     const local = () => {
       void loadLocal().catch(() => undefined);
     };
     const online = () => {
       if (document.visibilityState === "visible") void refresh();
     };
+    const reconnected = () => {
+      if (!organiser)
+        void syncPendingScannerItems({ force: true })
+          .then(local)
+          .catch(() => undefined);
+      online();
+    };
+    const unwatch = organiser
+      ? () => {}
+      : watchOtherScannerTabs(() => {
+          ++localGeneration.current;
+          setCredential(null);
+          setLeads([]);
+          setExpanded(null);
+          setView("mine");
+          setSearch("");
+          local();
+        });
     const interval = window.setInterval(online, 15000);
     window.addEventListener("swp:scanner-data", local);
-    window.addEventListener("online", online);
+    window.addEventListener("online", reconnected);
     document.addEventListener("visibilitychange", online);
     const channel =
       typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("swp-scanner-data") : null;
     if (channel) channel.onmessage = local;
     return () => {
+      unwatch();
       clearInterval(interval);
       window.removeEventListener("swp:scanner-data", local);
-      window.removeEventListener("online", online);
+      window.removeEventListener("online", reconnected);
       document.removeEventListener("visibilitychange", online);
       channel?.close();
     };
-  }, [loadLocal, refresh]);
+  }, [loadLocal, refresh, organiser]);
   const filtered = useMemo(
     () =>
-      leads.filter((lead) =>
-        [lead.name, lead.company, lead.jobTitle, lead.workEmail].some((value) =>
-          value.toLowerCase().includes(search.toLowerCase()),
+      leads
+        .filter(
+          (lead) =>
+            organiser ||
+            view === "team" ||
+            lead.scans.some((s) => s.operatorId === credential?.id && !!credential),
+        )
+        .filter((lead) =>
+          [lead.name, lead.company, lead.jobTitle, lead.workEmail].some((value) =>
+            value.toLowerCase().includes(search.toLowerCase()),
+          ),
         ),
-      ),
-    [leads, search],
+    [leads, search, organiser, view, credential],
   );
   const confirmed = leads.filter((lead) => !lead.localStatus).length;
   const download = async (format: "csv" | "xlsx") => {
-    if (!confirmed || exporting) return;
+    if (!organiser || exporting) return;
     setExporting(true);
     try {
-      const path = `/api/${credential ? "scanner" : "sponsor"}/leads/export?format=${format}`;
-      const response = credential
-        ? await scannerFetch(path, {}, credential)
-        : await sponsorFetch(path);
+      const response = await sponsorFetch("/api/sponsor/leads/export?format=" + format);
       if (!response.ok) throw new Error("Reconnect to download your confirmed leads.");
       const url = URL.createObjectURL(await response.blob()),
         anchor = document.createElement("a");
@@ -175,20 +200,6 @@ export default function SponsorLeads() {
       setExporting(false);
     }
   };
-  const activate = async () => {
-    if (activating || operatorName.trim().length < 2) return;
-    setActivating(true);
-    try {
-      const saved = await activateScanner(operatorName.trim());
-      await saveScannerCredential(saved);
-      setCredential(saved);
-      await refresh();
-    } catch {
-      setError("Open your sponsor management link again, then return to Leads.");
-    } finally {
-      setActivating(false);
-    }
-  };
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b sticky top-0 z-20">
@@ -196,7 +207,9 @@ export default function SponsorLeads() {
           <div>
             <h1 className="font-bold text-xl">Leads</h1>
             <p className="text-xs text-muted-foreground">
-              {credential?.sponsorCompany ?? "SWP Summit 2027"}
+              {credential
+                ? credential.operatorName + " · " + credential.sponsorCompany
+                : "SWP Summit 2027"}
             </p>
           </div>
           <div className="flex gap-2">
@@ -205,7 +218,7 @@ export default function SponsorLeads() {
                 Workspace
               </Button>
             )}
-            <Button onClick={() => navigate("/sponsor/scanner")}>Scan</Button>
+            {!organiser && <Button onClick={() => navigate("/sponsor/scanner")}>Scan</Button>}
           </div>
         </div>
       </header>
@@ -221,57 +234,70 @@ export default function SponsorLeads() {
         )}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold">Your leads</h2>
+            <h2 className="text-2xl font-bold">
+              {organiser || view === "team" ? "Team leads" : "My scans"}
+            </h2>
             <p className="text-sm text-muted-foreground mt-2">
-              Add notes and ratings whenever you're ready.
+              {organiser ? "Confirmed leads for your company." : "Tap a person to add notes."}
             </p>
           </div>
-          <div className="flex gap-2">
+          {organiser && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={!confirmed || exporting}
+                onClick={() => void download("csv")}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                CSV
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!report || exporting}
+                onClick={() => void download("xlsx")}
+              >
+                Sponsor report (Excel)
+              </Button>
+            </div>
+          )}
+        </div>
+        {organiser && report && <ScannerReportSummary report={report} />}
+        {!organiser && (
+          <div className="flex gap-2" role="group" aria-label="Lead list">
             <Button
-              variant="outline"
-              disabled={!confirmed || exporting}
-              onClick={() => void download("csv")}
+              aria-pressed={view === "mine"}
+              variant={view === "mine" ? "default" : "outline"}
+              onClick={() => {
+                setView("mine");
+                setExpanded(null);
+              }}
             >
-              <Download className="h-4 w-4 mr-2" />
-              CSV
+              My scans
             </Button>
             <Button
-              variant="outline"
-              disabled={!confirmed || exporting}
-              onClick={() => void download("xlsx")}
+              aria-pressed={view === "team"}
+              variant={view === "team" ? "default" : "outline"}
+              onClick={() => {
+                setView("team");
+                setExpanded(null);
+              }}
             >
-              Excel
+              Team leads
             </Button>
           </div>
-        </div>
+        )}
         {pending > 0 && (
           <p role="status" className="text-sm text-amber-900">
             {pending} saved item{pending === 1 ? "" : "s"} awaiting connection or a badge check.
-            Downloads include {confirmed} confirmed lead{confirmed === 1 ? "" : "s"} only.
+            Company reports include confirmed leads only.
           </p>
-        )}
-        {!credential && organiser && (
-          <Card className="p-4 space-y-3">
-            <Label htmlFor="lead-operator">Your name (to add notes)</Label>
-            <Input
-              id="lead-operator"
-              value={operatorName}
-              onChange={(event) => setOperatorName(event.target.value)}
-            />
-            <Button
-              disabled={activating || operatorName.trim().length < 2}
-              onClick={() => void activate()}
-            >
-              Enable notes on this device
-            </Button>
-          </Card>
         )}
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             aria-label="Search leads"
             className="pl-9 bg-white"
-            placeholder="Search your leads"
+            placeholder="Search name or company"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -311,8 +337,24 @@ export default function SponsorLeads() {
                         : date(lead.lastScannedAt)}
                 </p>
               </button>
+              {expanded === leadKey(lead) && organiser && (
+                <div className="border-t p-4">
+                  {lead.notes.map((n) => (
+                    <p key={n.id} className="mb-2">
+                      <strong>{n.operatorName}</strong>
+                      {n.rating ? " · " + n.rating + "/5" : ""}
+                      {n.note ? ": " + n.note : ""}
+                    </p>
+                  ))}
+                  {!lead.notes.length && <p>No notes yet.</p>}
+                </div>
+              )}
               {expanded === leadKey(lead) && credential && (
-                <LeadNotes lead={lead} credential={credential} />
+                <LeadNotes
+                  key={credential.id + ":" + lead.id}
+                  lead={lead}
+                  credential={credential}
+                />
               )}
             </Card>
           ))
@@ -324,9 +366,11 @@ export default function SponsorLeads() {
             <p className="text-sm text-muted-foreground mt-2">
               Scan a badge, then return here when you're ready to follow up.
             </p>
-            <Button className="mt-4" onClick={() => navigate("/sponsor/scanner")}>
-              Scan a badge
-            </Button>
+            {!organiser && (
+              <Button className="mt-4" onClick={() => navigate("/sponsor/scanner")}>
+                Scan a badge
+              </Button>
+            )}
           </Card>
         )}
         {credential && (
@@ -336,18 +380,22 @@ export default function SponsorLeads() {
                 Finished scanning?
               </summary>
               <p className="text-sm">
-                {summary.pendingScans + summary.pendingNotes + summary.rejected > 0 ||
+                {summary.pendingScans +
+                  summary.pendingNotes +
+                  summary.rejected +
+                  summary.otherWork >
+                  0 ||
                 summary.error ||
                 !summary.loaded
                   ? "Keep this phone's saved work until the status above shows everything is backed up. You can download an offline recovery file if the connection has not returned."
-                  : "All saved leads and notes are backed up. You can download your confirmed leads above."}
+                  : "All your saved leads and notes are backed up. Your coordinator can download the company report."}
               </p>
               <Button
                 className="mt-3 min-h-11"
                 variant="outline"
                 onClick={() =>
                   void syncPendingScannerItems({ force: true })
-                    .then(refresh)
+                    .then(() => refresh())
                     .catch(() =>
                       setError("Saved work is still on this phone. Reconnect and try again."),
                     )

@@ -3537,6 +3537,83 @@ export const AcknowledgeSponsorDocumentBody = zod.object({
 });
 
 /**
+ * @summary Prepare scanner access from registered stand staff (coordinator only)
+ */
+export const GetSponsorScannerTeamResponse = zod.object({
+  companyKey: zod.string(),
+  staff: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Issue or re-share a registered rep's private reusable link and code
+ */
+export const ShareRegisteredScannerParams = zod.object({
+  repId: zod.coerce.string(),
+});
+
+export const shareRegisteredScannerBodyRenewDefault = false;
+
+export const ShareRegisteredScannerBody = zod.object({
+  renew: zod.boolean().default(shareRegisteredScannerBodyRenewDefault),
+});
+
+export const ShareRegisteredScannerResponse = zod
+  .object({
+    id: zod.string(),
+    operatorName: zod.string(),
+    sponsorId: zod.number(),
+    sponsorCompany: zod.string(),
+    token: zod.string(),
+  })
+  .and(
+    zod.object({
+      pin: zod.string(),
+    }),
+  );
+
+/**
+ * @summary A company link can list staff names, not leads or credentials
+ */
+export const GetScannerRosterBody = zod.object({
+  companyKey: zod.string(),
+});
+
+export const GetScannerRosterResponse = zod.object({
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string(),
+  staff: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Activate one named rep using the company key and private rep code
+ */
+export const authoriseScannerRepBodyPinRegExp = new RegExp("^[0-9]{8}$");
+
+export const AuthoriseScannerRepBody = zod.object({
+  companyKey: zod.string(),
+  repId: zod.string(),
+  pin: zod.string().regex(authoriseScannerRepBodyPinRegExp),
+});
+
+export const AuthoriseScannerRepResponse = zod.object({
+  id: zod.string(),
+  operatorName: zod.string(),
+  sponsorId: zod.number(),
+  sponsorCompany: zod.string(),
+  token: zod.string(),
+});
+
+/**
  * @summary Renew the same phone after access rotation; never bypass explicit revocation
  */
 export const RecoverSponsorScannerParams = zod.object({
@@ -3625,6 +3702,7 @@ export const ListScannerLeadsResponse = zod.object({
       scans: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().optional(),
           operatorName: zod.string(),
           source: zod.enum(["camera", "image", "manual"]),
           capturedAt: zod.coerce.date(),
@@ -3633,6 +3711,7 @@ export const ListScannerLeadsResponse = zod.object({
       notes: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().nullish(),
           operatorName: zod.string(),
           note: zod.string().nullable(),
           rating: zod
@@ -3645,13 +3724,6 @@ export const ListScannerLeadsResponse = zod.object({
       ),
     }),
   ),
-});
-
-/**
- * @summary Export confirmed leads only; pending scans do not block this export
- */
-export const ExportScannerLeadsQueryParams = zod.object({
-  format: zod.enum(["csv", "xlsx"]).optional(),
 });
 
 export const ResolveSponsorPassRequestParams = zod.object({
@@ -3717,6 +3789,7 @@ export const ListSponsorLeadsResponse = zod.object({
       scans: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().optional(),
           operatorName: zod.string(),
           source: zod.enum(["camera", "image", "manual"]),
           capturedAt: zod.coerce.date(),
@@ -3725,6 +3798,7 @@ export const ListSponsorLeadsResponse = zod.object({
       notes: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().nullish(),
           operatorName: zod.string(),
           note: zod.string().nullable(),
           rating: zod
@@ -3737,6 +3811,24 @@ export const ListSponsorLeadsResponse = zod.object({
       ),
     }),
   ),
+  report: zod.object({
+    asOf: zod.coerce.date(),
+    companies: zod.array(
+      zod.object({
+        sponsorId: zod.number(),
+        sponsorCompany: zod.string(),
+        scans: zod.number(),
+        people: zod.number(),
+        reps: zod.array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            scans: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
 });
 
 /**
@@ -3784,6 +3876,7 @@ export const AnnotateSponsorLeadResponse = zod.object({
   scans: zod.array(
     zod.object({
       id: zod.string(),
+      operatorId: zod.string().optional(),
       operatorName: zod.string(),
       source: zod.enum(["camera", "image", "manual"]),
       capturedAt: zod.coerce.date(),
@@ -3792,6 +3885,7 @@ export const AnnotateSponsorLeadResponse = zod.object({
   notes: zod.array(
     zod.object({
       id: zod.string(),
+      operatorId: zod.string().nullish(),
       operatorName: zod.string(),
       note: zod.string().nullable(),
       rating: zod.number().min(1).max(annotateSponsorLeadResponseNotesItemRatingMax).nullable(),
@@ -3815,6 +3909,7 @@ export const ExportSponsorLeadsQueryParams = zod.object({
 export const getScannerBootstrapResponseTestQrValueRegExp = new RegExp("^[0-9A-F]{12}$");
 
 export const GetScannerBootstrapResponse = zod.object({
+  companyKey: zod.string().optional(),
   device: zod.object({
     id: zod.string(),
     operatorName: zod.string(),
@@ -3976,6 +4071,7 @@ export const SyncScannerBatchResponse = zod.object({
         scans: zod.array(
           zod.object({
             id: zod.string(),
+            operatorId: zod.string().optional(),
             operatorName: zod.string(),
             source: zod.enum(["camera", "image", "manual"]),
             capturedAt: zod.coerce.date(),
@@ -3984,6 +4080,7 @@ export const SyncScannerBatchResponse = zod.object({
         notes: zod.array(
           zod.object({
             id: zod.string(),
+            operatorId: zod.string().nullish(),
             operatorName: zod.string(),
             note: zod.string().nullable(),
             rating: zod
@@ -4063,6 +4160,7 @@ export const ListAdminSponsorLeadsResponse = zod.object({
       scans: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().optional(),
           operatorName: zod.string(),
           source: zod.enum(["camera", "image", "manual"]),
           capturedAt: zod.coerce.date(),
@@ -4071,6 +4169,7 @@ export const ListAdminSponsorLeadsResponse = zod.object({
       notes: zod.array(
         zod.object({
           id: zod.string(),
+          operatorId: zod.string().nullish(),
           operatorName: zod.string(),
           note: zod.string().nullable(),
           rating: zod
@@ -4083,15 +4182,33 @@ export const ListAdminSponsorLeadsResponse = zod.object({
       ),
     }),
   ),
+  report: zod.object({
+    asOf: zod.coerce.date(),
+    companies: zod.array(
+      zod.object({
+        sponsorId: zod.number(),
+        sponsorCompany: zod.string(),
+        scans: zod.number(),
+        people: zod.number(),
+        reps: zod.array(
+          zod.object({
+            id: zod.string(),
+            name: zod.string(),
+            scans: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
 });
 
 /**
- * @summary Export all leads or one sponsor's leads
+ * @summary Export the selected sponsor's confirmed report
  */
 export const exportAdminSponsorLeadsQueryFormatDefault = `xlsx`;
 
 export const ExportAdminSponsorLeadsQueryParams = zod.object({
-  sponsorId: zod.coerce.number().optional(),
+  sponsorId: zod.coerce.number(),
   format: zod.enum(["csv", "xlsx"]).default(exportAdminSponsorLeadsQueryFormatDefault),
 });
 

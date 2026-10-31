@@ -49,7 +49,9 @@ function deviceStatus(status: string): { label: string; className: string } {
   return { label: "Not tested", className: "bg-rose-100 text-rose-800" };
 }
 
+import { ScannerReportSummary, type ScannerReport } from "@/components/scanner-report-summary";
 export default function AdminLeadScanner() {
+  const [report, setReport] = useState<ScannerReport | null>(null);
   const [overview, setOverview] = useState<LeadScannerAdminOverview | null>(null);
   const [leads, setLeads] = useState<SponsorLead[]>([]);
   const [attendees, setAttendees] = useState<LeadScannerAttendee[]>([]);
@@ -66,11 +68,14 @@ export default function AdminLeadScanner() {
       const query = sponsorId === "all" ? "" : `?sponsorId=${sponsorId}`;
       const [overviewData, leadData, attendeeData] = await Promise.all([
         adminJson<LeadScannerAdminOverview>("/api/admin/lead-scanner/overview"),
-        adminJson<{ leads: SponsorLead[] }>(`/api/admin/lead-scanner/leads${query}`),
+        adminJson<{ leads: SponsorLead[]; report: ScannerReport }>(
+          `/api/admin/lead-scanner/leads${query}`,
+        ),
         adminJson<{ attendees: LeadScannerAttendee[] }>("/api/admin/lead-scanner/attendees"),
       ]);
       setOverview(overviewData);
       setLeads(leadData.leads);
+      setReport(leadData.report);
       setAttendees(attendeeData.attendees);
       setError("");
     } catch (caught) {
@@ -87,9 +92,10 @@ export default function AdminLeadScanner() {
   const sponsors = useMemo(() => {
     const values = new Map<number, string>();
     overview?.devices.forEach((device) => values.set(device.sponsorId, device.sponsorCompany));
+    report?.companies.forEach((c) => values.set(c.sponsorId, c.sponsorCompany));
     leads.forEach((lead) => values.set(lead.sponsorId, lead.sponsorCompany));
     return [...values.entries()].sort((left, right) => left[1].localeCompare(right[1]));
-  }, [leads, overview]);
+  }, [leads, overview, report]);
 
   const filteredLeads = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -141,7 +147,7 @@ export default function AdminLeadScanner() {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <p className="text-muted-foreground">
-              Badge readiness, sponsor phones, synchronised leads and exports in one place.
+              Badge readiness, sponsor scanners, synchronised leads and exports in one place.
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               The badge CSV contains first name, last name, job title, company and the hidden QR
@@ -186,9 +192,8 @@ export default function AdminLeadScanner() {
                 <h2 className="font-bold">Test QR scanning on phones and tablets</h2>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                The public test kit uses four hardcoded fictional people. Test scans are not saved,
-                do not create leads and never appear in attendee, sponsor or admin reports and
-                exports.
+                Practise with four fictional badges, switch reps and add notes later. Rehearsal
+                scans stay in that browser. Company reports contain confirmed event scans only.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -208,9 +213,9 @@ export default function AdminLeadScanner() {
 
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <Metric label="Unique leads" value={overview?.leadCount ?? 0} icon={Users} />
-          <Metric label="Sponsor phones" value={overview?.deviceCount ?? 0} icon={Smartphone} />
+          <Metric label="Sponsor scanners" value={overview?.deviceCount ?? 0} icon={Smartphone} />
           <Metric
-            label="Ready phones"
+            label="Checked scanners"
             value={overview?.devices.filter((d) => d.status === "ready").length ?? 0}
             icon={CheckCircle2}
           />
@@ -227,7 +232,7 @@ export default function AdminLeadScanner() {
         <Card className="swp-card overflow-hidden">
           <div className="p-5 border-b flex items-center justify-between gap-4">
             <div>
-              <h2 className="font-bold text-lg">Sponsor phones</h2>
+              <h2 className="font-bold text-lg">Sponsor scanners</h2>
               <p className="text-sm text-muted-foreground">
                 Each operator has an independent device identity and can be revoked separately.
               </p>
@@ -277,7 +282,7 @@ export default function AdminLeadScanner() {
                                     method: "POST",
                                     body: JSON.stringify({ reason: "Revoked by organiser" }),
                                   }),
-                                `${device.operatorName}'s phone was revoked`,
+                                `${device.operatorName}’s scanner access was revoked`,
                               );
                             }}
                           >
@@ -291,7 +296,7 @@ export default function AdminLeadScanner() {
                 {!overview?.devices.length && (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                      No sponsor phones activated yet.
+                      No sponsor scanners activated yet.
                     </td>
                   </tr>
                 )}
@@ -305,7 +310,8 @@ export default function AdminLeadScanner() {
             <div>
               <h2 className="font-bold text-lg">Synchronised leads</h2>
               <p className="text-sm text-muted-foreground">
-                Exports include scan times, operators, ratings, notes and duplicate counts.
+                Select a sponsor for their CSV contact list or Excel report with company totals and
+                rep scans.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -324,6 +330,7 @@ export default function AdminLeadScanner() {
               </Select>
               <Button
                 variant="outline"
+                disabled={sponsorId === "all"}
                 onClick={() =>
                   void downloadAdminFile(
                     `/api/admin/lead-scanner/leads/export?format=csv${exportQuery}`,
@@ -334,6 +341,7 @@ export default function AdminLeadScanner() {
                 <Download className="h-4 w-4 mr-2" /> CSV
               </Button>
               <Button
+                disabled={sponsorId === "all"}
                 onClick={() =>
                   void downloadAdminFile(
                     `/api/admin/lead-scanner/leads/export?format=xlsx${exportQuery}`,
@@ -345,6 +353,11 @@ export default function AdminLeadScanner() {
               </Button>
             </div>
           </div>
+          {report && (
+            <div className="p-4 border-b">
+              <ScannerReportSummary report={report} />
+            </div>
+          )}
           <div className="p-4 border-b bg-slate-50">
             <div className="relative max-w-xl">
               <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />

@@ -62,13 +62,15 @@ export function mergeScannerLeads(
       byPerson.set(key, lead);
     }
     if (!lead.scans.some((item) => item.id === scan.id)) {
+      const credited = lead.scans.some((item) => item.operatorId === credential.id);
       lead.scans.push({
         id: scan.id,
         capturedAt: scan.capturedAt,
         source: scan.source,
+        operatorId: credential.id,
         operatorName: credential.operatorName,
       });
-      lead.scanCount++;
+      if (!credited) lead.scanCount++;
     }
   }
   for (const annotation of annotations) {
@@ -76,9 +78,14 @@ export function mergeScannerLeads(
       item.scans.some((scan) => scan.id === annotation.scanId),
     );
     if (!lead) continue;
+    if (
+      lead.notes.some((note) => note.id === annotation.id && note.createdAt >= annotation.createdAt)
+    )
+      continue;
     lead.notes = lead.notes.filter((note) => note.id !== annotation.id);
     lead.notes.unshift({
       id: annotation.id,
+      operatorId: credential.id,
       operatorName: credential.operatorName,
       note: annotation.note,
       rating: annotation.rating,

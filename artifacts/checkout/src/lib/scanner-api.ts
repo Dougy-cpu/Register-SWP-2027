@@ -9,6 +9,8 @@ import type {
 } from "@/types/lead-scanner";
 import {
   applySyncResults,
+  approvedProfiles,
+  approvedProfileForToken,
   getScannerCredential,
   pendingScannerItems,
   scannerScope,
@@ -86,7 +88,9 @@ export async function scannerJson<T>(
     if (response.status === 401) {
       const saved = credential ?? (await getScannerCredential());
       if (saved) await writeScannerValue("access-error", body.code ?? "invalid_device", saved);
-      window.dispatchEvent(new CustomEvent("swp:scanner-access", { detail: error }));
+      const active = await getScannerCredential();
+      if (active?.id === saved?.id && active?.token === saved?.token)
+        window.dispatchEvent(new CustomEvent("swp:scanner-access", { detail: error }));
     }
     throw error;
   }
@@ -102,8 +106,14 @@ export async function getScannerBootstrap(): Promise<ScannerBootstrap> {
   await writeScannerValue("access-error", null, credential);
   return data;
 }
-export function downloadOfflinePack(): Promise<ScannerOfflinePackDownload> {
-  return scannerJson<ScannerOfflinePackDownload>("/api/scanner/offline-pack");
+export function downloadOfflinePack(
+  credential?: ScannerCredential,
+): Promise<ScannerOfflinePackDownload> {
+  return scannerJson<ScannerOfflinePackDownload>(
+    "/api/scanner/offline-pack",
+    undefined,
+    credential,
+  );
 }
 export async function lookupScannerBadge(
   code: string,
@@ -128,8 +138,13 @@ export async function updateReadiness(
     offlineTested: boolean;
     syncTested: boolean;
   }>,
+  credential?: ScannerCredential,
 ): Promise<void> {
-  await scannerJson("/api/scanner/readiness", { method: "PATCH", body: JSON.stringify(values) });
+  await scannerJson(
+    "/api/scanner/readiness",
+    { method: "PATCH", body: JSON.stringify(values) },
+    credential,
+  );
 }
 interface SyncResponse {
   scans: Array<{
@@ -161,8 +176,32 @@ const activeSync = new Map<string, Promise<{ remaining: number; rejected: number
 export async function syncPendingScannerItems(
   options: { force?: boolean } = {},
 ): Promise<{ remaining: number; rejected: number }> {
-  const credential = await getScannerCredential();
-  if (!credential) return { remaining: 0, rejected: 0 };
+  const current = await getScannerCredential();
+  if (!current) return { remaining: 0, rejected: 0 };
+  const others = (await approvedProfiles(current.sponsorId)).filter((p) => p.id !== current.id);
+  const results = await Promise.allSettled([
+    syncProfile(current, options),
+    ...others.map(async (profile) => {
+      const pending = await pendingScannerItems(profile);
+      if (!pending.scans.length && !pending.annotations.length)
+        return { remaining: 0, rejected: 0 };
+      return syncProfile(profile, options);
+    }),
+  ]);
+  const failed = results.find((r) => r.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
+  return results.reduce(
+    (total, r) =>
+      r.status === "fulfilled"
+        ? {
+            remaining: total.remaining + r.value.remaining,
+            rejected: total.rejected + r.value.rejected,
+          }
+        : total,
+    { remaining: 0, rejected: 0 },
+  );
+}
+async function syncProfile(credential: ScannerCredential, options: { force?: boolean }) {
   const scope = scannerScope(credential),
     syncKey = `${scope}:${credential.token}`;
   const running = activeSync.get(syncKey);
@@ -176,7 +215,15 @@ export async function syncPendingScannerItems(
     let rejected = 0;
     for (let batch = 0; batch < 20; batch++) {
       const active = await getScannerCredential();
-      if (!active || scannerScope(active) !== scope || active.token !== credential.token) break;
+      if (!active || active.sponsorId !== credential.sponsorId) break;
+      if (
+        active.id === credential.id
+          ? active.token !== credential.token
+          : !(await approvedProfiles(credential.sponsorId)).some(
+              (p) => p.id === credential.id && p.token === credential.token,
+            )
+      )
+        break;
       const pending = await pendingScannerItems(credential);
       const readiness = await readScannerValue<{ stage: string; scanId?: string }>(
         "offline-readiness",
@@ -300,7 +347,10 @@ export async function recoverScanner(credential: ScannerCredential): Promise<Sca
   await writeScannerValue("access-error", null, renewed);
   return renewed;
 }
-export async function importScannerLink(token: string): Promise<ScannerCredential> {
+export async function importScannerLink(
+  token: string,
+  confirmSwitch = true,
+): Promise<ScannerCredential> {
   if (!/^[A-Za-z0-9_-]{40,200}$/.test(token))
     throw new Error("This scanner link is incomplete. Ask your organiser for a new one.");
   const provisional: ScannerCredential = {
@@ -311,35 +361,66 @@ export async function importScannerLink(token: string): Promise<ScannerCredentia
     sponsorCompany: "",
     activatedAt: new Date().toISOString(),
   };
-  // Read using the link before selecting local storage: never store unverified ownership.
-  const response = await scannerFetch("/api/scanner/bootstrap", {}, provisional),
-    data = await response.json();
-  if (!response.ok)
-    throw new ScannerApiError(
-      data.error ?? "Ask your organiser for a new scanner link",
-      response.status,
-      data.code,
-    );
-  const device = (data as ScannerBootstrap).device;
-  const credential = {
-    ...provisional,
-    id: device.id,
-    sponsorId: device.sponsorId,
-    sponsorCompany: device.sponsorCompany,
-    operatorName: device.operatorName,
-  };
+  let data: ScannerBootstrap | null = null;
+  let credential: ScannerCredential;
+  try {
+    const response = await scannerFetch("/api/scanner/bootstrap", {}, provisional);
+    const body = await response.json();
+    if (!response.ok)
+      throw new ScannerApiError(
+        body.error ?? "Ask your organiser for a new scanner link",
+        response.status,
+        body.code,
+      );
+    if (!body.device?.id || !Number.isInteger(body.device.sponsorId) || !body.device.operatorName)
+      throw new Error("This scanner link could not be verified.");
+    data = body as ScannerBootstrap;
+    credential = {
+      ...provisional,
+      id: data.device.id,
+      sponsorId: data.device.sponsorId,
+      sponsorCompany: data.device.sponsorCompany,
+      operatorName: data.device.operatorName,
+    };
+  } catch (error) {
+    if (
+      !(
+        error instanceof TypeError ||
+        (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)) ||
+        error instanceof SyntaxError
+      )
+    )
+      throw error;
+    const known = await approvedProfileForToken(token);
+    if (
+      !known ||
+      (await readScannerValue("access-error", known)) ||
+      !(await readScannerValue("bootstrap", known))
+    )
+      throw error;
+    credential = known;
+  }
   const current = await getScannerCredential();
   if (
+    confirmSwitch &&
     current &&
     scannerScope(current) !== scannerScope(credential) &&
     !window.confirm(
-      `Open ${credential.sponsorCompany}'s scanner for ${credential.operatorName}? Any saved work for ${current.sponsorCompany} stays on this phone and is not transferred.`,
+      "Switch from " +
+        current.operatorName +
+        " to " +
+        credential.operatorName +
+        " at " +
+        credential.sponsorCompany +
+        "? Saved scans stay with the person who made them.",
     )
   )
-    throw new Error("Scanner switch cancelled. Your original saved work is unchanged.");
+    throw new Error("Scanner switch cancelled.");
   await saveScannerCredential(credential);
-  await writeScannerValue("bootstrap", data, credential);
-  await writeScannerValue("access-error", null, credential);
+  if (data) {
+    await writeScannerValue("bootstrap", data, credential);
+    await writeScannerValue("access-error", null, credential);
+  }
   return credential;
 }
 function sponsorCsrfCookie(): string {

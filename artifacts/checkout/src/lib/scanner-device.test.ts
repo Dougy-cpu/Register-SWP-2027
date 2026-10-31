@@ -8,7 +8,13 @@ it.each([
   ["Mozilla/5.0 (Linux; Android 10; SM-A205F) Chrome/128.0.0.0 Mobile Safari/537.36", true],
   ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0 Safari/537.36", false],
   ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari/605.1.15", false],
-  ["Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Mobile/15E148", false],
-])("keeps phone scanning separate from desktop and tablet: %s", (agent, expected) => {
+  ["Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Mobile/15E148", true],
+])("opens scanning on phones and tablets: %s", (agent, expected) => {
   expect(isScannerPhone(agent as string)).toBe(expected);
+});
+
+it("supports desktop-mode iPad Safari without enabling ordinary Macs", () => {
+  expect(isScannerPhone("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari/605.1", 5)).toBe(
+    true,
+  );
 });

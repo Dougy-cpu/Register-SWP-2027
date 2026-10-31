@@ -39,6 +39,11 @@ function signature(value: string, salt: string): string {
   return createHmac("sha256", signingSecret()).update(`${salt}|${value}`).digest("base64url");
 }
 
+// Domain-separated signatures: a scanner link cannot be exchanged for a management session.
+export function scannerSignature(purpose: "team" | "personal" | "pin", value: string): string {
+  return signature(value, "swp-2027-scanner-" + purpose + "-v1");
+}
+
 function safeEqual(left: string, right: string): boolean {
   const a = Buffer.from(left);
   const b = Buffer.from(right);

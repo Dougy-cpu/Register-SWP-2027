@@ -4,6 +4,15 @@ const fake = vi.hoisted(() => ({
   scans: [] as PendingScan[],
   marker: null as null | { stage: string; scanId: string },
   apply: vi.fn(),
+  other: [] as {
+    id: string;
+    token: string;
+    operatorName: string;
+    sponsorId: number;
+    sponsorCompany: string;
+    activatedAt: string;
+  }[],
+  otherScans: [] as PendingScan[],
 }));
 const credential = {
   id: "phone1",
@@ -22,9 +31,15 @@ const scan: PendingScan = {
   capturedAt: "2026-09-10T09:00:00Z",
 };
 vi.mock("./scanner-storage", () => ({
+  approvedProfiles: async () => fake.other,
+  watchOtherScannerTabs: () => () => {},
+  otherScannerWork: async () => 0,
   getScannerCredential: async () => credential,
-  pendingScannerItems: async () => ({ scans: fake.scans, annotations: [] }),
-  scannerScope: () => "swp-2027:1:phone1",
+  pendingScannerItems: async (c: typeof credential) => ({
+    scans: c.id === credential.id ? fake.scans : fake.otherScans,
+    annotations: [],
+  }),
+  scannerScope: (c: typeof credential) => "swp-2027:" + c.sponsorId + ":" + c.id,
   readScannerValue: async () => fake.marker,
   applySyncResults: (...args: unknown[]) => fake.apply(...args),
   writeScannerValue: vi.fn(),
@@ -39,6 +54,8 @@ const response = (scans = [{ id: scan.id, status: "accepted" }]) =>
 beforeEach(() => {
   vi.resetModules();
   fake.scans = [scan];
+  fake.other = [];
+  fake.otherScans = [];
   fake.marker = null;
   fake.apply.mockReset().mockImplementation(async () => {
     fake.scans = [];
@@ -71,6 +88,32 @@ describe("retry-safe scanner upload", () => {
     await expect(api.syncPendingScannerItems({ force: true })).rejects.toThrow("did not confirm");
     expect(fake.apply).not.toHaveBeenCalled();
     expect(fake.scans[0].id).toBe(scan.id);
+  });
+  it("uploads queued work for both reps under their original credentials after an offline handoff", async () => {
+    const second = { ...credential, id: "rep-1-22", token: "s".repeat(43) };
+    fake.other = [second];
+    fake.otherScans = [{ ...scan, id: "second-rep-scan-0001", scope: "swp-2027:1:rep-1-22" }];
+    fake.apply.mockImplementation(async ({ credential: owner }) => {
+      if (owner.id === second.id) fake.otherScans = [];
+      else fake.scans = [];
+    });
+    const sent = new Map<string, string>();
+    vi.stubGlobal("fetch", async (_: unknown, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.set(body.scans[0].id, (init.headers as Record<string, string>).Authorization);
+      return response([{ id: body.scans[0].id, status: "accepted" }]);
+    });
+    const api = await import("./scanner-api");
+    expect(await api.syncPendingScannerItems({ force: true })).toEqual({
+      remaining: 0,
+      rejected: 0,
+    });
+    expect(sent).toEqual(
+      new Map([
+        [scan.id, "Bearer " + credential.token],
+        ["second-rep-scan-0001", "Bearer " + second.token],
+      ]),
+    );
   });
   it("does not accept a Wi-Fi login page as a successful upload", async () => {
     vi.stubGlobal(

@@ -8,6 +8,7 @@
 
 export interface SponsorLeadNote {
   id: string;
+  operatorId?: string | null;
   operatorName: string;
   note: string | null;
   /**

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, asc, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { rateLimit } from "express-rate-limit";
-import ExcelJS from "exceljs";
+import { scannerReport, reportWorkbook, type ReportRoster } from "../lib/scanner-report";
 import { v4 as uuidv4 } from "uuid";
 import {
   attendeeBadgesTable,
@@ -38,7 +38,10 @@ import {
 import { logAdminAction } from "../lib/audit";
 import { logger } from "../lib/logger";
 
+import { scannerTeamAccess } from "./scanner-team-access";
+import { companyKey, repSecrets, scannerRoster } from "../lib/scanner-team";
 const router: IRouter = Router();
+router.use(scannerTeamAccess);
 const ACTIVE_BOOKING_STATUSES = ["paid", "invoiced"] as const;
 
 function sponsorReq(req: Request): SponsorRequest {
@@ -155,10 +158,19 @@ for (const action of ["recover", "restore"] as const) {
             code: "device_revoked",
           };
         // Refresh keeps the bearer and device ID, so a lost response can safely be retried.
-        const token = action === "recover" ? suppliedToken : randomBytes(32).toString("base64url");
+        const issuedAt =
+          action === "restore"
+            ? new Date(Math.max(Date.now(), device.activatedAt.getTime() + 1))
+            : device.activatedAt;
+        const token = device.id.startsWith("rep-")
+          ? repSecrets(device.id, sponsor.portalAccessVersion, issuedAt).token
+          : action === "recover"
+            ? suppliedToken
+            : randomBytes(32).toString("base64url");
         await tx
           .update(sponsorScannerDevicesTable)
           .set({
+            activatedAt: issuedAt,
             tokenHash: scannerTokenHash(token),
             accessVersion: sponsor.portalAccessVersion,
             revokedAt: null,
@@ -241,7 +253,9 @@ router.post(
 router.get("/sponsor/leads", sponsorAuth, async (req, res): Promise<void> => {
   try {
     const sponsorId = sponsorReq(req).sponsorSession.sponsorId;
-    res.json({ leads: await listLeadRows(sponsorId) });
+    const leads = await listLeadRows(sponsorId);
+    const report = scannerReport(leads, await reportRosters(sponsorId));
+    res.json({ leads, report: { asOf: report.asOf, companies: report.companies } });
   } catch (error) {
     sendError(res, error);
   }
@@ -295,11 +309,25 @@ function leadExportRows(leads: Awaited<ReturnType<typeof listLeadRows>>) {
   }));
 }
 
+async function reportRosters(sponsorId?: number): Promise<ReportRoster[]> {
+  const sponsors = await db
+    .select({ sponsorId: sponsorsTable.id, sponsorCompany: sponsorsTable.company })
+    .from(sponsorsTable)
+    .where(
+      sponsorId
+        ? eq(sponsorsTable.id, sponsorId)
+        : inArray(sponsorsTable.status, ["confirmed", "completed"]),
+    );
+  return Promise.all(
+    sponsors.map(async (s) => ({ ...s, staff: await scannerRoster(s.sponsorId) })),
+  );
+}
 async function sendLeadExport(
   res: Response,
   leads: Awaited<ReturnType<typeof listLeadRows>>,
   format: "csv" | "xlsx",
   filenameBase: string,
+  sponsorId: number,
 ): Promise<void> {
   const rows = leadExportRows(leads);
   const headings = Object.keys(
@@ -329,25 +357,8 @@ async function sendLeadExport(
     res.send(`\uFEFF${csv}\r\n`);
     return;
   }
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = "SWP Summit 2027";
-  const sheet = workbook.addWorksheet("Leads", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  sheet.columns = headings.map((header) => ({
-    header,
-    key: header,
-    width: header === "Notes" ? 55 : Math.max(14, Math.min(30, header.length + 6)),
-  }));
-  rows.forEach((row) => sheet.addRow(row));
-  sheet.autoFilter = { from: "A1", to: `${sheet.getColumn(headings.length).letter}1` };
-  sheet.getRow(1).eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF004EB9" } };
-  });
-  sheet.eachRow((row, index) => {
-    if (index > 1) row.alignment = { vertical: "top", wrapText: true };
-  });
+  const report = scannerReport(leads, await reportRosters(sponsorId));
+  const workbook = reportWorkbook(report, rows, headings);
   const buffer = await workbook.xlsx.writeBuffer();
   res.setHeader(
     "Content-Type",
@@ -370,6 +381,7 @@ router.get("/sponsor/leads/export", sponsorAuth, async (req, res): Promise<void>
       await listLeadRows(sponsorId),
       format,
       `swp-2027-${(sponsor?.company ?? "sponsor").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-leads`,
+      sponsorId,
     );
   } catch (error) {
     sendError(res, error);
@@ -422,18 +434,10 @@ router.get("/scanner/leads", async (req, res): Promise<void> => {
   res.json({ leads: await listLeadRows(scannerReq(req).scannerDevice.sponsorId) });
 });
 
-router.get("/scanner/leads/export", async (req, res): Promise<void> => {
-  const leads = await listLeadRows(scannerReq(req).scannerDevice.sponsorId);
-  if (!leads.length) {
-    res.status(409).json({ error: "No confirmed leads to export yet" });
-    return;
-  }
-  await sendLeadExport(
-    res,
-    leads,
-    req.query.format === "csv" ? "csv" : "xlsx",
-    "swp-2027-confirmed-leads",
-  );
+router.get("/scanner/leads/export", (_req, res): void => {
+  res
+    .status(403)
+    .json({ error: "Company exports are available in the sponsor coordinator’s workspace." });
 });
 
 router.get("/scanner/bootstrap", async (req, res): Promise<void> => {
@@ -479,6 +483,7 @@ router.get("/scanner/bootstrap", async (req, res): Promise<void> => {
         outOfDate: Boolean(record?.packVersion && record.packVersion !== currentPackVersion),
         lastSyncedAt: record?.lastSyncedAt?.toISOString() ?? null,
       },
+      companyKey: companyKey(device.sponsorId, device.accessVersion),
       scannerWindow: await getScannerWindow(),
       testQrValue: SCANNER_TEST_CODE,
     });
@@ -616,7 +621,9 @@ router.get("/admin/lead-scanner/leads", adminAuth, async (req, res): Promise<voi
       res.status(400).json({ error: "Invalid sponsor" });
       return;
     }
-    res.json({ leads: await listLeadRows(sponsorId) });
+    const leads = await listLeadRows(sponsorId);
+    const report = scannerReport(leads, await reportRosters(sponsorId));
+    res.json({ leads, report: { asOf: report.asOf, companies: report.companies } });
   } catch (error) {
     sendError(res, error);
   }
@@ -630,11 +637,16 @@ router.get("/admin/lead-scanner/leads/export", adminAuth, async (req, res): Prom
       return;
     }
     const format = req.query.format === "csv" ? "csv" : "xlsx";
+    if (!sponsorId) {
+      res.status(400).json({ error: "Select one sponsor to export their report." });
+      return;
+    }
     await sendLeadExport(
       res,
       await listLeadRows(sponsorId),
       format,
-      sponsorId ? `swp-2027-sponsor-${sponsorId}-leads` : "swp-2027-all-sponsor-leads",
+      `swp-2027-sponsor-${sponsorId}-leads`,
+      sponsorId,
     );
   } catch (error) {
     sendError(res, error);

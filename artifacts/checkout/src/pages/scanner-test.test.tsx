@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import ScannerTest from "./scanner-test";
 import { StrictMode } from "react";
-import { REHEARSAL_STORAGE_KEY, readRehearsal } from "@/lib/scanner-rehearsal";
+import { REHEARSAL_STORAGE_KEY, rehearsalRepKey, readRehearsal } from "@/lib/scanner-rehearsal";
 import { cameraMock, installCameraMock, latestCamera } from "@/test/badge-camera-mock";
 
 vi.mock("qr-scanner", async () => ({
@@ -10,6 +10,7 @@ vi.mock("qr-scanner", async () => ({
 }));
 beforeEach(() => {
   installCameraMock();
+  localStorage.removeItem(rehearsalRepKey);
   localStorage.removeItem(REHEARSAL_STORAGE_KEY);
 });
 afterEach(() => {
@@ -277,4 +278,34 @@ it("shows the desktop badge handoff with copyable URL and no camera controls", a
   expect(copy).toHaveBeenCalledWith("https://register.swpsummit.com/scanner-test");
   expect(screen.getAllByRole("img", { name: /Test badge for/ })).toHaveLength(4);
   expect(cameraMock.start).not.toHaveBeenCalled();
+});
+
+it("rehearses two reps meeting the same person, then reopens the personal view after a handoff", async () => {
+  const ui = render(<ScannerTest />);
+  click("Start scanning");
+  await screen.findByText("Camera ready");
+  await act(async () => latestCamera().decode({ data: "FACADE000001" }));
+  click("Switch user");
+  click("Alex");
+  click("Leads");
+  expect(screen.queryByText("Alex Morgan")).toBeNull();
+  expect(screen.getByRole("heading", { name: "My scans" })).toBeTruthy();
+  click("Team leads");
+  expect(screen.getByText("Alex Morgan")).toBeTruthy();
+  click("Scan");
+  click("Start scanning");
+  await screen.findByText("Camera ready");
+  await act(async () => latestCamera().decode({ data: "FACADE000001" }));
+  expect(
+    readRehearsal()
+      .map((l) => l.rep)
+      .sort(),
+  ).toEqual(["Alex", "Jamie"]);
+  ui.unmount();
+  render(<ScannerTest />);
+  expect(screen.getByText("Practice · scanning as Alex")).toBeTruthy();
+  click("Leads");
+  expect(screen.getByRole("heading", { name: "My scans" })).toBeTruthy();
+  click("Team leads");
+  expect(screen.getAllByText("Alex Morgan")).toHaveLength(1);
 });

@@ -427,7 +427,7 @@ export function PortalTeam({
       )}
       <Invitations workspace={workspace} />
       <PassRequest workspace={workspace} onRefresh={onRefresh} />
-      <PortalScannerAccess />
+      <PortalScannerAccess staff={workspace.staff} />
     </section>
   );
 }

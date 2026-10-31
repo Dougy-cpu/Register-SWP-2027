@@ -425,8 +425,20 @@ export async function syncScannerBatch(
             eq(sponsorLeadsTable.sponsorId, identity.sponsorId),
             eq(sponsorLeadsTable.attendeeId, badge.attendeeId),
           ),
-        );
+        )
+        .for("update");
       if (!lead) throw new Error("Lead could not be created");
+      // Keep every receipt for offline notes, but credit this person only once per rep.
+      const [credited] = await tx
+        .select({ id: sponsorLeadScanEventsTable.id })
+        .from(sponsorLeadScanEventsTable)
+        .where(
+          and(
+            eq(sponsorLeadScanEventsTable.leadId, lead.id),
+            eq(sponsorLeadScanEventsTable.scannerDeviceId, identity.id),
+          ),
+        )
+        .limit(1);
       const inserted = await tx
         .insert(sponsorLeadScanEventsTable)
         .values({
@@ -449,13 +461,13 @@ export async function syncScannerBatch(
       await tx
         .update(sponsorLeadsTable)
         .set({
-          scanCount: sql`${sponsorLeadsTable.scanCount} + 1`,
+          scanCount: sql`${sponsorLeadsTable.scanCount} + ${credited ? 0 : 1}`,
           firstScannedAt: sql`LEAST(COALESCE(${sponsorLeadsTable.firstScannedAt}, ${capturedAt}), ${capturedAt})`,
           lastScannedAt: sql`GREATEST(COALESCE(${sponsorLeadsTable.lastScannedAt}, ${capturedAt}), ${capturedAt})`,
           updatedAt: new Date(),
         })
         .where(eq(sponsorLeadsTable.id, lead.id));
-      scanResults.push({ id: scan.id, status: "accepted" });
+      scanResults.push({ id: scan.id, status: credited ? "duplicate" : "accepted" });
     }
 
     for (const annotation of annotations) {
@@ -578,12 +590,14 @@ export interface LeadListRow {
   lastScannedAt: string | null;
   scans: Array<{
     id: string;
+    operatorId: string;
     operatorName: string;
     source: "camera" | "image" | "manual";
     capturedAt: string;
   }>;
   notes: Array<{
     id: string;
+    operatorId: string | null;
     operatorName: string;
     note: string | null;
     rating: number | null;
@@ -625,6 +639,7 @@ export async function listLeadRows(sponsorId?: number): Promise<LeadListRow[]> {
     const items = scansByLead.get(scan.leadId) ?? [];
     items.push({
       id: scan.id,
+      operatorId: scan.scannerDeviceId,
       operatorName: scan.operatorName,
       source: scan.source,
       capturedAt: scan.capturedAt.toISOString(),
@@ -636,6 +651,7 @@ export async function listLeadRows(sponsorId?: number): Promise<LeadListRow[]> {
     const items = notesByLead.get(note.leadId) ?? [];
     items.push({
       id: note.id,
+      operatorId: note.scannerDeviceId,
       operatorName: note.operatorName,
       note: note.note,
       rating: note.rating,
@@ -655,7 +671,7 @@ export async function listLeadRows(sponsorId?: number): Promise<LeadListRow[]> {
     company: attendee.company,
     workEmail: attendee.workEmail,
     rating: lead.rating,
-    scanCount: lead.scanCount,
+    scanCount: new Set((scansByLead.get(lead.id) ?? []).map((s) => s.operatorId)).size,
     firstScannedAt: lead.firstScannedAt?.toISOString() ?? null,
     lastScannedAt: lead.lastScannedAt?.toISOString() ?? null,
     scans: scansByLead.get(lead.id) ?? [],

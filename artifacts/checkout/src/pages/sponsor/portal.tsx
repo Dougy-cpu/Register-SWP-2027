@@ -61,9 +61,11 @@ export default function SponsorPortal() {
 
   const openSection = (next: PortalSection, target?: string) => {
     setSection(next);
-    requestAnimationFrame(() =>
-      document.getElementById(target ?? "portal-content")?.scrollIntoView({ block: "start" }),
-    );
+    requestAnimationFrame(() => {
+      const section = document.getElementById(target ?? "portal-content");
+      if (section instanceof HTMLDetailsElement) section.open = true;
+      section?.scrollIntoView({ block: "start" });
+    });
   };
   const openStep = (step: PortalStep) => {
     if (step.sessionId) setSelectedSession(step.sessionId);
@@ -227,6 +229,13 @@ export default function SponsorPortal() {
               <p className="mt-2 text-muted-foreground">
                 Everything you need to prepare your sponsorship, in one place.
               </p>
+              <Button
+                variant="outline"
+                className="mt-3 min-h-11"
+                onClick={() => openSection("team", "team-scanners")}
+              >
+                Set up team scanners
+              </Button>
             </div>
             {steps.length > 0 && (
               <div className="max-w-lg space-y-2">
@@ -373,18 +382,18 @@ export default function SponsorPortal() {
           </TabsContent>
           <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-4 text-sm text-muted-foreground">
             <span className="font-medium">At the event</span>
-            <Link
-              href="/sponsor/scanner"
+            <button
+              type="button"
+              onClick={() => openSection("team", "team-scanners")}
               className="inline-flex min-h-11 items-center gap-2 text-primary"
             >
-              <QrCode className="h-4 w-4" />
-              Scan badges
-            </Link>
+              <QrCode className="h-4 w-4" /> Team scanners
+            </button>
             <Link
               href="/sponsor/leads?organiser=1"
               className="inline-flex min-h-11 items-center text-primary"
             >
-              View leads
+              Team leads
             </Link>
           </footer>
         </main>

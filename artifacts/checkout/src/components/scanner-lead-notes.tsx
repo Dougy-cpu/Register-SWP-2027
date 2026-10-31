@@ -21,10 +21,11 @@ export function LeadNotes({
   lead: SponsorLead;
   credential: ScannerCredential;
 }) {
-  const [scanId, setScanId] = useState(
-    () =>
-      [...lead.scans].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))[0]?.id ?? lead.id,
+  const ordered = [...lead.scans].sort(
+    (a, b) => a.capturedAt.localeCompare(b.capturedAt) || a.id.localeCompare(b.id),
   );
+  const scanId =
+    (ordered.find((scan) => scan.operatorId === credential.id) ?? ordered[0])?.id ?? lead.id;
   const key = `${scannerScope(credential)}:note-fallback:${scanId}`;
   const [draft, setDraft] = useState({ note: "", rating: null as number | null });
   const [status, setStatus] = useState("Notes save automatically");
@@ -35,52 +36,49 @@ export function LeadNotes({
   const latest = useRef(draft);
   useEffect(() => {
     let active = true;
-    let fallback: { note: string; rating: number | null } | null = null;
+    type NoteValue = { note: string | null; rating: number | null; createdAt?: string };
+    let fallback: NoteValue | null = null;
     try {
-      fallback = JSON.parse(localStorage.getItem(key) ?? "null");
-      if (!edited.current && fallback && typeof fallback.note === "string") {
-        setDraft(fallback);
-        latest.current = fallback;
-      }
+      const found = JSON.parse(localStorage.getItem(key) ?? "null");
+      if (found && typeof found.note === "string") fallback = found;
     } catch {
       /* IndexedDB is the primary local store. */
     }
+    const remote = lead.notes
+      .filter((note) => note.operatorId === credential.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
     void Promise.all(lead.scans.map((scan) => getLeadDraft(scan.id, credential)))
-      .then((savedDrafts) => {
-        const saved = savedDrafts
-          .filter((item) => item !== null)
+      .then(async (drafts) => {
+        if (!active || edited.current) return;
+        const saved = [...drafts, remote]
+          .filter((value) => value != null)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-        if (active && !edited.current && fallback) {
-          if (!saved || saved.note !== fallback.note || saved.rating !== fallback.rating)
-            void saveLeadDraft(scanId, fallback.note, fallback.rating, credential)
-              .then(() => {
-                if (active && !edited.current) setStatus("Saved on this phone");
-                void syncPendingScannerItems().catch(() => {
-                  if (active && !edited.current) setStatus("Saved on this phone · reconnecting");
-                });
-              })
-              .catch(() => {
-                if (active && !edited.current) {
-                  setStatus("Not saved yet");
-                  setProblem(
-                    "Your note has not reached phone storage. Keep this page open and try again.",
-                  );
-                }
-              });
-        } else if (active && !edited.current && saved) {
-          setScanId(saved.scanId);
-          const value = { note: saved.note ?? "", rating: saved.rating };
-          setDraft(value);
-          latest.current = value;
+        const fallbackIsNewer =
+          fallback && (!saved || (!!fallback.createdAt && fallback.createdAt > saved.createdAt));
+        const source = fallbackIsNewer ? fallback : saved;
+        if (!source) return;
+        const value = { note: source.note ?? "", rating: source.rating };
+        latest.current = value;
+        setDraft(value);
+        if (
+          fallbackIsNewer &&
+          (!saved || value.note !== (saved.note ?? "") || value.rating !== saved.rating)
+        ) {
+          await saveLeadDraft(scanId, value.note, value.rating, credential);
+          if (active && !edited.current) setStatus("Saved on this phone");
+          void syncPendingScannerItems().catch(() => {
+            if (active && !edited.current) setStatus("Saved on this phone · reconnecting");
+          });
         }
       })
-      .catch(() =>
-        setProblem("This browser could not open saved notes. Keep this page open and try again."),
-      );
+      .catch(() => {
+        if (active)
+          setProblem("This browser could not open saved notes. Keep this page open and try again.");
+      });
     return () => {
       active = false;
     };
-  }, [key, scanId, credential, lead.scans]);
+  }, [key, scanId, credential, lead.scans, lead.notes]);
   const persist = (value: typeof draft) => {
     edited.current = true;
     latest.current = value;
@@ -89,7 +87,7 @@ export function LeadNotes({
     setProblem("");
     // The synchronous fallback protects the very last keystroke on a sudden close.
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify({ ...value, createdAt: new Date().toISOString() }));
     } catch {
       /* The durable queue below reports failure. */
     }

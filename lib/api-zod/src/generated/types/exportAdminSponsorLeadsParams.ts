@@ -8,6 +8,6 @@
 import type { ExportAdminSponsorLeadsFormat } from "./exportAdminSponsorLeadsFormat";
 
 export type ExportAdminSponsorLeadsParams = {
-  sponsorId?: number;
+  sponsorId: number;
   format?: ExportAdminSponsorLeadsFormat;
 };

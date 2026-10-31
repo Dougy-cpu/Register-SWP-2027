@@ -34,6 +34,7 @@ export interface ScannerDeviceState {
 }
 
 export interface ScannerBootstrap {
+  companyKey?: string;
   device: ScannerDeviceState;
   scannerWindow: ScannerWindow;
   testQrValue: string;
@@ -99,6 +100,7 @@ export interface RejectedSyncItem {
 
 export interface SponsorLeadScan {
   id: string;
+  operatorId?: string;
   operatorName: string;
   source: ScanSource;
   capturedAt: string;
@@ -106,6 +108,7 @@ export interface SponsorLeadScan {
 
 export interface SponsorLeadNote {
   id: string;
+  operatorId?: string | null;
   operatorName: string;
   note: string | null;
   rating: number | null;

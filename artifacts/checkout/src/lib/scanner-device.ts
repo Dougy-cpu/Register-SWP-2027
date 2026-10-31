@@ -1,5 +1,9 @@
-// A phone-only product gate, not a security boundary. Do not use viewport width:
-// rotating an iPhone must not unmount an active scan or a note being edited.
-export function isScannerPhone(userAgent = navigator.userAgent): boolean {
-  return /iPhone|iPod|Android.*Mobile/i.test(userAgent);
+// Include iPadOS desktop mode without turning ordinary desktop visits into scanners.
+export function isScannerPhone(
+  userAgent = navigator.userAgent,
+  touchPoints = navigator.maxTouchPoints ?? 0,
+): boolean {
+  return (
+    /iPhone|iPod|iPad|Android/i.test(userAgent) || (/Macintosh/i.test(userAgent) && touchPoints > 1)
+  );
 }

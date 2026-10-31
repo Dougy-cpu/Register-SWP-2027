@@ -9,6 +9,7 @@ import type { SponsorLeadScanSource } from "./sponsorLeadScanSource";
 
 export interface SponsorLeadScan {
   id: string;
+  operatorId?: string;
   operatorName: string;
   source: SponsorLeadScanSource;
   capturedAt: Date;

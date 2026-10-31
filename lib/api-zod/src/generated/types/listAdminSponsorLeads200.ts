@@ -5,8 +5,10 @@
  * SWP Summit Conference Registration API
  * OpenAPI spec version: 0.1.0
  */
+import type { ScannerReport } from "./scannerReport";
 import type { SponsorLead } from "./sponsorLead";
 
 export type ListAdminSponsorLeads200 = {
   leads: SponsorLead[];
+  report: ScannerReport;
 };

@@ -34,13 +34,13 @@ export function ScannerSaveStatus({
       ) : (
         <>
           <p className="font-semibold">
-            {summary.leads.length} lead{summary.leads.length === 1 ? "" : "s"} ·{" "}
+            {summary.leads.length} team lead{summary.leads.length === 1 ? "" : "s"} ·{" "}
             {summary.rejected
               ? "Some items need help"
               : waiting
                 ? "Saved on this phone"
                 : summary.leads.length
-                  ? "All backed up"
+                  ? "Your scans are backed up"
                   : "Ready for your first badge"}
           </p>
           {waiting > 0 && (
@@ -53,6 +53,12 @@ export function ScannerSaveStatus({
                 ? `${summary.pendingNotes} note update${summary.pendingNotes === 1 ? "" : "s"}`
                 : ""}{" "}
               waiting to back up.
+            </p>
+          )}
+          {summary.otherWork > 0 && (
+            <p className="mt-1">
+              {summary.otherWork} {summary.otherWork === 1 ? "item" : "items"} for other reps still
+              on this device. Keep the scanner open when connected.
             </p>
           )}
           {summary.rejected > 0 && (

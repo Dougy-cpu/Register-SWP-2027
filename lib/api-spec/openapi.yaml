@@ -2089,6 +2089,94 @@ paths:
       responses: { "201": { description: Current version acknowledged } }
 
   # ==================== SPONSOR LEAD SCANNER ====================
+  /sponsor/scanner/team:
+    get:
+      operationId: getSponsorScannerTeam
+      tags: [lead-scanner]
+      summary: Prepare scanner access from registered stand staff (coordinator only)
+      responses:
+        "200":
+          description: Company entry link key and active registered staff
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  companyKey: { type: string }
+                  staff: { type: array, items: { $ref: "#/components/schemas/ScannerMember" } }
+                required: [companyKey, staff]
+  /sponsor/scanner/team/{repId}:
+    post:
+      operationId: shareRegisteredScanner
+      tags: [lead-scanner]
+      summary: Issue or re-share a registered rep's private reusable link and code
+      parameters: [{ name: repId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { renew: { type: boolean, default: false } } }
+      responses:
+        "200":
+          description: Private coordinator-only sharing details
+          content:
+            { application/json: { schema: { $ref: "#/components/schemas/ScannerRepGrant" } } }
+        "409": { description: Registration is unavailable or access must be explicitly renewed }
+  /scanner-team/roster:
+    post:
+      operationId: getScannerRoster
+      tags: [lead-scanner]
+      summary: A company link can list staff names, not leads or credentials
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  {
+                    type: object,
+                    properties: { companyKey: { type: string } },
+                    required: [companyKey],
+                  },
+              },
+          }
+      responses:
+        "200":
+          description: Company and names only
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sponsorId: { type: integer }
+                  sponsorCompany: { type: string }
+                  staff: { type: array, items: { $ref: "#/components/schemas/ScannerMember" } }
+                required: [sponsorId, sponsorCompany, staff]
+        "403": { description: Invalid or expired company access }
+  /scanner-team/access:
+    post:
+      operationId: authoriseScannerRep
+      tags: [lead-scanner]
+      summary: Activate one named rep using the company key and private rep code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                companyKey: { type: string }
+                repId: { type: string }
+                pin: { type: string, pattern: "^[0-9]{8}$" }
+              required: [companyKey, repId, pin]
+      responses:
+        "200":
+          description: Named rep scanner credential
+          content:
+            { application/json: { schema: { $ref: "#/components/schemas/ScannerRepCredential" } } }
+        "403": { description: Invalid rep code or authorisation }
+        "429": { description: Too many incorrect codes }
+
   /sponsor/scanner/devices/{deviceId}/recover:
     post:
       operationId: recoverSponsorScanner
@@ -2168,15 +2256,9 @@ paths:
       operationId: exportScannerLeads
       tags: [lead-scanner]
       security: [{ ScannerToken: [] }]
-      summary: Export confirmed leads only; pending scans do not block this export
-      parameters:
-        - { name: format, in: query, schema: { type: string, enum: [csv, xlsx] } }
+      summary: Company exports require a coordinator or event organiser
       responses:
-        "200":
-          description: Confirmed lead export
-          content:
-            application/octet-stream: { schema: { type: string, format: binary } }
-        "409": { description: No confirmed leads to export }
+        "403": { description: Scanner credentials cannot export company contacts }
 
   /admin/sponsors/{sponsorId}/pass-requests/{requestId}/resolve:
     post:
@@ -2264,7 +2346,8 @@ paths:
                 type: object
                 properties:
                   leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
-                required: [leads]
+                  report: { $ref: "#/components/schemas/ScannerReport" }
+                required: [leads, report]
 
   /sponsor/leads/{leadId}:
     patch:
@@ -2398,16 +2481,17 @@ paths:
                 type: object
                 properties:
                   leads: { type: array, items: { $ref: "#/components/schemas/SponsorLead" } }
-                required: [leads]
+                  report: { $ref: "#/components/schemas/ScannerReport" }
+                required: [leads, report]
 
   /admin/lead-scanner/leads/export:
     get:
       operationId: exportAdminSponsorLeads
       tags: [lead-scanner-admin]
       security: [{ AdminToken: [] }]
-      summary: Export all leads or one sponsor's leads
+      summary: Export the selected sponsor's confirmed report
       parameters:
-        - { name: sponsorId, in: query, schema: { type: integer } }
+        - { name: sponsorId, in: query, required: true, schema: { type: integer } }
         - { name: format, in: query, schema: { type: string, enum: [csv, xlsx], default: xlsx } }
       responses:
         "200":
@@ -2921,6 +3005,45 @@ components:
         resolvedAt: { type: string, format: date-time, nullable: true }
       required: [id, requestedVip, requestedStaff, status, createdAt]
 
+    ScannerMember:
+      type: object
+      properties: { id: { type: string }, name: { type: string } }
+      required: [id, name]
+    ScannerRepCredential:
+      type: object
+      properties:
+        id: { type: string }
+        operatorName: { type: string }
+        sponsorId: { type: integer }
+        sponsorCompany: { type: string }
+        token: { type: string }
+      required: [id, operatorName, sponsorId, sponsorCompany, token]
+    ScannerRepGrant:
+      allOf:
+        - { $ref: "#/components/schemas/ScannerRepCredential" }
+        - { type: object, properties: { pin: { type: string } }, required: [pin] }
+    ScannerReport:
+      type: object
+      properties:
+        asOf: { type: string, format: date-time }
+        companies:
+          type: array
+          items:
+            type: object
+            properties:
+              sponsorId: { type: integer }
+              sponsorCompany: { type: string }
+              scans: { type: integer }
+              people: { type: integer }
+              reps:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    { id: { type: string }, name: { type: string }, scans: { type: integer } }
+                  required: [id, name, scans]
+            required: [sponsorId, sponsorCompany, scans, people, reps]
+      required: [asOf, companies]
     ScannerActivation:
       type: object
       properties:
@@ -2978,6 +3101,7 @@ components:
     ScannerBootstrap:
       type: object
       properties:
+        companyKey: { type: string }
         device: { $ref: "#/components/schemas/ScannerDeviceState" }
         scannerWindow: { $ref: "#/components/schemas/ScannerWindow" }
         testQrValue: { type: string, pattern: "^[0-9A-F]{12}$" }
@@ -3092,6 +3216,7 @@ components:
       type: object
       properties:
         id: { type: string }
+        operatorId: { type: string }
         operatorName: { type: string }
         source: { type: string, enum: [camera, image, manual] }
         capturedAt: { type: string, format: date-time }
@@ -3101,6 +3226,7 @@ components:
       type: object
       properties:
         id: { type: string }
+        operatorId: { type: string, nullable: true }
         operatorName: { type: string }
         note: { type: string, nullable: true }
         rating: { type: integer, nullable: true, minimum: 1, maximum: 5 }

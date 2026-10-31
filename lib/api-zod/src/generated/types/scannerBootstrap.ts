@@ -9,6 +9,7 @@ import type { ScannerDeviceState } from "./scannerDeviceState";
 import type { ScannerWindow } from "./scannerWindow";
 
 export interface ScannerBootstrap {
+  companyKey?: string;
   device: ScannerDeviceState;
   scannerWindow: ScannerWindow;
   /** @pattern ^[0-9A-F]{12}$ */

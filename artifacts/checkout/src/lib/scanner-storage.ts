@@ -170,18 +170,64 @@ async function getScannerCredentialOperation(): Promise<ScannerCredential | null
 
 async function saveScannerCredentialOperation(credential: ScannerCredential): Promise<void> {
   const tx = startStorageTransaction((await database()).transaction("config", "readwrite"));
+  const previous = await tx.store.get("device");
+  if (previous && "token" in previous)
+    await tx.store.put(previous, "approved:" + scannerScope(previous));
+  await tx.store.put(credential, "approved:" + scannerScope(credential));
   await tx.store.put(credential, "device");
   await tx.store.put(credential, `credential:${scannerScope(credential)}`);
   await tx.done;
+  if (
+    !previous ||
+    !("token" in previous) ||
+    previous.id !== credential.id ||
+    previous.token !== credential.token
+  )
+    notifyProfileChange();
   changed();
 }
 
 async function clearScannerCredentialOperation(): Promise<void> {
-  // Disconnecting is not deletion. A matching renewed link reopens the original queue.
-  await (await database()).delete("config", "device");
+  // Disconnecting is not deletion. Retain pending data and the owner-bound recovery record.
+  const tx = startStorageTransaction((await database()).transaction("config", "readwrite"));
+  const saved = await tx.store.get("device");
+  if (saved && "token" in saved) await tx.store.delete("approved:" + scannerScope(saved));
+  await tx.store.delete("device");
+  await tx.done;
+  notifyProfileChange();
   changed();
 }
 
+function notifyProfileChange() {
+  if (typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel("swp-scanner-profile");
+  channel.postMessage(pageSession);
+  channel.close();
+}
+export function watchOtherScannerTabs(refresh: () => void) {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const channel = new BroadcastChannel("swp-scanner-profile");
+  channel.onmessage = (e) => {
+    if (e.data !== pageSession) refresh();
+  };
+  return () => channel.close();
+}
+export async function approvedProfiles(sponsorId: number): Promise<ScannerCredential[]> {
+  const prefix = "approved:swp-2027:" + sponsorId + ":";
+  const records = await boundStorageOperation(
+    (await database()).getAll("config", IDBKeyRange.bound(prefix, prefix + "\uffff")),
+  );
+  return records.filter((v): v is ScannerCredential => "token" in v && v.sponsorId === sponsorId);
+}
+export async function approvedProfileForToken(token: string): Promise<ScannerCredential | null> {
+  const prefix = "approved:swp-2027:";
+  const records = await boundStorageOperation(
+    (await database()).getAll("config", IDBKeyRange.bound(prefix, prefix + "\uffff")),
+  );
+  return (
+    records.find((row): row is ScannerCredential => "token" in row && row.token === token) ?? null
+  );
+}
 async function owner(credential?: ScannerCredential): Promise<ScannerCredential> {
   const saved = credential ?? (await getScannerCredential());
   if (!saved)
@@ -286,14 +332,30 @@ async function decryptPackAttendeeOperation(
   return JSON.parse(new TextDecoder().decode(plaintext)) as LeadPackAttendee;
 }
 
+// Registered reps use the same receipt for a badge on every device. Existing local
+// receipts keep their original IDs so pending notes can still be delivered.
+async function receiptId(credential: ScannerCredential, kind: "scan" | "note", target: string) {
+  if (!credential.id.startsWith("rep-")) return crypto.randomUUID();
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify([scannerScope(credential), kind, target])),
+  );
+  return (
+    kind +
+    "-" +
+    Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("")
+  );
+}
+
 async function queueScanOperation(
   input: Omit<PendingScan, "id" | "capturedAt" | "scope">,
   credential?: ScannerCredential,
 ): Promise<PendingScan> {
+  const rep = await owner(credential);
   const scan: PendingScan = {
     ...input,
-    scope: scannerScope(await owner(credential)),
-    id: crypto.randomUUID(),
+    scope: scannerScope(rep),
+    id: await receiptId(rep, "scan", input.code),
     capturedAt: new Date().toISOString(),
   };
   const db = await database();
@@ -459,6 +521,7 @@ async function saveLeadDraftOperation(
   rating: number | null,
   credential: ScannerCredential,
 ): Promise<PendingAnnotation> {
+  const id = await receiptId(credential, "note", scanId);
   const key = `${scannerScope(credential)}:note:${scanId}`;
   const tx = startStorageTransaction(
     (await database()).transaction(["config", "pendingAnnotations"], "readwrite"),
@@ -467,7 +530,7 @@ async function saveLeadDraftOperation(
   const draft =
     previous && "value" in previous ? (JSON.parse(previous.value) as PendingAnnotation) : null;
   const annotation: PendingAnnotation = {
-    id: draft?.id ?? crypto.randomUUID(),
+    id: draft?.id ?? id,
     scope: scannerScope(credential),
     scanId,
     note: note.slice(0, 4000),
@@ -641,6 +704,22 @@ export async function prepareScannerStorage(): Promise<{
   const result = { persistent, availableBytes };
   await writeScannerValue("storage-health", result);
   return result;
+}
+
+export async function otherScannerWork(credential: ScannerCredential): Promise<number> {
+  const db = await database();
+  const scope = scannerScope(credential);
+  const company = `swp-2027:${credential.sponsorId}:`;
+  const [scans, notes, rejected] = await boundStorageOperation(
+    Promise.all([
+      db.getAll("pendingScans"),
+      db.getAll("pendingAnnotations"),
+      db.getAll("rejectedItems"),
+    ]),
+  );
+  return [...scans.filter((scan) => scan.code !== "FFFFFFFFFFFF"), ...notes, ...rejected].filter(
+    (item) => item.scope?.startsWith(company) && item.scope !== scope,
+  ).length;
 }
 
 export async function scannerHasUnsettledWork(): Promise<boolean> {

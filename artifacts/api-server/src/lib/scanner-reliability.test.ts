@@ -3,6 +3,16 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { getTableColumns } from "drizzle-orm";
 import express from "express";
+import ExcelJS from "exceljs";
+import type {
+  GetSponsorScannerTeam200,
+  ScannerRepGrant,
+  ScannerRepCredential,
+  ScannerSyncResponse,
+  ListSponsorLeads200,
+} from "../../../../lib/api-zod/src/generated/types";
+import { issueAdminToken } from "../middleware/admin-auth";
+import { verifySponsorAccessToken } from "../middleware/sponsor-auth";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../../lib/db/src/schema";
@@ -128,13 +138,130 @@ describe("scanner recovery and idempotent synchronisation", () => {
     );
     expect(missing.annotations[0].status).toBe("deferred");
   });
+  it("honours reusable rep access and reports two reps meeting one person, including retries and personal notes", async () => {
+    await database.exec(`INSERT INTO bookings(id,status,sponsor_id,registration_source) VALUES (11,'paid',1,'sponsor_staff'),(12,'invoiced',1,'sponsor_staff'),(13,'paid',2,'sponsor_staff'),(14,'cancelled',1,'sponsor_staff');
+      INSERT INTO attendees(id,booking_id,first_name,last_name,is_tbc) VALUES (11,11,'Alex','Stand',false),(12,12,'Alex','Stand',false),(13,13,'Other','Rep',false),(14,14,'Cancelled','Rep',false),(15,12,'TBC','Staff',true);
+      INSERT INTO attendees(id,booking_id,first_name,last_name,job_title,company,work_email,is_tbc,lead_sharing_excluded,lead_sharing_notice_at) VALUES(21,1,'Robin','Visitor','Director','Fictional','robin@example.invalid',false,false,NOW());
+      INSERT INTO attendee_badges(attendee_id,code) VALUES(21,'102030405060');`);
+    const coordinator = sponsorHeaders(1, 1);
+    const api = (path: string, headers: Record<string, string> = {}, body?: unknown) =>
+      fetch(base + path, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const bearer = (token: string) => ({ Authorization: "Bearer " + token });
+    const team = (await (
+      await api("/sponsor/scanner/team", coordinator)
+    ).json()) as GetSponsorScannerTeam200;
+    expect(team.staff).toEqual([
+      { id: "rep-1-11", name: "Alex Stand" },
+      { id: "rep-1-12", name: "Alex Stand" },
+    ]);
+    expect(verifySponsorAccessToken(team.companyKey)).toBeNull();
+    expect((await api("/scanner/leads", bearer(team.companyKey))).status).toBe(401);
+    const roster = await (
+      await api("/scanner-team/roster", {}, { companyKey: team.companyKey })
+    ).json();
+    expect(roster).toEqual({ sponsorId: 1, sponsorCompany: "Sample", staff: team.staff });
+    expect(
+      (await api("/sponsor/scanner/team/rep-1-11", { ...coordinator, "x-sponsor-csrf": "" }, {}))
+        .status,
+    ).toBe(403);
+    expect((await api("/sponsor/scanner/team/rep-2-13", coordinator, {})).status).toBe(409);
+    const grant = async (id: string, renew = false) =>
+      (
+        await api("/sponsor/scanner/team/" + id, coordinator, { renew })
+      ).json() as Promise<ScannerRepGrant>;
+    const a = await grant("rep-1-11"),
+      b = await grant("rep-1-12");
+    expect(a.token).toHaveLength(43);
+    expect(a.pin).toMatch(/^\d{8}$/);
+    expect((await grant(a.id)).token).toBe(a.token);
+    const join = async (repId: string, pin: string) =>
+      api("/scanner-team/access", {}, { companyKey: team.companyKey, repId, pin });
+    expect((await join(a.id, a.pin === "00000000" ? "11111111" : "00000000")).status).toBe(403);
+    expect((await join("rep-2-13", a.pin)).status).toBe(403);
+    const fromPhone = await (await join(a.id, a.pin)).json(),
+      fromTablet = (await (await join(a.id, a.pin)).json()) as ScannerRepCredential;
+    expect(fromPhone).toEqual(fromTablet);
+    expect(fromTablet.token).toBe(a.token);
+    expect(fromTablet).not.toHaveProperty("pin");
+    expect((await api("/sponsor/scanner/team", bearer(a.token))).status).toBe(401);
+    expect((await api("/scanner/leads/export", bearer(a.token))).status).toBe(403);
+    expect((await api("/sponsor/leads/export", bearer(a.token))).status).toBe(401);
+    const send = async (rep: typeof a, id: string, note: string) => {
+      const scan = { id, code: "102030405060", source: "camera", capturedAt };
+      const result = await api("/scanner/sync", bearer(rep.token), {
+        scans: [scan],
+        annotations: note
+          ? [{ id: "note-" + id, scanId: id, note, rating: 4, createdAt: capturedAt }]
+          : [],
+      });
+      expect(result.status).toBe(200);
+      return ((await result.json()) as ScannerSyncResponse).scans[0].status;
+    };
+    expect(await send(a, "registered-phone-receipt", "Meet on Friday")).toBe("accepted");
+    expect(await send(a, "registered-tablet-receipt", "")).toBe("duplicate");
+    expect(await send(a, "registered-phone-receipt", "Meet on Friday")).toBe("duplicate");
+    expect(await send(b, "another-rep-badge-receipt", "Send the summary")).toBe("accepted");
+    const saved = (await (await api("/sponsor/leads", coordinator)).json()) as ListSponsorLeads200;
+    const contact = saved.leads.find((item: { attendeeId: number }) => item.attendeeId === 21);
+    expect(contact?.scanCount).toBe(2);
+    expect(contact?.notes.map((n) => n.operatorId).sort()).toEqual([a.id, b.id].sort());
+    expect(saved.report.companies[0]).toMatchObject({
+      sponsorId: 1,
+      people: 2,
+      scans: 3,
+      reps: expect.arrayContaining([
+        { id: a.id, name: "Alex Stand", scans: 1 },
+        { id: b.id, name: "Alex Stand", scans: 1 },
+      ]),
+    });
+    const csv = await (await api("/sponsor/leads/export?format=csv", coordinator)).text();
+    expect(csv.split("robin@example.invalid")).toHaveLength(2);
+    const foreignCsv = await (
+      await api("/sponsor/leads/export?format=csv&sponsorId=1", sponsorHeaders(2, 1))
+    ).text();
+    expect(foreignCsv).not.toContain("robin@example.invalid");
+    const xlsx = await api("/sponsor/leads/export?format=xlsx", coordinator);
+    expect(xlsx.status).toBe(200);
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await xlsx.arrayBuffer());
+    expect(book.worksheets.map((s) => s.name)).toEqual(["Summary", "Company leads", "Rep scans"]);
+    const credited: unknown[][] = [];
+    book.getWorksheet("Rep scans")!.eachRow((row) => credited.push(row.values as unknown[]));
+    const robin = credited.filter((row) => row.includes("robin@example.invalid"));
+    expect(robin).toHaveLength(2);
+    expect(robin.flat()).toEqual(
+      expect.arrayContaining([a.id, b.id, "Meet on Friday", "Send the summary"]),
+    );
+    vi.stubEnv("ADMIN_PASSWORD", "fixture-password-for-scanner");
+    try {
+      const admin = { "x-admin-token": issueAdminToken("fixture-password-for-scanner").token };
+      expect((await api("/admin/lead-scanner/leads/export", admin)).status).toBe(400);
+      expect(
+        await (await api("/admin/lead-scanner/leads/export?sponsorId=1&format=csv", admin)).text(),
+      ).toContain("robin@example.invalid");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const renewed = await grant(a.id, true);
+    expect(renewed.id).toBe(a.id);
+    expect(renewed.token).not.toBe(a.token);
+    expect((await api("/scanner/leads", bearer(a.token))).status).toBe(401);
+    expect((await join(a.id, a.pin)).status).toBe(403);
+    await database.exec("UPDATE bookings SET status='cancelled' WHERE id=11");
+    expect((await api("/scanner/leads", bearer(renewed.token))).status).toBe(401);
+    expect((await join(a.id, renewed.pin)).status).toBe(403);
+  });
   it("does not accept badges excluded from sharing and allows checking later after an eligible badge is issued", async () => {
     const queued = { ...scan, id: "scan-000000000000003", code: "ABCDEF654321" };
     expect((await syncScannerBatch(identity, [queued], [])).scans[0].status).toBe("rejected");
     await database.exec(
       "UPDATE attendee_badges SET code='ABCDEF654321',version=2 WHERE attendee_id=1",
     );
-    expect((await syncScannerBatch(identity, [queued], [])).scans[0].status).toBe("accepted");
+    expect((await syncScannerBatch(identity, [queued], [])).scans[0].status).toBe("duplicate");
     await database.exec("UPDATE attendees SET lead_sharing_excluded=true WHERE id=1");
     expect(
       (await syncScannerBatch(identity, [{ ...queued, id: "scan-000000000000004" }], [])).scans[0]

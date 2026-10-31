@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
-  ArrowLeft,
-  Camera,
   Check,
   CheckCircle2,
   CircleHelp,
@@ -19,8 +17,6 @@ import logoUrl from "@assets/swp-summit-logo.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useBadgeCamera } from "@/hooks/use-badge-camera";
 import { useBadgePhoto } from "@/hooks/use-badge-photo";
 import { BadgeCameraView } from "@/components/badge-camera-view";
@@ -38,7 +34,6 @@ import { ScannerStorageError } from "@/lib/scanner-storage-guard";
 import { prepareScannerDecoder } from "@/lib/scanner-decoder";
 import { isScannerPhone } from "@/lib/scanner-device";
 import {
-  activateScanner,
   downloadOfflinePack,
   getScannerBootstrap,
   ScannerApiError,
@@ -59,7 +54,6 @@ import {
   pendingScannerCount,
   queueScan,
   rejectedScannerItems,
-  saveScannerCredential,
   storeOfflinePack,
   verifyOfflineQueue,
   verifyOfflineStorage,
@@ -100,13 +94,6 @@ function scannerErrorMessage(caught: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
-function scannerActivationErrorMessage(caught: unknown): string {
-  if (caught instanceof ScannerApiError && caught.status === 401) {
-    return "Open this scanner from the Scan badge button in your sponsor workspace.";
-  }
-  return scannerErrorMessage(caught);
-}
-
 function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
   return Boolean(
     pack &&
@@ -118,20 +105,65 @@ function offlinePackIsUsable(pack: StoredOfflinePack | null): boolean {
   );
 }
 
+import { ScannerPersonPicker } from "@/components/scanner-person-picker";
+import { watchOtherScannerTabs } from "@/lib/scanner-storage";
+
 export default function SponsorScanner() {
-  if (isScannerPhone()) return <PhoneSponsorScanner />;
-  const hasLink = new URLSearchParams(window.location.hash.slice(1)).has("activate");
+  const [company, setCompany] = useState(() =>
+    new URLSearchParams(window.location.hash.slice(1)).get("team"),
+  );
+  const [current, setCurrent] = useState<ScannerCredential | null>(null);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const reopen = () => {
+      setCurrent(null);
+      setCompany(new URLSearchParams(window.location.hash.slice(1)).get("team"));
+      setRevision((n) => n + 1);
+    };
+    const unwatch = watchOtherScannerTabs(reopen);
+    window.addEventListener("hashchange", reopen);
+    return () => {
+      unwatch();
+      window.removeEventListener("hashchange", reopen);
+    };
+  }, []);
+  const finish = useCallback(() => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    setCompany(null);
+    setCurrent(null);
+    setRevision((n) => n + 1);
+  }, []);
+  if (isScannerPhone() && company)
+    return (
+      <ScannerPersonPicker
+        companyKey={company}
+        current={current}
+        onDone={finish}
+        onCancel={current ? finish : undefined}
+      />
+    );
+  if (isScannerPhone())
+    return (
+      <PhoneSponsorScanner
+        key={revision}
+        onSwitch={(c, k) => {
+          setCurrent(c);
+          setCompany(k);
+        }}
+      />
+    );
+  const hasLink = !!company || new URLSearchParams(window.location.hash.slice(1)).has("activate");
   return (
     <main className="min-h-screen bg-slate-50 p-6">
       <Card className="mx-auto max-w-xl space-y-4 p-6">
-        <h1 className="text-2xl font-bold">Scan badges on your phone</h1>
+        <h1 className="text-2xl font-bold">Scan on your phone or iPad</h1>
         {hasLink ? (
           <PhoneScannerLink url={window.location.href} />
         ) : (
           <p>Open your personal scanner link from Team &amp; passes in your phone browser.</p>
         )}
         <p className="text-sm text-muted-foreground">
-          Keep your scanner link private. It belongs to your named team member.
+          Keep this link private. Use it on the device you will scan with.
         </p>
         <Button asChild variant="outline">
           <a href="/sponsor">Back to sponsor workspace</a>
@@ -141,7 +173,11 @@ export default function SponsorScanner() {
   );
 }
 
-function PhoneSponsorScanner() {
+function PhoneSponsorScanner({
+  onSwitch,
+}: {
+  onSwitch: (c: ScannerCredential, key: string) => void;
+}) {
   const [, navigate] = useLocation();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const processingRef = useRef(false);
@@ -159,11 +195,9 @@ function PhoneSponsorScanner() {
   const [storageReady, setStorageReady] = useState(false);
   const [release, setRelease] = useState(scannerUpdateState);
   const [updating, setUpdating] = useState(false);
-  const [operatorName, setOperatorName] = useState("");
   const [bootstrap, setBootstrap] = useState<ScannerBootstrap | null>(null);
   const [pack, setPack] = useState<StoredOfflinePack | null>(null);
   const [initialising, setInitialising] = useState(true);
-  const [activating, setActivating] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [recoveryItems, setRecoveryItems] = useState<RejectedSyncItem[]>([]);
@@ -284,7 +318,7 @@ function PhoneSponsorScanner() {
     try {
       const downloadingFor = await getScannerCredential();
       if (!downloadingFor) return;
-      const downloaded = await downloadOfflinePack();
+      const downloaded = await downloadOfflinePack(downloadingFor);
       if (
         downloaded?.format !== 1 ||
         typeof downloaded.version !== "string" ||
@@ -297,10 +331,13 @@ function PhoneSponsorScanner() {
       setPack(stored);
       const storageOk = await verifyOfflineStorage();
       setStorageReady(storageOk);
-      await updateReadiness({
-        packVersion: stored.version,
-        storageTested: storageOk,
-      });
+      await updateReadiness(
+        {
+          packVersion: stored.version,
+          storageTested: storageOk,
+        },
+        downloadingFor,
+      );
       await refreshBootstrap();
       setNotice("");
     } catch (caught) {
@@ -372,9 +409,12 @@ function PhoneSponsorScanner() {
           linkToken && existing?.token !== linkToken
             ? await importScannerLink(linkToken)
             : existing;
-        if (linkToken)
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
         if (cancelled) return;
+        if (
+          linkToken &&
+          new URLSearchParams(window.location.hash.slice(1)).get("activate") === linkToken
+        )
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
         setCredential(saved);
         localPack = await getOfflinePack();
         setPack(localPack);
@@ -472,23 +512,6 @@ function PhoneSponsorScanner() {
     }, 1_200);
   }, []);
 
-  const activate = async () => {
-    if (operatorName.trim().length < 2) return;
-    setActivating(true);
-    setError("");
-    try {
-      const created = await activateScanner(operatorName.trim());
-      await saveScannerCredential(created);
-      setCredential(created);
-      await refreshBootstrap();
-      await downloadAndStorePack();
-    } catch (caught) {
-      setError(scannerActivationErrorMessage(caught));
-    } finally {
-      setActivating(false);
-    }
-  };
-
   const handleDecoded = useCallback(
     async (rawValue: string, source: ScanSource) => {
       if (processingRef.current) {
@@ -564,7 +587,14 @@ function PhoneSponsorScanner() {
         if (!current()) return;
         const alreadyAdded =
           pending.scans.some((scan) => scan.code === code) ||
-          Boolean(attendee && confirmed.some((lead) => lead.attendeeId === attendee.attendeeId));
+          Boolean(
+            attendee &&
+            confirmed.some(
+              (lead) =>
+                lead.attendeeId === attendee.attendeeId &&
+                lead.scans.some((scan) => scan.operatorId === credential.id),
+            ),
+          );
         if (alreadyAdded) {
           recentScansRef.current.set(code, now);
           showScanConfirmation("Already added");
@@ -577,7 +607,9 @@ function PhoneSponsorScanner() {
         setLastSaved(saved);
         setShowNotes(false);
         recentScansRef.current.set(code, Date.now());
-        showScanConfirmation(attendee ? "Saved on this phone" : "Saved for checking");
+        showScanConfirmation(
+          attendee ? `Saved on this phone · ${attendee.name}` : "Saved for checking",
+        );
         navigator.vibrate?.(50);
         void refreshCounts().catch(() => undefined);
         void syncNow(true);
@@ -741,53 +773,30 @@ function PhoneSponsorScanner() {
 
   if (!credential) {
     return (
-      <main className="min-h-screen bg-slate-50 grid place-items-center p-4 swp-grid-bg">
-        <Card className="w-full max-w-md p-7 sm:p-9 swp-card">
-          <img src={logoUrl} alt="SWP Summit" className="h-16 w-auto mx-auto mb-6" />
-          <div className="text-center mb-7">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              Sponsor lead scanner
+      <main className="min-h-screen bg-slate-50 grid place-items-center p-4">
+        <Card className="w-full max-w-md space-y-4 p-6">
+          <img src={logoUrl} alt="SWP Summit" className="h-12 w-auto" />
+          <h1 className="text-2xl font-bold">Open your scanner link</h1>
+          <p>
+            Open the personal or company scanner link your sponsor coordinator shared. Connect for
+            the first setup, then use the same browser to return.
+          </p>
+          {error && (
+            <p role="alert" className="text-rose-800">
+              {error}
             </p>
-            <h1 className="text-2xl font-bold mt-2">Start scanning</h1>
-            <p className="text-sm text-muted-foreground mt-3">
-              Enter your name once. We’ll take care of setup and saving.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Connect to the internet for this first setup. After that, you can scan without Wi-Fi.
-            </p>
-          </div>
-          {error && <ErrorBanner message={error} onClose={() => setError("")} />}
-          <Label htmlFor="operator-name">Your name</Label>
-          <Input
-            id="operator-name"
-            value={operatorName}
-            onChange={(event) => setOperatorName(event.target.value)}
-            placeholder="Your full name"
-            autoComplete="name"
-            className="mt-2 h-12"
-          />
-          <Button
-            className="w-full mt-5 h-12"
-            onClick={() => void activate()}
-            disabled={activating || operatorName.trim().length < 2}
-          >
-            <Camera className="h-4 w-4 mr-2" />
-            {activating ? "Getting ready…" : "Continue"}
-          </Button>
-          <Button variant="ghost" className="w-full mt-2" onClick={() => navigate("/sponsor")}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to sponsor workspace
+          )}
+          <Button asChild variant="outline">
+            <a href="/sponsor">Sponsor workspace</a>
           </Button>
         </Card>
       </main>
     );
   }
-
   const ready = bootstrap?.device?.ready ?? false;
   const rejectedCount = recoveryItems.length;
   const offlineUsable = offlinePackIsUsable(pack);
-  const diagnosticsEnabled =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("diagnostics") === "1";
+  const diagnosticsEnabled = new URLSearchParams(window.location.search).get("diagnostics") === "1";
   const lastLead =
     lastSaved && credential
       ? (summary.leads.find((lead) => lead.scans.some((scan) => scan.id === lastSaved.id)) ??
@@ -798,18 +807,23 @@ function PhoneSponsorScanner() {
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-white/10">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <button
-            onClick={() => navigate("/sponsor/leads")}
-            className="flex min-w-0 items-center gap-3 text-left"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            <div className="min-w-0">
-              <p className="font-semibold leading-tight">Scan · Leads</p>
-              <p className="text-xs text-slate-400 truncate max-w-44 sm:max-w-none">
-                {credential.sponsorCompany} · {credential.operatorName}
-              </p>
-            </div>
-          </button>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Scanning as {credential.operatorName}</p>
+            <p className="text-xs text-slate-300 truncate">{credential.sponsorCompany}</p>
+          </div>
+          {bootstrap?.companyKey && (
+            <Button
+              variant="secondary"
+              className="min-h-11"
+              onClick={() => {
+                stopCamera();
+                photo.cancel();
+                onSwitch(credential, bootstrap.companyKey!);
+              }}
+            >
+              Switch user
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => navigate("/sponsor/leads")}>
             Leads
           </Button>
@@ -1086,7 +1100,11 @@ function PhoneSponsorScanner() {
                       camera.phase === "starting" ||
                       photo.busy ||
                       showNotes ||
-                      summary.pendingScans + summary.pendingNotes + summary.rejected > 0
+                      summary.pendingScans +
+                        summary.pendingNotes +
+                        summary.rejected +
+                        summary.otherWork >
+                        0
                     }
                     onClick={() => {
                       setUpdating(true);
@@ -1212,18 +1230,6 @@ function ReadinessPanel({
         the organiser's Lead Scanner admin page.
       </p>
     </Card>
-  );
-}
-
-function ErrorBanner({ message, onClose }: { message: string; onClose: () => void }) {
-  return (
-    <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800 flex gap-2 mb-4">
-      <TriangleAlert className="h-4 w-4 mt-0.5 shrink-0" />
-      <span>{message}</span>
-      <button className="ml-auto" onClick={onClose} aria-label="Dismiss">
-        <X className="h-4 w-4" />
-      </button>
-    </div>
   );
 }
 

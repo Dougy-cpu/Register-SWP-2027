@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   cachedScannerLeads,
+  otherScannerWork,
   pendingScannerItems,
   rejectedScannerItems,
 } from "@/lib/scanner-storage";
@@ -10,6 +11,7 @@ export interface ScannerSummary {
   leads: SponsorLead[];
   pendingScans: number;
   pendingNotes: number;
+  otherWork: number;
   rejected: number;
   error: string;
   loaded: boolean;
@@ -19,6 +21,7 @@ export function useScannerSummary(credential: ScannerCredential | null) {
     leads: [],
     pendingScans: 0,
     pendingNotes: 0,
+    otherWork: 0,
     rejected: 0,
     error: "",
     loaded: false,
@@ -30,10 +33,11 @@ export function useScannerSummary(credential: ScannerCredential | null) {
     const refresh = async () => {
       const current = ++generation;
       try {
-        const [leads, pending, rejected] = await Promise.all([
+        const [leads, pending, rejected, otherWork] = await Promise.all([
           cachedScannerLeads(credential),
           pendingScannerItems(credential),
           rejectedScannerItems(credential),
+          otherScannerWork(credential),
         ]);
         if (!active || current !== generation) return;
         setSummary({
@@ -43,6 +47,7 @@ export function useScannerSummary(credential: ScannerCredential | null) {
           rejected: rejected.length,
           error: "",
           loaded: true,
+          otherWork,
         });
       } catch {
         if (active && current === generation)

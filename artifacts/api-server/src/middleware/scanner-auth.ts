@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { eq } from "drizzle-orm";
-import { db, sponsorScannerDevicesTable, sponsorsTable } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  db,
+  bookingsTable,
+  attendeesTable,
+  sponsorScannerDevicesTable,
+  sponsorsTable,
+} from "@workspace/db";
 
 export interface ScannerDeviceSession {
   id: string;
@@ -65,6 +71,32 @@ export async function scannerAuth(req: Request, res: Response, next: NextFunctio
       code,
     });
     return;
+  }
+  // Old, unregistered device links retain their existing behaviour. Registered
+  // rep access follows the actual staff registration, not a claimed display name.
+  if (record.id.startsWith("rep-")) {
+    const attendeeId = Number(record.id.split("-")[2]);
+    const [member] = await db
+      .select({ first: attendeesTable.firstName, last: attendeesTable.lastName })
+      .from(attendeesTable)
+      .innerJoin(bookingsTable, eq(bookingsTable.id, attendeesTable.bookingId))
+      .where(
+        and(
+          eq(attendeesTable.id, attendeeId),
+          eq(bookingsTable.sponsorId, record.sponsorId),
+          eq(bookingsTable.registrationSource, "sponsor_staff"),
+          inArray(bookingsTable.status, ["paid", "invoiced"]),
+          eq(attendeesTable.isTbc, false),
+        ),
+      );
+    if (!member) {
+      res.status(401).json({
+        error: "This staff registration is no longer active. Saved work stays on this device.",
+        code: "staff_inactive",
+      });
+      return;
+    }
+    record.operatorName = [member.first, member.last].filter(Boolean).join(" ").trim();
   }
   await db
     .update(sponsorScannerDevicesTable)

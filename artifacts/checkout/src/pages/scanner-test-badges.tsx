@@ -47,11 +47,11 @@ export default function ScannerTestBadges() {
                 <h2 className="font-bold">No attendee or lead data is used</h2>
               </div>
               <p className="mt-2 max-w-3xl text-sm text-slate-700">
-                Keep this page open on your computer so your phone can scan the large badges below,
-                or print the sheet. Scan several badges, then tap Leads on your phone to add notes
-                and ratings later, just as you will on the day. Every identity is fictional.
-                Practice leads stay in that browser until you choose Reset rehearsal or clear
-                browser data. Nothing is uploaded or included in real leads.
+                Keep this page open on your computer so your phone or iPad can scan the large badges
+                below, or print the sheet. Scan several badges, then tap Leads to open My scans and
+                add notes and ratings later, just as you will on the day. Every identity is
+                fictional. Practice leads stay in that browser until you choose Reset rehearsal or
+                clear browser data. Nothing is uploaded or included in real leads.
               </p>
             </div>
             <PhoneScannerLink url={SCANNER_TEST_URL} />

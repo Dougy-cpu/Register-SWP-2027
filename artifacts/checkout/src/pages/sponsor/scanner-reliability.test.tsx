@@ -15,6 +15,7 @@ const fake = vi.hoisted(() => ({
   importLink: vi.fn(),
   download: vi.fn(),
   storePack: vi.fn(),
+  confirmed: vi.fn(),
 }));
 const credential = {
   id: "phone1",
@@ -69,6 +70,9 @@ vi.mock("@/lib/scanner-api", () => ({
   importScannerLink: (...args: unknown[]) => fake.importLink(...args),
 }));
 vi.mock("@/lib/scanner-storage", () => ({
+  approvedProfiles: async () => [],
+  watchOtherScannerTabs: () => () => {},
+  otherScannerWork: async () => 0,
   getScannerCredential: vi.fn(async () => credential),
   getOfflinePack: vi.fn(async () => pack),
   cachedScannerBootstrap: vi.fn(async () => state),
@@ -79,7 +83,7 @@ vi.mock("@/lib/scanner-storage", () => ({
   decryptPackAttendee: (...args: unknown[]) => fake.decrypt(...args),
   normaliseScannedValue: (value: string) => (/^[0-9A-F]{12}$/.test(value) ? value : null),
   pendingScannerItems: vi.fn(async () => ({ scans: [], annotations: [] })),
-  cachedScannerLeads: vi.fn(async () => []),
+  cachedScannerLeads: (...args: unknown[]) => fake.confirmed(...args),
   queueScan: (...args: unknown[]) => fake.queue(...args),
   storeOfflinePack: (...args: unknown[]) => fake.storePack(...args),
   saveScannerCredential: vi.fn(),
@@ -102,6 +106,7 @@ beforeEach(() => {
   fake.decode = null;
   fake.bootstrap.mockResolvedValue(state);
   fake.lookup.mockReset().mockResolvedValue(null);
+  fake.confirmed.mockReset().mockResolvedValue([]);
   fake.decrypt.mockReset().mockResolvedValue(null);
   fake.queue.mockReset().mockImplementation(async (input: Record<string, unknown>) => ({
     ...input,
@@ -210,7 +215,7 @@ describe("fast scanner failure paths", () => {
     await waitFor(() => expect(fake.queue).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("Saved on this phone", { selector: "[role=status] *" })).toBeNull();
     await act(async () => saved());
-    await screen.findByText("Saved on this phone");
+    await screen.findByText("Saved on this phone · Jamie");
     fake.queue.mockRejectedValueOnce(new Error("Phone storage is full"));
     await act(async () => latestCamera().decode({ data: "CDCDCDCDCDCD" }));
     await screen.findByText("Phone storage is full");
@@ -234,7 +239,7 @@ describe("fast scanner failure paths", () => {
   it("keeps desktop handoff separate without activating a scanner or opening storage", () => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Windows Chrome");
     const { container } = render(<SponsorScanner />);
-    expect(screen.getByText("Scan badges on your phone")).toBeTruthy();
+    expect(screen.getByText("Scan on your phone or iPad")).toBeTruthy();
     expect(container.querySelector("video")).toBeNull();
     expect(fake.bootstrap).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Start scanning" })).toBeNull();
@@ -273,7 +278,7 @@ describe("fast scanner failure paths", () => {
     await act(async () => {
       latestCamera().decode({ data: "ABCDEF123456" });
     });
-    await screen.findByText("Saved on this phone");
+    await screen.findByText("Saved on this phone · Jamie");
     expect(fake.queue).toHaveBeenCalledWith(expect.objectContaining({ attendee }), credential);
     expect(fake.lookup).not.toHaveBeenCalled();
     expect(latestCamera().destroy).not.toHaveBeenCalled();
@@ -282,6 +287,26 @@ describe("fast scanner failure paths", () => {
       latestCamera().decode({ data: "ABCDEF123456" });
     });
     expect(fake.queue).toHaveBeenCalledTimes(1);
+  });
+  it("credits a cached team contact to the active rep even when their colleague has the same name", async () => {
+    const attendee = { attendeeId: 2, name: "Jamie", company: "Sample" };
+    fake.decrypt.mockResolvedValue(attendee);
+    fake.confirmed.mockResolvedValue([
+      {
+        id: "team-lead",
+        attendeeId: 2,
+        sponsorId: 1,
+        notes: [],
+        scans: [
+          { id: "old-scan", operatorId: "another-id", operatorName: credential.operatorName },
+        ],
+      },
+    ]);
+    render(<SponsorScanner />);
+    fireEvent.click(await screen.findByRole("button", { name: "Start scanning" }));
+    await screen.findByText("Camera ready");
+    await act(async () => latestCamera().decode({ data: "ABABCDCD1234" }));
+    expect(fake.queue).toHaveBeenCalledWith(expect.objectContaining({ attendee }), credential);
   });
   it("retains an unresolved offline badge with a truthful brief message", async () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, value: false });

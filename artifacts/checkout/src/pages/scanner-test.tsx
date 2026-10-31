@@ -13,6 +13,9 @@ import { isScannerPhone } from "@/lib/scanner-device";
 import { prepareScannerDecoder } from "@/lib/scanner-decoder";
 import {
   clearRehearsal,
+  practiceReps,
+  rehearsalRepKey,
+  type PracticeRep,
   readRehearsal,
   saveRehearsal,
   type RehearsalLead,
@@ -38,6 +41,19 @@ function PhoneScannerTest() {
   });
   const [leads, setLeads] = useState<RehearsalLead[]>(initial.leads);
   const leadsRef = useRef(leads);
+  const [rep, setRep] = useState<PracticeRep>(() => {
+    try {
+      return (
+        practiceReps.find((name) => name === localStorage.getItem(rehearsalRepKey)) ??
+        practiceReps[0]
+      );
+    } catch {
+      return practiceReps[0];
+    }
+  });
+  const [picking, setPicking] = useState(false);
+  const [shared, setShared] = useState(false);
+  const mine = leads.filter((lead) => (lead.rep ?? practiceReps[0]) === rep);
   const [view, setView] = useState<"scan" | "leads">("scan");
   const viewRef = useRef(view);
   const [lastCode, setLastCode] = useState<string | null>(null);
@@ -103,12 +119,15 @@ function PhoneScannerTest() {
       return;
     }
     if (recent.current.code === badge.code && Date.now() - recent.current.at < 1500) return;
-    const existing = leadsRef.current.find((lead) => lead.code === badge.code);
+    const existing = leadsRef.current.find(
+      (lead) => lead.code === badge.code && (lead.rep ?? practiceReps[0]) === rep,
+    );
     const next = existing
       ? leadsRef.current
       : [
           {
             code: badge.code,
+            rep,
             source,
             capturedAt: new Date().toISOString(),
             note: "",
@@ -150,7 +169,7 @@ function PhoneScannerTest() {
 
   function annotate(code: string, value: LeadAnnotation) {
     const next = leadsRef.current.map((lead) =>
-      lead.code === code ? { ...lead, ...value } : lead,
+      lead.code === code && (lead.rep ?? practiceReps[0]) === rep ? { ...lead, ...value } : lead,
     );
     // Keep the latest text visible if browser storage fails, and offer a retry.
     remember(next);
@@ -180,9 +199,11 @@ function PhoneScannerTest() {
     setNotice("Rehearsal cleared. Start scanning to try again.");
   }
 
-  const lastLead = leads.find((lead) => lead.code === lastCode);
+  const lastLead = mine.find((lead) => lead.code === lastCode);
   const lastBadge = lastLead ? findScannerTestBadge(lastLead.code) : null;
-  const filtered = leads.filter((lead) => {
+  const teamPeople = new Map(leads.map((lead) => [lead.code, lead]));
+  for (const lead of mine) teamPeople.set(lead.code, lead);
+  const filtered = (shared ? [...teamPeople.values()] : mine).filter((lead) => {
     const badge = findScannerTestBadge(lead.code)!;
     return [badge.name, badge.company, badge.jobTitle, badge.workEmail].some((text) =>
       text.toLowerCase().includes(search.trim().toLowerCase()),
@@ -216,9 +237,19 @@ function PhoneScannerTest() {
           <div className="min-w-0 flex-1">
             <h1 className="font-bold">{scanning ? "Scan" : "Leads"}</h1>
             <p className={`text-xs ${scanning ? "text-slate-300" : "text-slate-600"}`}>
-              Practice · fictional people
+              Practice · scanning as {rep}
             </p>
           </div>
+          <Button
+            variant={scanning ? "secondary" : "outline"}
+            onClick={() => {
+              photo.cancel();
+              camera.stop();
+              setPicking(true);
+            }}
+          >
+            Switch user
+          </Button>
           <Button
             variant={scanning ? "secondary" : "default"}
             className="h-12 shrink-0"
@@ -230,8 +261,41 @@ function PhoneScannerTest() {
         </div>
       </header>
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-4">
+        {picking && (
+          <section
+            aria-label="Choose practice rep"
+            className="rounded-lg border bg-white p-4 text-slate-950"
+          >
+            <h2 className="font-bold">Who’s scanning?</h2>
+            {practiceReps.map((name) => (
+              <Button
+                key={name}
+                variant="outline"
+                className="mt-2 mr-2 min-h-11"
+                onClick={() => {
+                  if (storageError && !store(leadsRef.current)) return;
+                  try {
+                    localStorage.setItem(rehearsalRepKey, name);
+                  } catch {
+                    setError("This browser could not remember the scanner selection.");
+                    return;
+                  }
+                  setRep(name);
+                  setPicking(false);
+                  setExpanded(null);
+                  setLastCode(null);
+                  recent.current = { code: "", at: 0 };
+                  setShared(false);
+                  changeView("scan");
+                }}
+              >
+                {name}
+              </Button>
+            ))}
+          </section>
+        )}
         <p className={`text-sm ${scanning ? "text-slate-300" : "text-slate-600"}`}>
-          {leads.length} practice {leads.length === 1 ? "lead" : "leads"} ·{" "}
+          {mine.length} practice {mine.length === 1 ? "lead" : "leads"} ·{" "}
           {storageError || loadError ? "Saving needs attention" : "Saved in this browser"}
         </p>
         {(storageError || loadError) && (
@@ -351,7 +415,29 @@ function PhoneScannerTest() {
         ) : (
           <>
             <div>
-              <h2 className="text-xl font-bold">Your practice leads</h2>
+              <h2 className="text-xl font-bold">{shared ? "Team leads" : "My scans"}</h2>
+              <div role="group" aria-label="Practice lead list" className="my-2 flex gap-2">
+                <Button
+                  variant={shared ? "outline" : "default"}
+                  aria-pressed={!shared}
+                  onClick={() => {
+                    setShared(false);
+                    setExpanded(null);
+                  }}
+                >
+                  My scans
+                </Button>
+                <Button
+                  variant={shared ? "default" : "outline"}
+                  aria-pressed={shared}
+                  onClick={() => {
+                    setShared(true);
+                    setExpanded(null);
+                  }}
+                >
+                  Team leads
+                </Button>
+              </div>
               <p className="mt-1 text-sm text-slate-600">
                 Tap a person to add or edit notes and a rating.
               </p>
@@ -398,7 +484,19 @@ function PhoneScannerTest() {
                       </p>
                     </button>
                     {open && (
-                      <div className="border-t border-slate-100">{annotationFields(lead)}</div>
+                      <div className="border-t border-slate-100">
+                        {(lead.rep ?? practiceReps[0]) === rep && annotationFields(lead)}
+                        {shared &&
+                          leads
+                            .filter((entry) => entry.code === lead.code)
+                            .map((entry) => (
+                              <p className="p-3 text-sm" key={entry.rep ?? practiceReps[0]}>
+                                Scanned by {entry.rep ?? practiceReps[0]}
+                                {entry.note ? " · " + entry.note : ""}
+                                {entry.rating ? " · " + entry.rating + "/5" : ""}
+                              </p>
+                            ))}
+                      </div>
                     )}
                   </Card>
                 );
@@ -438,7 +536,7 @@ function PhoneScannerTest() {
           className={`flex flex-wrap items-center justify-between gap-2 border-t pt-3 ${scanning ? "border-white/15" : "border-slate-200"}`}
         >
           <p className={`text-sm ${scanning ? "text-slate-300" : "text-slate-600"}`}>
-            {leads.length} of 4 practice badges saved
+            {mine.length} of 4 practice badges saved
           </p>
           <Button variant={scanning ? "secondary" : "outline"} className="h-12" onClick={reset}>
             Reset rehearsal

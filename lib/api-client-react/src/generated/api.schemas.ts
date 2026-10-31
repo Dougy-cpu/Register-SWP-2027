@@ -421,6 +421,42 @@ export interface SponsorWorkspacePublic {
   invitationCopy: SponsorWorkspacePublicInvitationCopy;
 }
 
+export interface ScannerMember {
+  id: string;
+  name: string;
+}
+
+export interface ScannerRepCredential {
+  id: string;
+  operatorName: string;
+  sponsorId: number;
+  sponsorCompany: string;
+  token: string;
+}
+
+export type ScannerRepGrant = ScannerRepCredential & {
+  pin: string;
+};
+
+export type ScannerReportCompaniesItemRepsItem = {
+  id: string;
+  name: string;
+  scans: number;
+};
+
+export type ScannerReportCompaniesItem = {
+  sponsorId: number;
+  sponsorCompany: string;
+  scans: number;
+  people: number;
+  reps: ScannerReportCompaniesItemRepsItem[];
+};
+
+export interface ScannerReport {
+  asOf: string;
+  companies: ScannerReportCompaniesItem[];
+}
+
 export interface ScannerActivation {
   id: string;
   /** Returned only on activation; store in device IndexedDB. */
@@ -457,6 +493,7 @@ export interface ScannerDeviceState {
 }
 
 export interface ScannerBootstrap {
+  companyKey?: string;
   device: ScannerDeviceState;
   scannerWindow: ScannerWindow;
   /** @pattern ^[0-9A-F]{12}$ */
@@ -568,6 +605,7 @@ export const SponsorLeadScanSource = {
 
 export interface SponsorLeadScan {
   id: string;
+  operatorId?: string;
   operatorName: string;
   source: SponsorLeadScanSource;
   capturedAt: string;
@@ -575,6 +613,7 @@ export interface SponsorLeadScan {
 
 export interface SponsorLeadNote {
   id: string;
+  operatorId?: string | null;
   operatorName: string;
   note: string | null;
   /**
@@ -1973,6 +2012,32 @@ export type AcknowledgeSponsorDocumentBody = {
   acknowledgedBy: string;
 };
 
+export type GetSponsorScannerTeam200 = {
+  companyKey: string;
+  staff: ScannerMember[];
+};
+
+export type ShareRegisteredScannerBody = {
+  renew?: boolean;
+};
+
+export type GetScannerRosterBody = {
+  companyKey: string;
+};
+
+export type GetScannerRoster200 = {
+  sponsorId: number;
+  sponsorCompany: string;
+  staff: ScannerMember[];
+};
+
+export type AuthoriseScannerRepBody = {
+  companyKey: string;
+  repId: string;
+  /** @pattern ^[0-9]{8}$ */
+  pin: string;
+};
+
 export type RecoverSponsorScannerBody = {
   /**
    * @minLength 40
@@ -1989,18 +2054,6 @@ export type LookupScannerBadgeBody = {
 export type ListScannerLeads200 = {
   leads: SponsorLead[];
 };
-
-export type ExportScannerLeadsParams = {
-  format?: ExportScannerLeadsFormat;
-};
-
-export type ExportScannerLeadsFormat =
-  (typeof ExportScannerLeadsFormat)[keyof typeof ExportScannerLeadsFormat];
-
-export const ExportScannerLeadsFormat = {
-  csv: "csv",
-  xlsx: "xlsx",
-} as const;
 
 export type ResolveSponsorPassRequestBodyDecision =
   (typeof ResolveSponsorPassRequestBodyDecision)[keyof typeof ResolveSponsorPassRequestBodyDecision];
@@ -2035,6 +2088,7 @@ export type ActivateSponsorScannerDeviceBody = {
 
 export type ListSponsorLeads200 = {
   leads: SponsorLead[];
+  report: ScannerReport;
 };
 
 export type ExportSponsorLeadsParams = {
@@ -2060,10 +2114,11 @@ export type ListAdminSponsorLeadsParams = {
 
 export type ListAdminSponsorLeads200 = {
   leads: SponsorLead[];
+  report: ScannerReport;
 };
 
 export type ExportAdminSponsorLeadsParams = {
-  sponsorId?: number;
+  sponsorId: number;
   format?: ExportAdminSponsorLeadsFormat;
 };
 

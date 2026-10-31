@@ -18,6 +18,9 @@ vi.mock("@/lib/scanner-api", () => ({
   scannerFetch: vi.fn(),
 }));
 vi.mock("@/lib/scanner-storage", () => ({
+  approvedProfiles: async () => [],
+  watchOtherScannerTabs: () => () => {},
+  otherScannerWork: async () => 0,
   getScannerCredential: async () => owner,
   cachedScannerLeads: async () => [],
   pendingScannerItems: async () => ({ scans: [], annotations: [] }),
@@ -35,7 +38,7 @@ it("uploads queued work independently of a stalled download, without trusting th
   fake.download.mockReturnValue(new Promise(() => undefined));
   fake.sync.mockResolvedValue({ remaining: 0, rejected: 0 });
   render(<SponsorLeads />);
-  await screen.findByText("Your leads");
+  await screen.findByRole("heading", { name: "My scans" });
   await waitFor(() => expect(fake.download).toHaveBeenCalled());
   expect(fake.sync).toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByText("Opening saved leads…")).toBeNull());

@@ -35,9 +35,9 @@ The scanner reveals only the attendee's name, job title, company and work email.
 
 The app first writes every real scan to IndexedDB on the phone. Only after that transaction finishes does it show **Lead saved on this phone**. Sync uses client-generated event IDs, so a retry cannot create the same scan twice. Local records are removed only after the server explicitly accepts or identifies them as duplicates. Rejected records remain in a recovery store for organiser review.
 
-## Release prerequisites
+## First installation of the scanner schema
 
-Do not publish the feature or run the production migration until all of the following are true:
+The reusable staff links and reporting release uses the existing lead-scanner tables. The following prerequisites apply when installing those tables in a new environment:
 
 - A verified production PostgreSQL restore point exists.
 - Its reference has been recorded for `PRODUCTION_BACKUP_REFERENCE` during the approved migration run.
@@ -74,22 +74,18 @@ zone so the test reflects the intended quick, longer-distance event-day scan. Bo
 and authenticated sponsor scanner use the same rear-camera configuration, a larger high-resolution
 scan region and up to 20 scan attempts per second.
 
-Use the public kit to check browser camera permission, rear-camera selection, QR recognition,
-torch availability and photograph upload on representative devices. It does not replace the full
-authenticated phone readiness, offline close/reopen and queued server-sync checks below.
+Use the public kit to test camera permission, torch, photo upload and printed QR recognition. **Switch user** changes between Jamie and Alex. Each has a separate **My scans** list. **Team leads** shows each practice contact once with the reps who scanned them. Practice results stay in that browser until reset.
 
-## Authenticated phone readiness check
+## Sponsor setup and event day
 
-Each sponsor operator opens the sponsor's existing private link, selects **Scan badge**, enters their own name and activates that phone. Before event day, every phone must show all six checks complete:
+1. In the sponsor workspace, register the people staffing the stand under **Team & passes**. Open **Set up team scanners** from Home. Each registered, named staff member appears in the list.
+2. Choose **Share [name]’s scanner** and share the private personal link. The rep opens it on their phone or iPad and taps **Start scanning**. The same link works on a second device. Another option is **Copy company link**. Each rep picks their name and uses the private code shown beside their personal link once on each new browser. Keep the sponsor management link with the coordinator.
+3. Open the scanner once while connected. It prepares the offline badge pack automatically. **Scanning as** shows who receives credit. To hand over a shared iPad, tap **Switch user**. A rep already set up in that browser can resume offline. If a new rep arrives during a Wi-Fi outage, use a prepared device or a mobile connection for first access.
+4. Scan in succession. Each confirmation follows a local save. **Leads** opens **My scans**. Tap a person to add notes or a rating during the break. **Team leads** includes confirmed scans across the company. Reopen the original message or scanner on the same browser to return. Confirmed scans appear on the rep’s other devices after refresh. Anything awaiting backup stays on the device that captured it. Reopen that scanner when connected and wait for backup before clearing browser storage or retiring the device.
+5. For a lost device or forwarded invitation, open the rep’s sharing panel and choose **Replace link and code**. Give the new personal link to that rep. Opening it on the original device restores access to its waiting work. Removing a staff registration stops future authenticated requests for that identity.
+6. In the sponsor workspace, open **Team leads**. The Excel report includes **Summary**, **Company leads** and **Rep scans**. CSV contains one row per company contact. SWP organisers can select one sponsor in **Admin → Lead Scanner** to download the same report. A rep sees their own credit even when another rep scans the same person. Retrying a scan or using another device for the same rep adds no credit. The report shows when the totals were produced and includes only confirmed data.
 
-- current attendee pack
-- offline storage
-- offline save test
-- camera permission
-- real scanner-test QR
-- server sync test
-
-The admin page must show the phone as **Ready**, not **Not tested** or **Out of date**. Re-run this check after changing an attendee, replacing a badge QR or updating the event end time.
+Organisers can open scanner help for diagnostic checks and recovery. There is no mandatory setup checklist for reps. Use the physical rehearsal below on a sample of the devices and badges that will actually be used.
 
 ## Physical rehearsal
 
