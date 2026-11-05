@@ -9,13 +9,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="format-detection" content="telephone=no,date=no,address=no,email=no" />
     <title>{{title}}</title>
-    <!--[if mso
-      ]><xml
-        ><o:OfficeDocumentSettings
-          ><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings
-        ></xml
-      ><!
-    [endif]-->
+    <!-- Keep the Outlook conditional delimiters intact. Splitting them can hide the email body. -->
+    <!-- prettier-ignore -->
+    <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
     <style>
       html,
       body {

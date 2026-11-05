@@ -4,6 +4,7 @@ import { renderApprovedEmailSample } from "./approved-email-sample";
 import nodemailer from "nodemailer";
 import type StreamTransport from "nodemailer/lib/stream-transport";
 import sharp from "sharp";
+import { format } from "prettier";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendMail, wrapInBrandedLayout } from "./email";
 import { prepareInlineEmailImages } from "./email-images";
@@ -36,6 +37,20 @@ function leafParts(message: Buffer) {
           );
       return [{ headers, content }];
     });
+}
+
+function expectIntactOutlookConditionals(html: string) {
+  // Outlook interprets these comments even though a browser preview ignores them.
+  // A line break between <! and [endif] left the 4 November messages blank in Outlook.
+  expect(html).not.toMatch(/<!\s+\[endif\]/i);
+  const comments = html.match(/<!--\[if\b[\s\S]*?-->/gi) ?? [];
+  expect(comments).toHaveLength(3);
+  for (const comment of comments) {
+    expect(comment).toMatch(/^<!--\[if [^\]\r\n]+\]>/);
+    expect(comment).toMatch(/<!\[endif\]-->$/);
+  }
+  const head = html.slice(0, html.indexOf("</head>"));
+  expect(head).toContain("</xml><![endif]-->");
 }
 
 describe("email image delivery", () => {
@@ -172,6 +187,9 @@ describe("email image delivery", () => {
       expect(imageParts).toHaveLength(2);
       expect(html.match(/src="cid:/g)).toHaveLength(3);
       expect(html).not.toContain("data:image");
+      expectIntactOutlookConditionals(html);
+      // Exercise the formatter too: it originally split the Office XML closing delimiter.
+      expectIntactOutlookConditionals(await format(html, { parser: "html", printWidth: 100 }));
       expect(text).toContain("People Strategy Hub");
       expect(text).toContain("/manage/PREVIEW-ONLY-NOT-A-REAL-BOOKING");
       for (const original of approvedEmailImages(designed.html)) {
