@@ -229,6 +229,7 @@ describe("card and invoice reconciliation integration", () => {
       },
     });
     expect(params.metadata).toEqual(params.payment_intent_data.metadata);
+    expect(params.metadata.registrationApp).toBe("swp-2027");
     expect(params).not.toHaveProperty("customer_email");
     expect(
       params.line_items.map(

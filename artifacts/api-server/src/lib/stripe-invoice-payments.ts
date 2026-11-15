@@ -70,17 +70,8 @@ export async function syncStripeInvoicePaymentDetails(
   onPaymentResolved?: (paymentIntentId: string) => void,
 ): Promise<string | null> {
   const references = await invoicePaymentReferences(stripe, invoice);
-  let paymentIntentId = objectId(references.find((reference) => reference.isDefault)?.intent);
-  // Retain the canonical invoice/payment link even if a later label update fails.
-  if (paymentIntentId) onPaymentResolved?.(paymentIntentId);
-
-  if (
-    invoice.description !== details.description ||
-    Object.entries(details.metadata).some(([key, value]) => invoice.metadata?.[key] !== value)
-  ) {
-    await stripe.invoices.update(invoice.id, details);
-  }
-
+  const payments: Array<{ intentId: string | null; chargeId: string | null; isDefault: boolean }> =
+    [];
   for (const reference of references) {
     const intentId = objectId(reference.intent);
     const intent = intentId
@@ -97,12 +88,28 @@ export async function syncStripeInvoicePaymentDetails(
       throw new Error(`Stripe invoice ${invoice.id} payment customer does not match`);
     }
 
-    const chargeId = objectId(reference.charge) || objectId(intent?.latest_charge);
+    payments.push({
+      intentId,
+      chargeId: objectId(reference.charge) || objectId(intent?.latest_charge),
+      isDefault: reference.isDefault,
+    });
+  }
+
+  const paymentIntentId =
+    payments.find((payment) => payment.isDefault)?.intentId || payments[0]?.intentId || null;
+  // Retain the verified invoice/payment link even if a later label update fails.
+  if (paymentIntentId) onPaymentResolved?.(paymentIntentId);
+
+  if (
+    invoice.description !== details.description ||
+    Object.entries(details.metadata).some(([key, value]) => invoice.metadata?.[key] !== value)
+  ) {
+    await stripe.invoices.update(invoice.id, details);
+  }
+
+  for (const { intentId, chargeId } of payments) {
     if (chargeId) await stripe.charges.update(chargeId, details);
     if (!intentId) continue; // Bank/out-of-band payments may have no refundable Stripe charge.
-
-    paymentIntentId ||= intentId;
-    onPaymentResolved?.(paymentIntentId);
     try {
       await stripe.paymentIntents.update(intentId, details);
     } catch (err) {
