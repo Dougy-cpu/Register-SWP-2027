@@ -1,4 +1,4 @@
-import { db } from "@workspace/db";
+import { db, type DbConnection } from "@workspace/db";
 import { discountTiersTable, promoCodesTable, passConfigTable } from "@workspace/db";
 import { eq, and, lte, gte, or, isNull, sql } from "drizzle-orm";
 
@@ -7,7 +7,10 @@ import { eq, and, lte, gte, or, isNull, sql } from "drizzle-orm";
  * `db.transaction(async (tx) => ...)`. Both expose the same `select`/`update`
  * surface used by `incrementPromoUsage`, so callers can pass either.
  */
-export type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type DbExecutor =
+  | typeof db
+  | DbConnection
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Atomically increment a promo code's `usedCount` after a successful booking

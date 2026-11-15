@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import type Stripe from "stripe";
 
 const state = vi.hoisted(() => ({
+  journal: [] as Array<Record<string, unknown>>,
   booking: {} as Record<string, unknown>,
   lead: {} as Record<string, unknown>,
   customer: null as Record<string, unknown> | null,
@@ -12,7 +13,7 @@ const state = vi.hoisted(() => ({
   intent: {} as Record<string, unknown>,
   stripe: {
     customers: { list: vi.fn(), create: vi.fn(), update: vi.fn() },
-    checkout: { sessions: { create: vi.fn() } },
+    checkout: { sessions: { create: vi.fn(), retrieve: vi.fn(), expire: vi.fn() } },
     invoices: {
       create: vi.fn(),
       retrieve: vi.fn(),
@@ -46,16 +47,51 @@ vi.mock("@workspace/db", () => {
     }),
     update: () => ({
       set: (values: Record<string, unknown>) => ({
-        where: async () => {
+        where: () => {
           Object.assign(state.booking, values);
+          return {
+            returning: async () => [state.booking],
+            then: (resolve: (value: unknown) => void) => resolve([state.booking]),
+          };
         },
       }),
     }),
     transaction: async (callback: (tx: unknown) => Promise<void>) => callback(db),
   };
-  return { db, bookingsTable, attendeesTable, promoCodesTable: {}, sponsorPromoCodesTable: {} };
+  const client = {
+    on: vi.fn(),
+    removeListener: vi.fn(),
+    release: vi.fn(),
+    query: async (sql: string, params: unknown[] = []) => {
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+      if (sql.includes("pg_advisory_unlock")) return { rows: [] };
+      if (sql.startsWith("SELECT data"))
+        return {
+          rows: [...state.journal]
+            .reverse()
+            .filter((data) => !params[2] || data.route === params[2])
+            .map((data) => ({ data: structuredClone(data) })),
+        };
+      if (sql.startsWith("INSERT INTO activity_log (type, actor, booking_id, data) VALUES")) {
+        state.journal.push(JSON.parse(params[1] as string));
+      } else if (sql.startsWith("UPDATE activity_log")) {
+        const data = JSON.parse(params[0] as string);
+        state.journal[state.journal.findIndex((item) => item.id === data.id)] = data;
+      }
+      return { rows: [], rowCount: 1 };
+    },
+  };
+  return {
+    db,
+    createDbConnection: () => db,
+    pool: { connect: async () => client },
+    bookingsTable,
+    attendeesTable,
+    promoCodesTable: {},
+    sponsorPromoCodesTable: {},
+  };
 });
-vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
+vi.mock("drizzle-orm", () => ({ eq: vi.fn(), and: vi.fn(), inArray: vi.fn() }));
 vi.mock("./promo-codes", () => ({ isCodeUsedByEmail: vi.fn() }));
 vi.mock("../lib/pricing", () => ({ incrementPromoUsage: vi.fn() }));
 vi.mock("../lib/sponsor-redemptions", () => ({
@@ -64,6 +100,7 @@ vi.mock("../lib/sponsor-redemptions", () => ({
 }));
 vi.mock("../lib/stripe-client", () => ({ getStripe: () => state.stripe }));
 vi.mock("../lib/booking-confirmation", () => ({
+  PromoReservationError: class extends Error {},
   claimBookingConfirmation: state.claim,
   runConfirmationSideEffects: state.confirmation,
 }));
@@ -131,6 +168,7 @@ beforeEach(() => {
     workEmail: "jamie@example.com",
     company: "Example Ltd",
   };
+  state.journal = [];
   state.customer = null;
   state.intent = {
     id: "pi_invoice",
@@ -149,10 +187,17 @@ beforeEach(() => {
   state.stripe.customers.update.mockImplementation(
     async (_id, params) => (state.customer = { ...state.customer, ...params }),
   );
-  state.stripe.checkout.sessions.create.mockResolvedValue({
+  const card = {
     id: "cs_card",
     url: "https://checkout.stripe.com/test",
-  });
+    status: "open",
+    payment_status: "unpaid",
+  };
+  state.stripe.checkout.sessions.create.mockResolvedValue(card);
+  state.stripe.checkout.sessions.retrieve.mockImplementation(async () => card);
+  state.stripe.checkout.sessions.expire.mockImplementation(async () =>
+    Object.assign(card, { status: "expired" }),
+  );
   state.stripe.taxRates.list.mockResolvedValue({
     data: [{ id: "txr_vat", percentage: 20, country: "GB", inclusive: false }],
   });
@@ -280,6 +325,7 @@ describe("card and invoice reconciliation integration", () => {
         collection_method: "send_invoice",
         days_until_due: 14,
       }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(state.stripe.invoices.update).toHaveBeenCalledWith(
       "in_invoice",
@@ -298,6 +344,7 @@ describe("card and invoice reconciliation integration", () => {
     );
     expect(state.stripe.invoiceItems.create).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 49800, tax_rates: ["txr_vat"] }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(state.stripe.invoices.sendInvoice).toHaveBeenCalledOnce();
   });

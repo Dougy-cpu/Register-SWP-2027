@@ -33,4 +33,11 @@ pool.on("error", (err) => {
 
 export const db = drizzle(pool, { schema });
 
+// Keep session-scoped locks and their queries on the same pooled connection.
+export function createDbConnection(client: pg.PoolClient) {
+  return drizzle(client, { schema });
+}
+
+export type DbConnection = ReturnType<typeof createDbConnection>;
+
 export * from "./schema";

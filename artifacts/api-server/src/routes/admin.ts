@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import type Stripe from "stripe";
 import { eq, desc, asc, or, and, sql, count, notInArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
@@ -42,6 +42,13 @@ import {
   getSessionSchedulerExportFilename,
 } from "../lib/session-scheduler-export";
 import { releaseSponsorRedemption, restoreSponsorRedemption } from "../lib/sponsor-redemptions";
+import { closePendingCheckoutsForInvoice } from "../lib/stripe-checkout";
+
+import {
+  PaymentOperationError,
+  withPaymentOperation,
+  type PaymentOperations,
+} from "../lib/payment-operations";
 
 const router: IRouter = Router();
 const INVOICE_PAYMENT_TERMS_DAYS = 14;
@@ -898,7 +905,18 @@ router.post(
   },
 );
 
-router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Promise<void> => {
+async function updateAdminBookingStatus(
+  req: Request,
+  res: Response,
+  ops: PaymentOperations,
+  deferred: Array<() => Promise<unknown>>,
+): Promise<Record<string, unknown> | undefined> {
+  const redemptionOptions = {
+    connection: ops.db,
+    deferNotification: (send: () => Promise<unknown>) => {
+      deferred.push(send);
+    },
+  };
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const { status } = req.body as { status: string };
@@ -918,7 +936,7 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
     return;
   }
 
-  const [existing] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+  const [existing] = await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Booking not found" });
     return;
@@ -1000,11 +1018,47 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
 
   if (status === "cancelled") {
     const stripe = getStripe();
-    const needsInvoiceVoid = existing.status === "invoiced" && !!existing.stripeInvoiceId;
+    const invoiceAttempts = await ops.attempts("invoice");
+    if (
+      invoiceAttempts.some(
+        (attempt) =>
+          !["expired", "superseded"].includes(attempt.status) &&
+          attempt.steps.invoice &&
+          !attempt.steps.invoice.resultId &&
+          !attempt.steps.invoice.rejected,
+      )
+    ) {
+      throw new PaymentOperationError(
+        "The invoice outcome is still uncertain. Resume invoice setup or review it in Stripe before cancelling this booking.",
+      );
+    }
+    const invoiceId =
+      existing.stripeInvoiceId ||
+      invoiceAttempts.find(
+        (attempt) =>
+          !["expired", "superseded"].includes(attempt.status) && attempt.steps.invoice?.resultId,
+      )?.steps.invoice.resultId;
+    const needsInvoiceVoid =
+      ["partial", "pending_payment", "invoiced"].includes(existing.status) && !!invoiceId;
     const needsCardRefund =
-      existing.status === "paid" &&
+      ["paid", "partial", "pending_payment"].includes(existing.status) &&
       existing.paymentMethod === "card" &&
       !!existing.stripePaymentIntentId;
+
+    if (
+      !stripe &&
+      existing.stripeSessionId &&
+      ["partial", "pending_payment"].includes(existing.status)
+    ) {
+      throw new PaymentOperationError(
+        "Stripe is not configured; the open checkout cannot be closed safely.",
+        503,
+      );
+    }
+
+    if (stripe && !needsCardRefund && ["partial", "pending_payment"].includes(existing.status)) {
+      await closePendingCheckoutsForInvoice(stripe, ops, existing);
+    }
 
     if (!stripe && (needsInvoiceVoid || needsCardRefund)) {
       stripeAction = "failed";
@@ -1014,7 +1068,12 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
       );
     } else if (stripe && needsInvoiceVoid) {
       try {
-        await stripe.invoices.voidInvoice(existing.stripeInvoiceId!);
+        const current = await stripe.invoices.retrieve(invoiceId!);
+        if (current.status === "draft") await stripe.invoices.del(invoiceId!);
+        else if (["open", "uncollectible"].includes(current.status || ""))
+          await stripe.invoices.voidInvoice(invoiceId!);
+        else if (current.status !== "void")
+          throw new Error("Invoice is paid or its cancellation status is uncertain");
         stripeAction = "invoice_voided";
       } catch (err) {
         logger.error({ err, bookingId: id }, "Failed to void Stripe invoice on cancellation");
@@ -1030,6 +1089,13 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
         stripeAction = "failed";
       }
     }
+    if (stripeAction === "failed") {
+      res.status(502).json({
+        error: "Stripe cancellation could not be verified; booking status was not changed",
+        stripeAction,
+      });
+      return;
+    }
   }
 
   let sponsorAllocationRestored = false;
@@ -1039,7 +1105,7 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
     terminalStatuses.has(existing.status) &&
     activeStatuses.has(finalStatus)
   ) {
-    sponsorAllocationRestored = await restoreSponsorRedemption(existing.id);
+    sponsorAllocationRestored = await restoreSponsorRedemption(existing.id, redemptionOptions);
     if (!sponsorAllocationRestored) {
       res.status(409).json({
         error: "This sponsor allocation no longer has capacity, so the booking cannot be restored",
@@ -1056,7 +1122,7 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
       terminalStatuses.has(existing.status) &&
       activeStatuses.has(finalStatus)
     ) {
-      const restored = await db.transaction(async (tx) => {
+      const restored = await ops.db.transaction(async (tx) => {
         await tx.execute(sql`SELECT id FROM sponsors WHERE id = ${existing.sponsorId} FOR UPDATE`);
         const [sponsor] = await tx
           .select({ staffAllocation: sponsorsTable.staffAllocation })
@@ -1093,7 +1159,7 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
       }
       updated = restored;
     } else {
-      [updated] = await db
+      [updated] = await ops.db
         .update(bookingsTable)
         .set({
           status: finalStatus as typeof existing.status,
@@ -1105,7 +1171,11 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
     }
   } catch (error) {
     if (sponsorAllocationRestored) {
-      await releaseSponsorRedemption(existing.id, "admin_restore_database_update_failed");
+      await releaseSponsorRedemption(
+        existing.id,
+        "admin_restore_database_update_failed",
+        redemptionOptions,
+      );
     }
     throw error;
   }
@@ -1113,22 +1183,45 @@ router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Pro
   if (
     typeof existing.sponsorId === "number" &&
     existing.registrationSource !== "sponsor_staff" &&
-    activeStatuses.has(existing.status) &&
     terminalStatuses.has(finalStatus)
   ) {
-    await releaseSponsorRedemption(existing.id, `admin_status_${finalStatus}`);
+    await releaseSponsorRedemption(existing.id, `admin_status_${finalStatus}`, redemptionOptions);
   }
 
-  await logAdminAction({
-    type: "admin_booking_status_changed",
-    bookingId: id,
-    summary: `Booking ${existing.orderReference || `#${id}`}: ${existing.status} → ${finalStatus}`,
-    before: { status: existing.status },
-    after: { status: finalStatus },
-    meta: { stripeAction, requestedStatus: status },
-  });
+  deferred.push(() =>
+    logAdminAction({
+      type: "admin_booking_status_changed",
+      bookingId: id,
+      summary: `Booking ${existing.orderReference || `#${id}`}: ${existing.status} → ${finalStatus}`,
+      before: { status: existing.status },
+      after: { status: finalStatus },
+      meta: { stripeAction, requestedStatus: status },
+    }),
+  );
 
-  res.json({ ...formatBooking(updated), stripeAction });
+  return { ...formatBooking(updated), stripeAction };
+}
+
+router.patch("/admin/registrations/:id/status", adminAuth, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid booking ID" });
+    return;
+  }
+  const deferred: Array<() => Promise<unknown>> = [];
+  try {
+    const body = await withPaymentOperation(id, (ops) =>
+      updateAdminBookingStatus(req, res, ops, deferred),
+    );
+    for (const send of deferred)
+      await send().catch((err) =>
+        logger.error({ err, bookingId: id }, "Admin status notification needs retry"),
+      );
+    if (body) res.json(body);
+  } catch (err) {
+    if (!(err instanceof PaymentOperationError)) throw err;
+    res.status(err.status).json({ error: err.message, stripeAction: "failed" });
+  }
 });
 
 router.delete("/admin/registrations", adminAuth, async (req, res): Promise<void> => {
@@ -1723,6 +1816,7 @@ router.get("/admin/activity", adminAuth, async (req, res): Promise<void> => {
     .from(activityLogTable)
     .leftJoin(attendeesTable, eq(activityLogTable.attendeeId, attendeesTable.id))
     .leftJoin(bookingsTable, eq(activityLogTable.bookingId, bookingsTable.id))
+    .where(notInArray(activityLogTable.type, ["_stripe_payment_attempt"]))
     .orderBy(desc(activityLogTable.createdAt))
     .limit(200);
 

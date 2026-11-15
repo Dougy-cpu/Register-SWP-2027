@@ -3,12 +3,26 @@ import {
   attendeesTable,
   bookingsTable,
   db,
+  type DbConnection,
   promoCodesTable,
   sponsorPromoCodesTable,
   sponsorRedemptionsTable,
 } from "@workspace/db";
 import { incrementPromoUsage, type DbExecutor } from "./pricing";
 import { sendSponsorInternalNotification } from "./sponsor-email";
+
+interface RedemptionOptions {
+  connection?: typeof db | DbConnection;
+  deferNotification?: (send: () => Promise<unknown>) => void;
+}
+
+async function redemptionNotification(
+  options: RedemptionOptions,
+  send: () => Promise<unknown>,
+): Promise<void> {
+  if (options.deferNotification) options.deferNotification(send);
+  else await send();
+}
 
 async function reserveWithExecutor(
   code: string,
@@ -91,8 +105,9 @@ export async function reservePromoUsageForBooking(
 export async function releaseSponsorRedemption(
   bookingId: number,
   reason: string,
+  options: RedemptionOptions = {},
 ): Promise<boolean> {
-  const result = await db.transaction(async (tx) => {
+  const result = await (options.connection || db).transaction(async (tx) => {
     const released = await tx
       .update(sponsorRedemptionsTable)
       .set({ status: "released", releasedAt: new Date(), releaseReason: reason })
@@ -120,18 +135,23 @@ export async function releaseSponsorRedemption(
     return row?.sponsorId ?? null;
   });
   if (result) {
-    await sendSponsorInternalNotification({
-      sponsorId: result,
-      category: "passes",
-      event: "Sponsor pass released",
-      summary: `Booking #${bookingId} released its sponsor allocation (${reason}).`,
-    });
+    await redemptionNotification(options, () =>
+      sendSponsorInternalNotification({
+        sponsorId: result,
+        category: "passes",
+        event: "Sponsor pass released",
+        summary: `Booking #${bookingId} released its sponsor allocation (${reason}).`,
+      }),
+    );
   }
   return true;
 }
 
-export async function restoreSponsorRedemption(bookingId: number): Promise<boolean> {
-  const result = await db.transaction(async (tx) => {
+export async function restoreSponsorRedemption(
+  bookingId: number,
+  options: RedemptionOptions = {},
+): Promise<boolean> {
+  const result = await (options.connection || db).transaction(async (tx) => {
     await tx.execute(
       sql`SELECT id FROM sponsor_redemptions WHERE booking_id = ${bookingId} FOR UPDATE`,
     );
@@ -166,12 +186,15 @@ export async function restoreSponsorRedemption(bookingId: number): Promise<boole
     return { success: true, sponsorId: redemption.sponsorId, units: redemption.units };
   });
   if (result.success && result.sponsorId) {
-    await sendSponsorInternalNotification({
-      sponsorId: result.sponsorId,
-      category: "passes",
-      event: "Sponsor pass restored",
-      summary: `Booking #${bookingId} was deliberately restored and ${result.units} ${result.units === 1 ? "pass was" : "passes were"} re-reserved.`,
-    });
+    const sponsorId = result.sponsorId;
+    await redemptionNotification(options, () =>
+      sendSponsorInternalNotification({
+        sponsorId,
+        category: "passes",
+        event: "Sponsor pass restored",
+        summary: `Booking #${bookingId} was deliberately restored and ${result.units} ${result.units === 1 ? "pass was" : "passes were"} re-reserved.`,
+      }),
+    );
   }
   return result.success;
 }

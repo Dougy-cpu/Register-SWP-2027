@@ -18,18 +18,31 @@ import {
 } from "../lib/email";
 import { syncBookingToSheets } from "../lib/google-sheets";
 import { logger } from "../lib/logger";
-import { reissueBookingInvoice, applyReissueInvoiceResultTx } from "../lib/invoice";
+import {
+  reissueBookingInvoice,
+  applyReissueInvoiceResultTx,
+  isInvoiceBeingReplaced,
+} from "../lib/invoice";
 import { claimBookingConfirmation, runConfirmationSideEffects } from "../lib/booking-confirmation";
 import { defaultOrderRef } from "../lib/order-reference";
 import { getStripe } from "../lib/stripe-client";
 import {
   checkoutSessionBookingId,
   validateCheckoutSessionOwnership,
-  validateCompletedCheckoutSession,
+  STRIPE_REGISTRATION_APP,
 } from "../lib/stripe-checkout-validation";
-import { getOrCreateStripeCustomer } from "../lib/stripe-customer";
-import { buildStripePaymentDetails, getStripeBillingDetails } from "../lib/stripe-payment-details";
-import { syncStripeInvoicePaymentDetails } from "../lib/stripe-invoice-payments";
+import { buildStripePaymentDetails } from "../lib/stripe-payment-details";
+import {
+  invoicePaymentFailureReason,
+  syncStripeInvoicePaymentDetails,
+} from "../lib/stripe-invoice-payments";
+
+import { createOrResumeCheckout, settleCheckoutPayment } from "../lib/stripe-checkout";
+import {
+  PaymentOperationBusy,
+  PaymentOperationError,
+  withPaymentOperation,
+} from "../lib/payment-operations";
 
 const DECLINE_CODE_LABELS: Record<string, string> = {
   authentication_required: "Strong customer authentication required - please retry your payment",
@@ -77,100 +90,75 @@ const router: IRouter = Router();
  */
 async function handleInvoicePaidEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
   const invoice = event.data.object as Stripe.Invoice;
-  const invoiceId = invoice.id;
-  if (!invoiceId) {
-    logger.warn({ eventType: event.type }, "invoice paid event without invoice id, skipping");
-    return;
-  }
-
-  const [booking] = await db
+  if (!invoice.id) return;
+  const [candidate] = await db
     .select()
     .from(bookingsTable)
-    .where(eq(bookingsTable.stripeInvoiceId, invoiceId));
-
-  if (!booking) {
-    logger.info(
-      { invoiceId, eventType: event.type },
-      "invoice paid: no matching booking, skipping",
-    );
+    .where(eq(bookingsTable.stripeInvoiceId, invoice.id));
+  if (!candidate) {
+    logger.info({ invoiceId: invoice.id }, "Invoice payment has no matching booking");
     return;
   }
-
-  const attendees = await db
-    .select()
-    .from(attendeesTable)
-    .where(eq(attendeesTable.bookingId, booking.id));
-  const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
-  let paymentIntentId: string | null = null;
-  let paymentDetailsError: unknown;
-  try {
-    if (!lead) throw new Error("No attendee found for invoice payment details");
-    paymentIntentId = await syncStripeInvoicePaymentDetails(
-      stripe,
-      invoice,
-      buildStripePaymentDetails(booking, lead, "invoice", invoice),
-      (resolvedId) => {
-        paymentIntentId = resolvedId;
-      },
-    );
-  } catch (err) {
-    paymentDetailsError = err;
-    logger.error(
-      { err, invoiceId, bookingId: booking.id },
-      "Invoice payment label sync needs retry",
-    );
-  }
-
-  // Cache the latest Stripe status no matter what - even if we already processed,
-  // a fresh sync is cheap and keeps the badge accurate.
-  await db
-    .update(bookingsTable)
-    .set({
-      stripeInvoiceStatus: "paid",
-      stripeInvoiceStatusSyncedAt: new Date(),
-      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
-    })
-    .where(eq(bookingsTable.id, booking.id));
-
-  // Atomic claim. We allow the flip from "invoiced" "paid" (the typical
-  // happy path: invoice issued, then customer pays the hosted Stripe link)
-  // as well as from partial/pending_payment in case the invoice flow skipped
-  // those intermediates. paymentMethod stays "invoice" so invoice-specific
-  // UI keeps rendering after settlement.
-  const claimed = await claimBookingConfirmation(
-    booking.id,
-    "paid",
-    {
-      paidConfirmationEmailSentAt: new Date(),
-      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
-    },
-    ["partial", "pending_payment", "invoiced"],
-  );
-
-  if (claimed) {
-    logger.info(
+  let detailsError: unknown;
+  const applied = await withPaymentOperation(candidate.id, async (ops) => {
+    const [booking] = await ops.db
+      .select()
+      .from(bookingsTable)
+      .where(eq(bookingsTable.id, candidate.id));
+    if (!booking || booking.stripeInvoiceId !== invoice.id) return false;
+    if (!["partial", "pending_payment", "invoiced", "paid"].includes(booking.status)) {
+      await ops.alert("An invoice payment was received for a closed booking", {
+        invoiceId: invoice.id,
+      });
+      return false;
+    }
+    const attendees = await ops.db
+      .select()
+      .from(attendeesTable)
+      .where(eq(attendeesTable.bookingId, booking.id));
+    const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
+    let paymentIntentId: string | null = null;
+    try {
+      if (!lead) throw new Error("No attendee found for invoice payment details");
+      paymentIntentId = await syncStripeInvoicePaymentDetails(
+        stripe,
+        invoice,
+        buildStripePaymentDetails(booking, lead, "invoice", invoice),
+        (id) => {
+          paymentIntentId = id;
+        },
+      );
+    } catch (err) {
+      detailsError = err;
+      logger.error(
+        { err, invoiceId: invoice.id, bookingId: booking.id },
+        "Invoice payment labels need retry",
+      );
+    }
+    await ops.db
+      .update(bookingsTable)
+      .set({
+        stripeInvoiceStatus: "paid",
+        stripeInvoiceStatusSyncedAt: new Date(),
+        ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
+      })
+      .where(eq(bookingsTable.id, booking.id));
+    await claimBookingConfirmation(
+      booking.id,
+      "paid",
       {
-        bookingId: booking.id,
-        invoiceId,
-        orderRef: booking.orderReference,
-        paymentIntentId,
-        eventType: event.type,
+        paidConfirmationEmailSentAt: new Date(),
+        ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
       },
-      "invoice paid: booking claimed paid, running side-effects",
+      ["partial", "pending_payment", "invoiced"],
+      ops.db,
     );
-  } else {
-    // Already paid - fall through to side-effect retry so a stuck flag from
-    // a previous webhook delivery (e.g. SMTP blip) gets a fresh chance.
-    logger.info(
-      { bookingId: booking.id, invoiceId, eventType: event.type },
-      "invoice paid: already confirmed - retrying any unfinished side-effects",
-    );
-  }
-
-  await runConfirmationSideEffects(booking.id);
-  // Stripe retries this event on a labelling failure. Booking confirmation remains
-  // idempotent, and customer delivery is not held up by reconciliation metadata.
-  if (paymentDetailsError) throw paymentDetailsError;
+    return true;
+  });
+  if (applied) await runConfirmationSideEffects(candidate.id);
+  // Keep confirmation independent of optional labels. Stripe replays any
+  // failed label update without issuing a second confirmation.
+  if (detailsError) throw detailsError;
 }
 
 async function isPromoOncePerCustomerViolation(
@@ -232,85 +220,33 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
     return;
   }
 
-  const passLabels: Record<string, string> = {
-    single: "Workforce Pass, SWP Summit 2027",
-    team: "Team Pass, SWP Summit 2027",
-    business: "Business Pass, SWP Summit 2027",
-  };
-
-  const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
-  const vatAmount = parseFloat(booking.vatAmount?.toString() || "0");
-
-  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-    {
-      price_data: {
-        currency: "gbp",
-        product_data: {
-          name: passLabels[booking.passType] || booking.passType,
-          description: `Wednesday, 3 March 2027, 1 Basinghall Avenue, London, ${booking.quantity} ${booking.quantity === 1 ? "pass" : "passes"}`,
-        },
-        unit_amount: Math.round(subtotalAfterDiscounts * 100),
-      },
-      quantity: 1,
-    },
-    {
-      price_data: {
-        currency: "gbp",
-        product_data: {
-          name: "VAT (20%)",
-        },
-        unit_amount: Math.round(vatAmount * 100),
-      },
-      quantity: 1,
-    },
-  ];
-
-  let session: import("stripe").Stripe.Checkout.Session;
   try {
-    const attendees = await db
-      .select()
-      .from(attendeesTable)
-      .where(eq(attendeesTable.bookingId, booking.id));
-    const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
-    if (!lead) {
-      res.status(400).json({ error: "No attendee found for booking" });
+    const session = await withPaymentOperation(booking.id, async (ops) => {
+      const [fresh] = await ops.db
+        .select()
+        .from(bookingsTable)
+        .where(eq(bookingsTable.id, booking.id));
+      if (!fresh || fresh.sessionToken !== sessionHeader)
+        throw new PaymentOperationError("Forbidden - invalid booking session", 403);
+      const attendees = await ops.db
+        .select()
+        .from(attendeesTable)
+        .where(eq(attendeesTable.bookingId, booking.id));
+      const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
+      if (!lead) throw new PaymentOperationError("No attendee found for booking", 400);
+      return createOrResumeCheckout(stripe, ops, fresh, lead, successUrl, cancelUrl);
+    });
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (err) {
+    if (err instanceof PaymentOperationError) {
+      res.status(err.status).json({ error: err.message });
       return;
     }
-    const details = buildStripePaymentDetails(booking, lead, "card");
-    const customer = await getOrCreateStripeCustomer(
-      stripe,
-      getStripeBillingDetails(booking, lead),
-      booking.id,
-    );
-    session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      client_reference_id: details.metadata.orderRef,
-      metadata: details.metadata,
-      customer: customer.id,
-      payment_intent_data: details,
+    logger.error({ err, bookingId }, "Stripe checkout setup failed; saved attempt can be retried");
+    res.status(502).json({
+      error: "Payment setup could not finish. Please retry to resume the same payment safely.",
     });
-  } catch (err) {
-    const e = err as { raw?: { message?: string }; message?: string };
-    const stripeMessage = e?.raw?.message || e?.message || "Stripe error";
-    logger.error({ err, bookingId }, "Stripe checkout session creation failed");
-    res.status(502).json({ error: `Payment provider error: ${stripeMessage}` });
-    return;
   }
-
-  await db
-    .update(bookingsTable)
-    .set({
-      stripeSessionId: session.id,
-      status: "pending_payment",
-      orderReference: booking.orderReference || defaultOrderRef(booking.id),
-    })
-    .where(eq(bookingsTable.id, booking.id));
-
-  res.json({ sessionId: session.id, url: session.url });
 });
 
 router.post("/stripe/webhook", async (req, res): Promise<void> => {
@@ -346,58 +282,22 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const bookingId = checkoutSessionBookingId(session);
-
-    if (!bookingId) {
-      logger.warn({ sessionId: session.id }, "Stripe checkout event has an invalid booking ID");
-    } else {
-      const [existing] = await db
-        .select()
-        .from(bookingsTable)
-        .where(eq(bookingsTable.id, bookingId));
-
-      if (!existing) {
-        logger.warn({ bookingId }, "Stripe webhook: booking not found, skipping");
-        res.json({ received: true });
-        return;
-      }
-
-      const validation = validateCompletedCheckoutSession(session, existing);
-      if (!validation.ok) {
+    if (bookingId) {
+      try {
+        await withPaymentOperation(bookingId, (ops) => settleCheckoutPayment(stripe, ops, session));
+      } catch (err) {
+        if (!(err instanceof PaymentOperationError) || err instanceof PaymentOperationBusy)
+          throw err;
         logger.warn(
-          { bookingId, sessionId: session.id, reason: validation.reason },
-          "Ignoring Stripe checkout event that does not match this booking",
+          { err, bookingId, sessionId: session.id },
+          "Checkout payment could not be applied automatically",
         );
         res.json({ received: true });
         return;
       }
-
-      if (validation.legacyMetadata) {
-        logger.info(
-          { bookingId, sessionId: session.id },
-          "Accepting legacy checkout session after exact Session ID validation",
-        );
-      }
-
-      const orderRef = existing.orderReference || defaultOrderRef(bookingId);
-
-      // Atomic claim: only the first webhook delivery (or the racing
-      // /confirm-card-payment caller) actually flips status paid; concurrent
-      // duplicate events get back null and skip straight to side-effect retry.
-      const claimed = await claimBookingConfirmation(bookingId, "paid", {
-        currentStep: 5,
-        stripePaymentIntentId: validation.paymentIntentId,
-        orderReference: orderRef,
-        paymentMethod: "card",
-      });
-
-      if (!claimed) {
-        logger.info(
-          { bookingId, status: existing.status },
-          "checkout.session.completed: already confirmed - retrying any unfinished side-effects",
-        );
-      }
-
       await runConfirmationSideEffects(bookingId);
+    } else {
+      logger.warn({ sessionId: session.id }, "Stripe checkout event has an invalid booking ID");
     }
   }
 
@@ -410,41 +310,40 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     await handleInvoicePaidEvent(stripe, event);
   }
 
-  // Invoice cancelled in Stripe (manually voided or via API). Cache the status so the
-  // UI badge reflects "voided", and cancel the booking if it isn't already in a terminal
-  // state. We deliberately don't refund anything here (voiding only applies to unpaid
-  // invoices in Stripe).
+  // Replacement invoices deliberately void their predecessors. A delayed
+  // callback must not cancel the replacement booking or release its allocation.
   if (event.type === "invoice.voided") {
     const invoice = event.data.object as Stripe.Invoice;
-    const invoiceId = invoice.id;
-    const [booking] = await db
+    const [candidate] = await db
       .select()
       .from(bookingsTable)
-      .where(eq(bookingsTable.stripeInvoiceId, invoiceId));
-    if (booking) {
-      const updates: Partial<typeof bookingsTable.$inferInsert> = {
-        stripeInvoiceStatus: "void",
-        stripeInvoiceStatusSyncedAt: new Date(),
-        updatedAt: new Date(),
-      };
-      if (booking.status !== "cancelled" && booking.status !== "refunded") {
-        updates.status = "cancelled";
-      }
-      await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, booking.id));
-      if (updates.status === "cancelled") {
-        await releaseSponsorRedemption(booking.id, "stripe_invoice_voided");
-      }
-      logger.info(
-        { bookingId: booking.id, invoiceId, prevStatus: booking.status },
-        "invoice.voided: booking updated",
-      );
-      try {
-        await syncBookingToSheets(booking.id);
-      } catch (err) {
-        logger.error({ err, bookingId: booking.id }, "invoice.voided: sheets sync failed");
-      }
-    } else {
-      logger.info({ invoiceId }, "invoice.voided: no matching booking, skipping");
+      .where(eq(bookingsTable.stripeInvoiceId, invoice.id));
+    let cancelled = false;
+    if (candidate) {
+      await withPaymentOperation(candidate.id, async (ops) => {
+        const [booking] = await ops.db
+          .select()
+          .from(bookingsTable)
+          .where(eq(bookingsTable.id, candidate.id));
+        if (
+          !booking ||
+          booking.stripeInvoiceId !== invoice.id ||
+          (await isInvoiceBeingReplaced(ops, invoice.id))
+        )
+          return;
+        cancelled = !["paid", "cancelled", "refunded", "disputed"].includes(booking.status);
+        await ops.db
+          .update(bookingsTable)
+          .set({
+            stripeInvoiceStatus: "void",
+            stripeInvoiceStatusSyncedAt: new Date(),
+            updatedAt: new Date(),
+            ...(cancelled ? { status: "cancelled" } : {}),
+          })
+          .where(eq(bookingsTable.id, booking.id));
+      });
+      if (cancelled) await releaseSponsorRedemption(candidate.id, "stripe_invoice_voided");
+      await syncBookingToSheets(candidate.id);
     }
   }
 
@@ -474,47 +373,53 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     }
   }
 
-  // Stripe Checkout session expired without payment - reset booking to "partial" so
-  // the customer can retry, and email them to let them know.
+  // Only the current, naturally expired checkout can reset an unpaid booking.
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
     const bookingId = checkoutSessionBookingId(session);
-
+    let reset = false;
     if (bookingId) {
-      const [booking] = await db
-        .select()
-        .from(bookingsTable)
-        .where(eq(bookingsTable.id, bookingId));
-
-      if (booking) {
-        const validation = validateCheckoutSessionOwnership(session, booking);
-        if (!validation.ok) {
-          logger.warn(
-            { bookingId, sessionId: session.id, reason: validation.reason },
-            "Ignoring expired Stripe checkout event that does not match this booking",
-          );
-          res.json({ received: true });
+      await withPaymentOperation(bookingId, async (ops) => {
+        const [booking] = await ops.db
+          .select()
+          .from(bookingsTable)
+          .where(eq(bookingsTable.id, bookingId));
+        if (
+          !booking ||
+          booking.status !== "pending_payment" ||
+          !validateCheckoutSessionOwnership(session, booking).ok
+        )
           return;
-        }
-      }
-
-      if (booking && booking.status === "pending_payment") {
-        await db
+        const attempts = await ops.attempts("card");
+        if (
+          attempts.some(
+            (attempt) =>
+              attempt.steps.checkout?.resultId === session.id &&
+              ["expired", "superseded"].includes(attempt.status),
+          )
+        )
+          return;
+        if (
+          attempts.some(
+            (attempt) =>
+              !["expired", "superseded"].includes(attempt.status) &&
+              attempt.steps.checkout?.resultId !== session.id,
+          )
+        )
+          return;
+        if (
+          (await ops.attempts("invoice")).some(
+            (attempt) => !["expired", "superseded"].includes(attempt.status),
+          )
+        )
+          return;
+        await ops.db
           .update(bookingsTable)
           .set({ status: "partial", stripeSessionId: null, updatedAt: new Date() })
           .where(eq(bookingsTable.id, bookingId));
-
-        logger.info({ bookingId }, "checkout.session.expired: booking reset to partial");
-
-        try {
-          await sendCheckoutExpiredEmail(bookingId);
-        } catch (err) {
-          logger.error(
-            { err, bookingId },
-            "checkout.session.expired: failed to send expired email",
-          );
-        }
-      }
+        reset = true;
+      });
+      if (reset) await sendCheckoutExpiredEmail(bookingId);
     }
   }
 
@@ -585,27 +490,12 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
       .from(bookingsTable)
       .where(eq(bookingsTable.stripeInvoiceId, invoiceId));
 
-    if (booking) {
-      // Attempt to retrieve the payment intent to get the specific decline reason
+    if (booking && !["paid", "cancelled", "refunded", "disputed"].includes(booking.status)) {
       let declineReason: string | undefined;
-      const piId =
-        typeof (invoice as unknown as Record<string, unknown>).payment_intent === "string"
-          ? ((invoice as unknown as Record<string, unknown>).payment_intent as string)
-          : null;
-      if (piId && stripe) {
-        try {
-          const pi = await stripe.paymentIntents.retrieve(piId);
-          const err = pi.last_payment_error;
-          if (err) {
-            const code = err.decline_code || err.code || "";
-            declineReason = DECLINE_CODE_LABELS[code] || err.message || undefined;
-          }
-        } catch (piErr) {
-          logger.warn(
-            { piErr, piId },
-            "invoice.payment_failed: could not retrieve payment intent for decline reason",
-          );
-        }
+      if (stripe) {
+        // Both legacy payment_intent and modern InvoicePayment relationships
+        // resolve through the same read-only lookup used for reconciliation.
+        declineReason = await invoicePaymentFailureReason(stripe, invoice, DECLINE_CODE_LABELS);
       }
 
       const attemptCount = invoice.attempt_count ?? undefined;
@@ -705,10 +595,26 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     const declineMessage = DECLINE_CODE_LABELS[declineCode] || err?.message || "Unknown reason";
 
     // Try to identify the booking for richer log context
-    const [booking] = await db
+    const [storedBooking] = await db
       .select()
       .from(bookingsTable)
       .where(eq(bookingsTable.stripePaymentIntentId, piId));
+    let booking: typeof storedBooking | undefined = storedBooking;
+
+    const candidateId = checkoutSessionBookingId(pi);
+    if (!booking && candidateId && pi.metadata?.registrationApp === STRIPE_REGISTRATION_APP) {
+      booking = await withPaymentOperation(candidateId, async (ops) => {
+        const attempt = (await ops.attempts("card")).find(
+          (item) => item.id === pi.metadata.paymentAttemptId && item.steps.checkout,
+        );
+        const customer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id;
+        if (!attempt || !customer || customer !== attempt.steps.customer?.resultId)
+          return undefined;
+        return (
+          await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, candidateId))
+        )[0];
+      });
+    }
 
     logger.info(
       { piId, declineCode, declineMessage, bookingId: booking?.id ?? null },
@@ -748,78 +654,23 @@ router.post("/stripe/confirm-card-payment", async (req, res): Promise<void> => {
     return;
   }
 
-  if (existing.status === "paid" || existing.status === "invoiced") {
-    logger.info(
-      { bookingId: id, status: existing.status },
-      "confirm-card-payment: already processed - retrying any unfinished side-effects",
-    );
-    // Replay safety: if a previous confirm/webhook left a side-effect stuck
-    // (e.g. SMTP blip), running it again is the customer's only way to
-    // trigger a retry without admin intervention.
-    await runConfirmationSideEffects(id);
-    res.json({ alreadyProcessed: true, orderReference: existing.orderReference || "" });
-    return;
-  }
-
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-    if (session.payment_status !== "paid") {
-      res.status(400).json({ error: "Payment not yet completed" });
-      return;
-    }
-
-    // Verify this Stripe session was created for this booking (prevents cross-session abuse)
-    const sessionBookingId = session.metadata?.bookingId;
-    if (!sessionBookingId || String(sessionBookingId) !== String(id)) {
-      logger.warn(
-        { bookingId: id, sessionBookingId, sessionId },
-        "confirm-card-payment: session/booking mismatch",
-      );
-      res.status(403).json({ error: "Stripe session does not belong to this booking" });
-      return;
-    }
-
-    // Verify the stored stripeSessionId matches (if we have one)
-    if (existing.stripeSessionId && existing.stripeSessionId !== sessionId) {
-      logger.warn(
-        { bookingId: id, storedSessionId: existing.stripeSessionId, sessionId },
-        "confirm-card-payment: sessionId mismatch",
-      );
-      res.status(403).json({ error: "Stripe session ID does not match booking record" });
-      return;
-    }
-
-    const orderRef = existing.orderReference || defaultOrderRef(id);
-
-    // Atomic claim of the status flip - same primitive as the webhook path so
-    // a race between the browser and the webhook can never double-confirm.
-    const claimed = await claimBookingConfirmation(id, "paid", {
-      currentStep: 5,
-      stripePaymentIntentId: session.payment_intent as string | null,
-      orderReference: orderRef,
-      paymentMethod: "card",
+    const result = await withPaymentOperation(id, async (ops) => {
+      const [fresh] = await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+      if (!fresh || fresh.sessionToken !== sessionHeader)
+        throw new PaymentOperationError("Forbidden - invalid booking session", 403);
+      return settleCheckoutPayment(stripe, ops, session);
     });
-
-    if (claimed) {
-      logger.info(
-        { bookingId: id, orderRef },
-        "confirm-card-payment: booking confirmed - running side-effects",
-      );
-    } else {
-      logger.info(
-        { bookingId: id, orderRef },
-        "confirm-card-payment: webhook beat us - retrying any unfinished side-effects",
-      );
-    }
-
     await runConfirmationSideEffects(id);
-    res.json({ alreadyProcessed: !claimed, orderReference: orderRef });
+    res.json(result);
   } catch (err) {
-    const e = err as { raw?: { message?: string }; message?: string };
-    const msg = e?.raw?.message || e?.message || "Stripe error";
-    logger.error({ err, bookingId: id }, "confirm-card-payment: failed to retrieve session");
-    res.status(502).json({ error: `Failed to verify payment: ${msg}` });
+    if (err instanceof PaymentOperationError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    logger.error({ err, bookingId: id }, "confirm-card-payment: verification needs retry");
+    res.status(502).json({ error: "Payment verification could not finish. Please retry shortly." });
   }
 });
 
@@ -852,151 +703,103 @@ router.post("/stripe/create-invoice", async (req, res): Promise<void> => {
     return;
   }
 
-  if (booking.status === "paid" || (booking.status === "invoiced" && booking.stripeInvoiceId)) {
-    res.json({
-      invoiceId: booking.stripeInvoiceId || `manual-${booking.orderReference}`,
-      invoiceUrl: booking.stripeInvoicePdfUrl || null,
-      paymentUrl: booking.stripeInvoicePaymentUrl || null,
-      invoiceReference: booking.orderReference || "",
-      alreadyProcessed: true,
-    });
-    return;
-  }
-
   if (await isPromoOncePerCustomerViolation(booking.id, booking.promoCode)) {
     res.status(400).json({
       error: "This promo code has already been used on a previous booking with this email",
     });
     return;
   }
-
-  const attendees = await db.select().from(attendeesTable).where(eq(attendeesTable.bookingId, id));
-  const lead = attendees.find((a) => a.isLead) || attendees[0];
-
-  if (!lead) {
-    res.status(400).json({ error: "No attendee found for booking" });
-    return;
-  }
-
-  const orderRef = booking.orderReference || defaultOrderRef(id);
-  let sponsorPromoReserved = false;
-  let invoicePersisted = false;
-  let externalInvoiceIssued = false;
-
   try {
-    // Sponsor allocations are reserved before Stripe creates an invoice. This
-    // prevents an externally-issued discounted invoice from being created
-    // after a concurrent VIP booking has consumed the final allocation.
-    if (booking.promoCode) {
-      const [sponsorMapping] = await db
-        .select({ sponsorId: sponsorPromoCodesTable.sponsorId })
-        .from(promoCodesTable)
-        .innerJoin(
-          sponsorPromoCodesTable,
-          eq(sponsorPromoCodesTable.promoCodeId, promoCodesTable.id),
-        )
-        .where(eq(promoCodesTable.code, booking.promoCode));
-      if (sponsorMapping?.sponsorId) {
-        sponsorPromoReserved = await reservePromoUsageForBooking(
-          booking.promoCode,
-          booking.quantity,
-          booking.id,
-        );
-        if (!sponsorPromoReserved) {
-          res.status(409).json({
-            error: "This sponsor pass allocation no longer has enough availability",
-          });
-          return;
+    const response = await withPaymentOperation(id, async (ops) => {
+      const [fresh] = await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+      if (!fresh || fresh.sessionToken !== sessionHeader)
+        throw new PaymentOperationError("Forbidden - invalid booking session", 403);
+      const unfinished = (await ops.attempts("invoice")).some((attempt) =>
+        ["pending", "review"].includes(attempt.status),
+      );
+      if (
+        fresh.status === "paid" ||
+        (fresh.status === "invoiced" && fresh.stripeInvoiceId && !unfinished)
+      ) {
+        return {
+          invoiceId: fresh.stripeInvoiceId || `manual-${fresh.orderReference}`,
+          invoiceUrl: fresh.stripeInvoicePdfUrl || null,
+          paymentUrl: fresh.stripeInvoicePaymentUrl || null,
+          invoiceReference: fresh.orderReference || "",
+          alreadyProcessed: true,
+        };
+      }
+      if (!["partial", "pending_payment", "invoiced"].includes(fresh.status))
+        throw new PaymentOperationError("This booking is closed. An invoice cannot be created.");
+      const attendees = await ops.db
+        .select()
+        .from(attendeesTable)
+        .where(eq(attendeesTable.bookingId, id));
+      if (!attendees.length) throw new PaymentOperationError("No attendee found for booking", 400);
+      // Reserve sponsor capacity before making an invoice payable. Keep the
+      // reservation on failure: a timed-out Stripe call may already have succeeded.
+      // A retry resumes it; deliberate cancellation releases it through the normal flow.
+      if (fresh.promoCode) {
+        const [mapping] = await ops.db
+          .select({ sponsorId: sponsorPromoCodesTable.sponsorId })
+          .from(promoCodesTable)
+          .innerJoin(
+            sponsorPromoCodesTable,
+            eq(sponsorPromoCodesTable.promoCodeId, promoCodesTable.id),
+          )
+          .where(eq(promoCodesTable.code, fresh.promoCode));
+        if (mapping?.sponsorId) {
+          const reserved = await ops.db.transaction((tx) =>
+            reservePromoUsageForBooking(fresh.promoCode!, fresh.quantity, id, tx),
+          );
+          if (!reserved)
+            throw new PaymentOperationError(
+              "This sponsor pass allocation no longer has enough availability",
+            );
         }
       }
-    }
-
-    // Delegate the customer-sync + invoice-create + finalize + send to the
-    // shared helper so the create and re-issue flows can never drift apart.
-    // The helper performs ONLY external Stripe ops - the resulting booking-row
-    // writes are applied below inside a transaction so they commit atomically
-    // with the promo counter increment.
-    const result = await reissueBookingInvoice(stripe, id);
-    externalInvoiceIssued = true;
-    if (result.alreadyPaid) {
-      // Persist status="paid" (if not already) atomically in case our DB row
-      // was still showing partial/invoiced.
-      await db.transaction(async (tx) => {
-        await applyReissueInvoiceResultTx(tx, id, result);
+      const result = await reissueBookingInvoice(stripe, id, ops);
+      const orderRef = fresh.orderReference || defaultOrderRef(id);
+      await ops.db.transaction(async (tx) => {
+        await applyReissueInvoiceResultTx(tx, id, result, {
+          currentStep: 5,
+          orderReference: orderRef,
+          paymentMethod: "invoice",
+        });
+        if (fresh.promoCode && !result.alreadyPaid && fresh.status !== "invoiced") {
+          const reserved = await reservePromoUsageForBooking(
+            fresh.promoCode,
+            fresh.quantity,
+            id,
+            tx,
+          );
+          if (!reserved)
+            logger.warn({ bookingId: id }, "Issued invoice requires promo allocation review");
+        }
       });
-      invoicePersisted = true;
-      const [refreshed] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
-      res.json({
-        invoiceId: refreshed.stripeInvoiceId || `manual-${refreshed.orderReference}`,
-        invoiceUrl: refreshed.stripeInvoicePdfUrl || null,
-        paymentUrl: refreshed.stripeInvoicePaymentUrl || null,
-        invoiceReference: refreshed.orderReference || "",
-        alreadyProcessed: true,
-      });
+      const [saved] = await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, id));
+      return {
+        invoiceId: saved.stripeInvoiceId || `manual-${orderRef}`,
+        invoiceUrl: saved.stripeInvoicePdfUrl || null,
+        paymentUrl: saved.stripeInvoicePaymentUrl || null,
+        invoiceReference: orderRef,
+        ...(result.alreadyPaid ? { alreadyProcessed: true } : {}),
+      };
+    });
+    await runConfirmationSideEffects(id);
+    res.json(response);
+  } catch (err) {
+    if (err instanceof PaymentOperationError) {
+      res.status(err.status).json({ error: err.message });
       return;
     }
-
-    // Atomic: status="invoiced" + invoice metadata + currentStep/orderRef/
-    // paymentMethod + promo counter increment all commit (or roll back)
-    // together. Eliminates the previous window where a crash between the
-    // helper's status write and the promo increment could leave them in
-    // inconsistent states.
-    await db.transaction(async (tx) => {
-      await applyReissueInvoiceResultTx(tx, id, result, {
-        currentStep: 5,
-        orderReference: orderRef,
-        paymentMethod: "invoice",
-      });
-
-      if (booking.promoCode) {
-        const reserved = await reservePromoUsageForBooking(
-          booking.promoCode,
-          booking.quantity,
-          booking.id,
-          tx,
-        );
-        if (!reserved) {
-          // The Stripe invoice has already been issued - log but do not throw.
-          logger.warn(
-            { bookingId: id, promoCode: booking.promoCode, quantity: booking.quantity },
-            "Promo cap exceeded after Stripe invoice issued - booking confirmed but usage not incremented",
-          );
-        }
-      }
+    logger.error(
+      { err, bookingId: id },
+      "Invoice setup failed; saved attempt and allocation remain available for retry",
+    );
+    res.status(502).json({
+      error: "Invoice setup could not finish. Please retry to resume the same invoice safely.",
     });
-    invoicePersisted = true;
-
-    // Run the same per-flag retry pipeline as the card paths so a failed
-    // confirmation email here is automatically retried on the next webhook
-    // (or admin redeliver) instead of being silently lost.
-    await runConfirmationSideEffects(id);
-
-    res.json({
-      invoiceId: result.invoiceId,
-      invoiceUrl: result.pdfUrl,
-      paymentUrl: result.paymentUrl,
-      invoiceReference: orderRef,
-    });
-    return;
-  } catch (err) {
-    if (sponsorPromoReserved && !externalInvoiceIssued && !invoicePersisted) {
-      await releaseSponsorRedemption(booking.id, "invoice_creation_failed").catch((releaseError) =>
-        logger.error(
-          { releaseError, bookingId: booking.id },
-          "Failed to release sponsor allocation after invoice creation failure",
-        ),
-      );
-    } else if (sponsorPromoReserved && externalInvoiceIssued && !invoicePersisted) {
-      logger.error(
-        { bookingId: booking.id },
-        "Stripe issued a sponsor invoice but local persistence failed; allocation remains reserved for manual reconciliation",
-      );
-    }
-    const e = err as { raw?: { message?: string }; message?: string };
-    const msg = e?.raw?.message || e?.message || "Stripe error";
-    logger.error({ err, bookingId: id }, "Failed to create Stripe invoice");
-    res.status(502).json({ error: `Failed to create invoice: ${msg}` });
-    return;
   }
 });
 
