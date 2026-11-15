@@ -288,6 +288,7 @@ describe("approved welcome design", () => {
       "Basinghall",
       "EC2V 5DD",
       "keynotes",
+      "When you arrive, just give your name at reception. We’ll have your pass ready for you.",
       "breakout",
       "AI in HR",
       "Happy Hour",
@@ -302,13 +303,15 @@ describe("approved welcome design", () => {
     expect(text).not.toContain("alex@example.invalid");
     expect(text).not.toContain("£");
     expect(text).not.toContain("conference pass and receipt are included");
+    expect(text).not.toMatch(/digital or printed copy|your booking organiser receives/i);
     expect(text.match(/Badge scanning and sponsor leads/g)).toHaveLength(1);
     expect(html).not.toMatch(/\{\{[a-zA-Z]/);
     expect(text).not.toContain("calendar.google");
   });
   it("does not promise a receipt to sponsor staff and still has a next action without a booking link", () => {
     const { text } = welcome({ registrationSource: "sponsor_staff" }, null);
-    expect(text).toContain("sponsor staff confirmation");
+    expect(text).toContain("give your name at reception");
+    expect(text).not.toContain("sponsor staff confirmation for check-in");
     expect(text).not.toContain("receipt");
     expect(text).toContain("dietary or accessibility requirements, contact");
   });

@@ -406,7 +406,6 @@ export function welcomeDesignVars(context: {
     context.booking,
     context.appBaseUrl || "https://register.swpsummit.com",
   );
-  const staff = context.booking?.registrationSource === "sponsor_staff";
   return {
     ...commonVars(context.settings, context.calendarHtml),
     "{{firstName}}": escape(context.firstName),
@@ -431,9 +430,8 @@ export function welcomeDesignVars(context: {
               "0",
             ),
         ),
-    "{{checkinDetails}}": staff
-      ? "Please bring a digital or printed copy of your sponsor staff confirmation for check-in."
-      : "Please bring a digital or printed copy of your booking confirmation for check-in. Your booking organiser receives the confirmation and any receipt or invoice separately.",
+    "{{checkinDetails}}":
+      "When you arrive, just give your name at reception. We’ll have your pass ready for you.",
     "{{badgeNotice}}": emailSection(
       heading("Badge scanning and sponsor leads", 16, "0 0 10px") +
         p(
