@@ -1,6 +1,5 @@
 ﻿import type Stripe from "stripe";
-import { eq } from "drizzle-orm";
-import { db } from "@workspace/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { bookingsTable, attendeesTable } from "@workspace/db";
 import { logger } from "./logger";
 import type { DbExecutor } from "./pricing";
@@ -8,6 +7,15 @@ import { defaultOrderRef } from "./order-reference";
 import { getOrCreateStripeCustomer } from "./stripe-customer";
 import { buildStripePaymentDetails, getStripeBillingDetails } from "./stripe-payment-details";
 import { syncStripeInvoicePaymentDetails } from "./stripe-invoice-payments";
+import {
+  paymentFingerprint,
+  PaymentOperationError,
+  withPaymentOperation,
+  type PaymentOperations,
+  type PaymentAttempt,
+} from "./payment-operations";
+import { closePendingCheckoutsForInvoice } from "./stripe-checkout";
+import type { StripeBillingDetails } from "./stripe-payment-details";
 
 const PASS_LABELS: Record<string, string> = {
   single: "Workforce Pass, SWP Summit 2027",
@@ -89,70 +97,67 @@ const STALE_INVOICE_STATUS_MS = 5 * 60 * 1000;
  * always pulls fresh data - call it from user-facing download/resend paths
  * where serving a stale PDF URL is unacceptable. Errors are swallowed.
  */
+async function refreshInvoiceSnapshot(
+  stripe: Stripe | null,
+  bookingId: number,
+  onlyIfStale: boolean,
+): Promise<void> {
+  if (!stripe) return;
+  try {
+    await withPaymentOperation(bookingId, async (ops) => {
+      const [booking] = await ops.db
+        .select()
+        .from(bookingsTable)
+        .where(eq(bookingsTable.id, bookingId));
+      if (!booking?.stripeInvoiceId) return;
+      if (
+        onlyIfStale &&
+        (["paid", "cancelled"].includes(booking.status) ||
+          Date.now() - (booking.stripeInvoiceStatusSyncedAt?.getTime() || 0) <
+            STALE_INVOICE_STATUS_MS)
+      )
+        return;
+      const invoice = await stripe.invoices.retrieve(booking.stripeInvoiceId);
+      const replacing =
+        invoice.status === "void" && (await isInvoiceBeingReplaced(ops, invoice.id));
+      await ops.db
+        .update(bookingsTable)
+        .set({
+          stripeInvoiceStatus: invoice.status,
+          stripeInvoiceStatusSyncedAt: new Date(),
+          ...(invoice.invoice_pdf ? { stripeInvoicePdfUrl: invoice.invoice_pdf } : {}),
+          ...(invoice.hosted_invoice_url
+            ? { stripeInvoicePaymentUrl: invoice.hosted_invoice_url }
+            : {}),
+          ...(invoice.status === "paid" &&
+          !["paid", "refunded", "disputed"].includes(booking.status)
+            ? { status: "paid", paidAt: booking.paidAt || new Date() }
+            : {}),
+          ...(invoice.status === "void" &&
+          !replacing &&
+          !["paid", "refunded", "disputed", "cancelled"].includes(booking.status)
+            ? { status: "cancelled" }
+            : {}),
+        })
+        .where(eq(bookingsTable.id, bookingId));
+    });
+  } catch (err) {
+    logger.warn({ err, bookingId }, "Invoice refresh unavailable; cached booking retained");
+  }
+}
+
 export async function refreshStripeInvoiceUrls(
   stripe: Stripe | null,
   bookingId: number,
 ): Promise<void> {
-  if (!stripe) return;
-  try {
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-    if (!booking || !booking.stripeInvoiceId) return;
-    const inv = await stripe.invoices.retrieve(booking.stripeInvoiceId);
-    const updates: Record<string, unknown> = {
-      stripeInvoiceStatus: inv.status ?? null,
-      stripeInvoiceStatusSyncedAt: new Date(),
-    };
-    if (inv.invoice_pdf) updates.stripeInvoicePdfUrl = inv.invoice_pdf;
-    if (inv.hosted_invoice_url) updates.stripeInvoicePaymentUrl = inv.hosted_invoice_url;
-    if (inv.status === "paid" && booking.status !== "paid") {
-      updates.status = "paid";
-      updates.paidAt = booking.paidAt ?? new Date();
-    } else if (inv.status === "void" && booking.status !== "cancelled") {
-      updates.status = "cancelled";
-    }
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, bookingId));
-  } catch (err) {
-    logger.warn({ err, bookingId }, "refreshStripeInvoiceUrls failed");
-  }
+  return refreshInvoiceSnapshot(stripe, bookingId, false);
 }
 
 export async function refreshStripeInvoiceStatusIfStale(
   stripe: Stripe | null,
   bookingId: number,
 ): Promise<void> {
-  if (!stripe) return;
-  try {
-    const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
-    if (!booking || !booking.stripeInvoiceId) return;
-    if (booking.status === "paid" || booking.status === "cancelled") return;
-
-    const last = booking.stripeInvoiceStatusSyncedAt
-      ? booking.stripeInvoiceStatusSyncedAt.getTime()
-      : 0;
-    if (Date.now() - last < STALE_INVOICE_STATUS_MS) return;
-
-    const { status, paid } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
-    if (status === null) return;
-
-    // Note: the `if (booking.status === "paid" || "cancelled") return;` guard
-    // above means we know `booking.status` is one of the non-terminal states here.
-    const updates: Record<string, unknown> = {
-      stripeInvoiceStatus: status,
-      stripeInvoiceStatusSyncedAt: new Date(),
-    };
-
-    if (paid) {
-      updates.status = "paid";
-      updates.paidAt = booking.paidAt ?? new Date();
-    } else if (status === "void") {
-      // Invoice voided in Stripe - reflect by cancelling the booking.
-      updates.status = "cancelled";
-    }
-
-    await db.update(bookingsTable).set(updates).where(eq(bookingsTable.id, bookingId));
-  } catch (err) {
-    logger.warn({ err, bookingId }, "refreshStripeInvoiceStatusIfStale failed");
-  }
+  return refreshInvoiceSnapshot(stripe, bookingId, true);
 }
 
 export type ReissueInvoiceResult =
@@ -182,7 +187,11 @@ export async function applyReissueInvoiceResultTx(
   if (result.alreadyPaid) {
     await tx
       .update(bookingsTable)
-      .set({ status: "paid", ...(extras || {}) })
+      .set({
+        status: "paid",
+        paidAt: sql`coalesce(${bookingsTable.paidAt}, now())`,
+        ...(extras || {}),
+      })
       .where(eq(bookingsTable.id, bookingId));
   } else {
     await tx
@@ -195,161 +204,291 @@ export async function applyReissueInvoiceResultTx(
         invoiceDueDate: result.dueDate,
         ...(extras || {}),
       })
-      .where(eq(bookingsTable.id, bookingId));
+      .where(
+        and(
+          eq(bookingsTable.id, bookingId),
+          eq(bookingsTable.stripeInvoiceId, result.invoiceId),
+          inArray(bookingsTable.status, ["partial", "pending_payment", "invoiced"]),
+        ),
+      );
   }
 }
 
-/**
- * Re-issue (or first issue) the Stripe invoice for a booking.
- *
- * Performs the external Stripe operations only (customer sync, invoice
- * create/finalize/send, optional voiding of the previous open invoice). The
- * resulting booking-row writes are NOT applied here - instead the result is
- * returned so the caller can persist it via `applyReissueInvoiceResultTx`
- * inside the same transaction as any related promo-counter increment. This
- * is what guarantees that `bookings.status` and `promoCodes.usedCount` can
- * never drift apart due to a crash mid-confirmation.
- */
+/** Immutable request snapshot for a recoverable invoice revision. */
+export interface InvoicePlan {
+  billing: StripeBillingDetails;
+  params: Stripe.InvoiceCreateParams;
+  items: Array<{ key: string; params: Stripe.InvoiceItemCreateParams }>;
+  previousInvoiceId: string | null;
+}
+
+async function invoiceFromAttempt(
+  stripe: Stripe,
+  ops: PaymentOperations,
+  attempt: PaymentAttempt<InvoicePlan>,
+): Promise<Stripe.Invoice> {
+  const customer = await ops.step(attempt, "customer", attempt.plan.billing, () =>
+    getOrCreateStripeCustomer(stripe, attempt.plan.billing, attempt.bookingId),
+  );
+  const params = {
+    ...attempt.plan.params,
+    customer,
+    metadata: { ...attempt.plan.params.metadata, paymentAttemptId: attempt.id },
+  };
+  const id = await ops.step(attempt, "invoice", params, (options) =>
+    stripe.invoices.create(params, options),
+  );
+  return stripe.invoices.retrieve(id);
+}
+
+async function retireInvoice(
+  stripe: Stripe,
+  ops: PaymentOperations,
+  attempt: PaymentAttempt<InvoicePlan>,
+  invoiceId: string,
+): Promise<boolean> {
+  const name = `retire-${invoiceId}`;
+  if (attempt.steps[name]?.resultId) return true;
+  let invoice: Stripe.Invoice;
+  try {
+    invoice = await stripe.invoices.retrieve(invoiceId);
+  } catch (err) {
+    // A draft deletion can succeed while its response (or our saved result) is lost.
+    const previous = (await ops.attempts<InvoicePlan>("invoice")).find((item) => item.steps[name]);
+    if ((err as { code?: string }).code !== "resource_missing" || !previous) throw err;
+    await ops.record(attempt, name, { invoiceId, action: "delete" }, invoiceId);
+    return true;
+  }
+  if (invoice.status === "paid") return false;
+  if (invoice.status === "void") {
+    await ops.record(attempt, name, { invoiceId, action: "void" }, invoiceId);
+    return true;
+  }
+  if (!["draft", "open", "uncollectible"].includes(invoice.status || "")) {
+    throw new PaymentOperationError(
+      "The previous invoice status could not be verified. No replacement was created.",
+    );
+  }
+  const action = invoice.status === "draft" ? "delete" : "void";
+  try {
+    await ops.step(attempt, name, { invoiceId, action }, (options) =>
+      action === "delete"
+        ? stripe.invoices.del(invoiceId, options)
+        : stripe.invoices.voidInvoice(invoiceId, {}, options),
+    );
+  } catch (err) {
+    const stripeError = err as { code?: string };
+    if (action === "delete" && stripeError.code === "resource_missing") {
+      await ops.record(attempt, name, { invoiceId, action }, invoiceId);
+      return true;
+    }
+    invoice = await stripe.invoices.retrieve(invoiceId);
+    if (invoice.status === "paid") return false;
+    if (invoice.status !== "void") throw err;
+    await ops.record(attempt, name, { invoiceId, action }, invoiceId);
+  }
+  return true;
+}
+
+export async function isInvoiceBeingReplaced(
+  ops: PaymentOperations,
+  invoiceId: string,
+): Promise<boolean> {
+  return (await ops.attempts<InvoicePlan>("invoice")).some((attempt) =>
+    Boolean(attempt.steps[`retire-${invoiceId}`]),
+  );
+}
+
+async function rememberInvoice(ops: PaymentOperations, invoice: Stripe.Invoice): Promise<void> {
+  await ops.db
+    .update(bookingsTable)
+    .set({
+      stripeInvoiceId: invoice.id,
+      stripeInvoiceStatus: invoice.status,
+      stripeInvoiceStatusSyncedAt: new Date(),
+      stripeInvoicePdfUrl: invoice.invoice_pdf || null,
+      stripeInvoicePaymentUrl: invoice.hosted_invoice_url || null,
+      invoiceDueDate: invoice.due_date ? new Date(invoice.due_date * 1000) : null,
+    })
+    .where(eq(bookingsTable.id, ops.bookingId));
+}
+
+/** Retry the same invoice operation; a changed billing/pricing snapshot starts a new revision. */
 export async function reissueBookingInvoice(
   stripe: Stripe,
   bookingId: number,
+  operations?: PaymentOperations,
 ): Promise<ReissueInvoiceResult> {
-  const [booking] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId));
+  if (!operations)
+    return withPaymentOperation(bookingId, (ops) => reissueBookingInvoice(stripe, bookingId, ops));
+  const ops = operations;
+  const [booking] = await ops.db
+    .select()
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId));
   if (!booking) throw new Error("Booking not found");
-
-  // Short-circuit if booking is already marked paid in our DB
-  if (booking.status === "paid") {
-    return { alreadyPaid: true };
+  if (booking.status === "paid") return { alreadyPaid: true };
+  if (!["partial", "pending_payment", "invoiced"].includes(booking.status)) {
+    throw new PaymentOperationError("This booking is closed. An invoice cannot be created.");
   }
-
-  // If we have an existing invoice, check its remote status
-  if (booking.stripeInvoiceId) {
-    const { paid, status } = await getStripeInvoiceStatus(stripe, booking.stripeInvoiceId);
-    if (paid) {
-      return { alreadyPaid: true };
-    }
-    // Void the existing invoice if it's still open/finalized/uncollectible.
-    // (Already-void invoices are skipped; paid is handled above.)
-    if (status === "open" || status === "draft" || status === "uncollectible") {
-      try {
-        if (status === "draft") {
-          await stripe.invoices.del(booking.stripeInvoiceId);
-        } else {
-          await stripe.invoices.voidInvoice(booking.stripeInvoiceId);
-        }
-      } catch (err) {
-        logger.warn(
-          { err, invoiceId: booking.stripeInvoiceId, bookingId },
-          "Failed to void/delete previous Stripe invoice while re-issuing - continuing",
-        );
-      }
-    }
-  }
-
-  const attendees = await db
+  await closePendingCheckoutsForInvoice(stripe, ops, booking);
+  const attendees = await ops.db
     .select()
     .from(attendeesTable)
     .where(eq(attendeesTable.bookingId, bookingId));
-  const lead = attendees.find((a) => a.isLead) || attendees[0];
+  const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
   if (!lead) throw new Error("No attendee found for booking");
-
   const orderRef = booking.orderReference || defaultOrderRef(bookingId);
-
-  const subtotalAfterDiscounts = parseFloat(booking.subtotalAmount?.toString() || "0");
-  const groupDiscount = parseFloat(booking.groupDiscountAmount?.toString() || "0");
-  const promoDiscount = parseFloat(booking.promoDiscountAmount?.toString() || "0");
-  const baseAmount = subtotalAfterDiscounts + groupDiscount + promoDiscount;
-
-  const customer = await getOrCreateStripeCustomer(
-    stripe,
-    getStripeBillingDetails(booking, lead),
-    bookingId,
-  );
-  const paymentDetails = buildStripePaymentDetails(booking, lead, "invoice");
-
-  // Look up - or bootstrap - the UK VAT 20% Stripe tax rate
+  const billing = getStripeBillingDetails(booking, lead);
+  const details = buildStripePaymentDetails(booking, lead, "invoice");
+  const subtotal = Number(booking.subtotalAmount || 0);
+  const groupDiscount = Number(booking.groupDiscountAmount || 0);
+  const promoDiscount = Number(booking.promoDiscountAmount || 0);
   const vatRateId = await getOrCreateVatRate(stripe);
-  if (!vatRateId) {
+  if (!vatRateId)
     throw new Error("Could not establish UK VAT 20% tax rate in Stripe - invoice not issued");
-  }
-  const vatParams = { tax_rates: [vatRateId] };
-
-  // Build custom_fields (max 4). When PO is set, replace the "Contact" field.
-  const baseCustomFields: Array<{ name: string; value: string }> = [
+  const customFields = [
     { name: "Booking reference", value: orderRef },
     { name: "Company Number", value: "12252258" },
     { name: "VAT Number", value: "336124621" },
+    booking.poNumber
+      ? { name: "PO Number", value: booking.poNumber.slice(0, 30) }
+      : { name: "Contact", value: "douglas@dynamicbusinessleaders.co.uk" },
   ];
-  if (booking.poNumber) {
-    baseCustomFields.push({ name: "PO Number", value: booking.poNumber.slice(0, 30) });
-  } else {
-    baseCustomFields.push({ name: "Contact", value: "douglas@dynamicbusinessleaders.co.uk" });
-  }
-
-  const invoiceObj = await stripe.invoices.create({
-    customer: customer.id,
+  const items: InvoicePlan["items"] = [
+    {
+      key: "passes",
+      params: {
+        description: `${PASS_LABELS[booking.passType] || booking.passType}, quantity ${booking.quantity}`,
+        amount: Math.round((subtotal + groupDiscount + promoDiscount) * 100),
+        currency: "gbp",
+        tax_rates: [vatRateId],
+      },
+    },
+  ];
+  if (groupDiscount > 0)
+    items.push({
+      key: "group",
+      params: {
+        description: "Group Discount",
+        amount: -Math.round(groupDiscount * 100),
+        currency: "gbp",
+        tax_rates: [vatRateId],
+      },
+    });
+  if (promoDiscount > 0)
+    items.push({
+      key: "promo",
+      params: {
+        description: `Promo Code: ${booking.promoCode}`,
+        amount: -Math.round(promoDiscount * 100),
+        currency: "gbp",
+        tax_rates: [vatRateId],
+      },
+    });
+  const params: Stripe.InvoiceCreateParams = {
     collection_method: "send_invoice",
     days_until_due: 14,
-    description: paymentDetails.description,
+    description: details.description,
     footer: INVOICE_FOOTER,
-    custom_fields: baseCustomFields,
-    metadata: paymentDetails.metadata,
+    custom_fields: customFields,
+    metadata: details.metadata,
     auto_advance: false,
-  });
+  };
+  const fingerprint = paymentFingerprint({ billing, params, items });
+  const attempts = await ops.attempts<InvoicePlan>("invoice");
+  let attempt = attempts.find(
+    (item) => !["expired", "superseded"].includes(item.status) && item.fingerprint === fingerprint,
+  );
 
-  await stripe.invoiceItems.create({
-    customer: customer.id,
-    invoice: invoiceObj.id,
-    description: `${PASS_LABELS[booking.passType] || booking.passType}, quantity ${booking.quantity}`,
-    amount: Math.round(baseAmount * 100),
-    currency: "gbp",
-    ...vatParams,
-  });
-
-  if (groupDiscount > 0) {
-    await stripe.invoiceItems.create({
-      customer: customer.id,
-      invoice: invoiceObj.id,
-      description: "Group Discount",
-      amount: -Math.round(groupDiscount * 100),
-      currency: "gbp",
-      ...vatParams,
-    });
+  // Finish resolving an uncertain earlier creation before starting a replacement.
+  // Never finalize/send an outdated revision just to recover its reference.
+  for (const old of attempts) {
+    if (old === attempt || ["expired", "superseded"].includes(old.status)) continue;
+    if (old.steps.invoice?.rejected && !old.steps.invoice.resultId) {
+      old.status = "superseded";
+      await ops.save(old);
+      continue;
+    }
+    if (!old.steps.invoice) {
+      old.status = "superseded";
+      await ops.save(old);
+      continue;
+    }
+    const oldInvoiceId =
+      old.steps.invoice.resultId || (await invoiceFromAttempt(stripe, ops, old)).id;
+    if (!(await retireInvoice(stripe, ops, old, oldInvoiceId))) {
+      await rememberInvoice(ops, await stripe.invoices.retrieve(oldInvoiceId));
+      return { alreadyPaid: true };
+    }
+    old.status = "superseded";
+    await ops.save(old);
   }
-  if (promoDiscount > 0) {
-    await stripe.invoiceItems.create({
-      customer: customer.id,
-      invoice: invoiceObj.id,
-      description: `Promo Code: ${booking.promoCode}`,
-      amount: -Math.round(promoDiscount * 100),
-      currency: "gbp",
-      ...vatParams,
-    });
-  }
 
-  const finalized = await stripe.invoices.finalizeInvoice(invoiceObj.id);
+  if (!attempt) {
+    attempt = await ops.start(
+      "invoice",
+      { billing, params, items, previousInvoiceId: booking.stripeInvoiceId },
+      fingerprint,
+    );
+  }
+  // Preserve legacy invoices and explicit billing revisions. An inability to
+  // verify/cancel the old invoice stops creation instead of leaving two payable invoices.
+  if (attempt.plan.previousInvoiceId && !attempt.steps.invoice?.resultId) {
+    if (!(await retireInvoice(stripe, ops, attempt, attempt.plan.previousInvoiceId))) {
+      await rememberInvoice(ops, await stripe.invoices.retrieve(attempt.plan.previousInvoiceId));
+      return { alreadyPaid: true };
+    }
+  }
+  let invoice = await invoiceFromAttempt(stripe, ops, attempt);
+  await rememberInvoice(ops, invoice);
+  if (invoice.status === "paid") return { alreadyPaid: true };
+  if (!["draft", "open"].includes(invoice.status || "")) {
+    return ops.review(attempt, "The saved invoice is no longer payable; its status needs review");
+  }
+  // Persist the external reference before finalization or email delivery.
+  const customer = attempt.steps.customer.resultId!;
+  if (invoice.status === "draft") {
+    for (const item of attempt.plan.items) {
+      const itemParams = { ...item.params, customer, invoice: invoice.id };
+      await ops.step(attempt, `item-${item.key}`, itemParams, (options) =>
+        stripe.invoiceItems.create(itemParams, options),
+      );
+    }
+    await ops.step(attempt, "finalize", { invoiceId: invoice.id }, (options) =>
+      stripe.invoices.finalizeInvoice(invoice.id, {}, options),
+    );
+    invoice = await stripe.invoices.retrieve(invoice.id);
+  }
+  await rememberInvoice(ops, invoice);
+  if (invoice.status === "paid") return { alreadyPaid: true };
+  if (invoice.status !== "open")
+    return ops.review(attempt, "Invoice finalization did not produce an open invoice");
+  await ops.record(attempt, "finalize", { invoiceId: invoice.id }, invoice.id);
   try {
     await syncStripeInvoicePaymentDetails(
       stripe,
-      finalized,
-      buildStripePaymentDetails(booking, lead, "invoice", finalized),
+      invoice,
+      buildStripePaymentDetails(booking, lead, "invoice", invoice),
     );
   } catch (err) {
-    // A labelling outage must not prevent an otherwise valid invoice being issued.
-    // The paid webhook retries this sync, including the eventual successful charge.
-    logger.warn({ err, bookingId, invoiceId: finalized.id }, "Invoice payment labels pending sync");
+    logger.warn({ err, bookingId, invoiceId: invoice.id }, "Invoice payment labels pending sync");
   }
-  const sent = await stripe.invoices.sendInvoice(finalized.id);
-
-  const dueDate = sent.due_date
-    ? new Date(sent.due_date * 1000)
-    : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-
+  await ops.step(attempt, "send", { invoiceId: invoice.id }, (options) =>
+    stripe.invoices.sendInvoice(invoice.id, {}, options),
+  );
+  invoice = await stripe.invoices.retrieve(invoice.id);
+  await rememberInvoice(ops, invoice);
+  attempt.status = "ready";
+  await ops.save(attempt);
+  if (invoice.status === "paid") return { alreadyPaid: true };
   return {
     alreadyPaid: false,
-    invoiceId: sent.id,
-    pdfUrl: sent.invoice_pdf || null,
-    paymentUrl: sent.hosted_invoice_url || null,
-    dueDate,
+    invoiceId: invoice.id,
+    pdfUrl: invoice.invoice_pdf || null,
+    paymentUrl: invoice.hosted_invoice_url || null,
+    dueDate: invoice.due_date
+      ? new Date(invoice.due_date * 1000)
+      : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   };
 }

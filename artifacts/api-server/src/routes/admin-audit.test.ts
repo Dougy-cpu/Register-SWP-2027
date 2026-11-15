@@ -8,7 +8,7 @@
  *
  * The DB layer is mocked with an in-memory store so the suite can run under
  * `pnpm test` without a Postgres dependency, but every other layer
- * (Express routing, JSON parsing, admin auth, audit helper) runs for real —
+ * (Express routing, JSON parsing, admin auth, audit helper) runs for real  -
  * which is exactly the surface area this test is meant to protect.
  */
 
@@ -1268,6 +1268,44 @@ describe("admin audit trail — integration", () => {
     expect(data.summary).toBe("Booking SWP-12345: partial → paid");
     const changes = data.changes as Record<string, { from: unknown; to: unknown }>;
     expect(changes.status).toEqual({ from: "partial", to: "paid" });
+  });
+
+  it("GET /admin/activity hides private payment snapshots while showing reconciliation alerts", async () => {
+    activityRows().push(
+      {
+        id: 1,
+        type: "_stripe_payment_attempt",
+        actor: "stripe",
+        bookingId: null,
+        createdAt: new Date(),
+        data: { plan: { billing: { email: "private@example.test" } } },
+      },
+      {
+        id: 2,
+        type: "payment_reconciliation_required",
+        actor: "stripe",
+        bookingId: null,
+        createdAt: new Date(),
+        data: { summary: "Payment requires review", sessionId: "cs_review" },
+      },
+    );
+    const response = await fetch(`${baseUrl}/admin/activity`, {
+      headers: { "x-admin-token": adminToken },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      feed: Array<{ type: string; data?: Record<string, unknown> }>;
+    };
+    expect(
+      body.feed.some((entry: { type: string }) => entry.type === "_stripe_payment_attempt"),
+    ).toBe(false);
+    expect(JSON.stringify(body)).not.toContain("private@example.test");
+    expect(body.feed).toContainEqual(
+      expect.objectContaining({
+        type: "payment_reconciliation_required",
+        data: { summary: "Payment requires review", sessionId: "cs_review" },
+      }),
+    );
   });
 
   it("PATCH /bookings/:bookingId/attendees/:attendeeId records an admin_attendee_updated row with masked PII before/after", async () => {

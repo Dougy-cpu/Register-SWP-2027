@@ -128,6 +128,12 @@ const EVENT_TYPE_CONFIG: Record<
     color: "text-red-700",
     bg: "bg-red-50 border-red-200",
   },
+  payment_reconciliation_required: {
+    label: "Payment Needs Review",
+    icon: AlertTriangle,
+    color: "text-red-700",
+    bg: "bg-red-50 border-red-200",
+  },
   partial_checkout: {
     label: "Partial Checkout",
     icon: Hourglass,
@@ -421,6 +427,21 @@ function FeedCard({ item }: { item: FeedItem }) {
           </div>
         )}
 
+        {item.type === "payment_reconciliation_required" && item.data && (
+          <div className="mt-1 space-y-1">
+            <p className="text-sm text-red-700">
+              {String(item.data.summary || "Please review this payment in Stripe.")}
+            </p>
+            {["sessionId", "invoiceId", "paymentIntentId"].map((key) =>
+              item.data?.[key] ? (
+                <p key={key} className="text-xs font-mono text-slate-600 break-all">
+                  {String(item.data[key])}
+                </p>
+              ) : null,
+            )}
+          </div>
+        )}
+
         {item.type.startsWith("admin_") && (
           <div className="mt-1 space-y-1">
             {item.data?.summary != null && (
@@ -498,7 +519,12 @@ export default function AdminActivity() {
     invoices: ["new_booking_invoice", "invoice_paid", "invoice_overdue"],
     attendees: ["attendee_change", "tbc_filled"],
     partial: ["partial_checkout"],
-    alerts: ["invoice_overdue", "email_failure", "admin_login_failure"],
+    alerts: [
+      "invoice_overdue",
+      "email_failure",
+      "admin_login_failure",
+      "payment_reconciliation_required",
+    ],
     admin: ADMIN_EVENT_TYPES,
   };
 

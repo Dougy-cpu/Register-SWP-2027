@@ -1,5 +1,5 @@
 import { and, eq, inArray, not, or, isNull, sql } from "drizzle-orm";
-import { db } from "@workspace/db";
+import { db, type DbConnection } from "@workspace/db";
 import { attendeesTable, bookingsTable } from "@workspace/db";
 import { logger } from "./logger";
 import {
@@ -43,6 +43,7 @@ export async function claimBookingConfirmation(
     "partial",
     "pending_payment",
   ],
+  connection: typeof db | DbConnection = db,
 ): Promise<typeof bookingsTable.$inferSelect | null> {
   const now = new Date();
   const setFields: Partial<typeof bookingsTable.$inferInsert> = {
@@ -54,7 +55,7 @@ export async function claimBookingConfirmation(
     setFields.paidAt = now;
   }
 
-  return db.transaction(async (tx) => {
+  return connection.transaction(async (tx) => {
     // The row lock makes the status check, sponsor redemption ledger entry
     // and final status change one indivisible operation. This is especially
     // important when the Stripe webhook and browser confirmation race.

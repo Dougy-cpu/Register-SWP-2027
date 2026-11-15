@@ -11,19 +11,21 @@ function objectId(value?: string | { id: string } | null): string | null {
   return typeof value === "string" ? value : value?.id || null;
 }
 
-interface InvoicePaymentReference {
+export interface InvoicePaymentReference {
   intent?: string | Stripe.PaymentIntent | null;
   charge?: string | Stripe.Charge | null;
   isDefault: boolean;
+  status?: Stripe.InvoicePayment["status"];
+  created?: number;
 }
 
-async function invoicePaymentReferences(
+export async function invoicePaymentReferences(
   stripe: Stripe,
   invoice: Stripe.Invoice,
 ): Promise<InvoicePaymentReference[]> {
   // Webhook endpoints can still deliver the older API shape after an SDK upgrade.
   const legacy = invoice as InvoiceWithLegacyPayment;
-  if (legacy.payment_intent || legacy.charge) {
+  if ((legacy.payment_intent || legacy.charge) && !invoice.payments) {
     return [{ intent: legacy.payment_intent, charge: legacy.charge, isDefault: true }];
   }
 
@@ -44,13 +46,49 @@ async function invoicePaymentReferences(
     }
   }
 
-  return payments
+  const references: InvoicePaymentReference[] = payments
     .filter((payment) => payment.status !== "canceled")
     .map((payment) => ({
       intent: payment.payment.payment_intent,
       charge: payment.payment.charge,
       isDefault: payment.is_default,
+      status: payment.status,
+      created: payment.created,
     }));
+  if (
+    legacy.payment_intent &&
+    !references.some((ref) => objectId(ref.intent) === objectId(legacy.payment_intent))
+  ) {
+    references.push({ intent: legacy.payment_intent, charge: legacy.charge, isDefault: true });
+  }
+  return references;
+}
+
+/** Prefer the current invoice-managed failure, never a paid or unrelated attached payment. */
+export async function invoicePaymentFailureReason(
+  stripe: Stripe,
+  invoice: Stripe.Invoice,
+  labels: Record<string, string>,
+): Promise<string | undefined> {
+  const references = (await invoicePaymentReferences(stripe, invoice))
+    .filter((reference) => reference.isDefault && reference.status !== "paid")
+    .sort((a, b) => (b.created || 0) - (a.created || 0));
+  const seen = new Set<string>();
+  for (const reference of references) {
+    const id = objectId(reference.intent);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const intent =
+      typeof reference.intent === "object" && reference.intent
+        ? reference.intent
+        : await stripe.paymentIntents.retrieve(id);
+    if (objectId(intent.customer) !== objectId(invoice.customer))
+      throw new Error("Invoice failure payment customer does not match");
+    if (intent.status === "succeeded" || intent.status === "canceled") continue;
+    const error = intent.last_payment_error;
+    if (error) return labels[error.decline_code || error.code || ""] || error.message || undefined;
+  }
+  return undefined;
 }
 
 function isInvoiceManagedIntentError(error: unknown): boolean {

@@ -1723,6 +1723,7 @@ router.get("/admin/activity", adminAuth, async (req, res): Promise<void> => {
     .from(activityLogTable)
     .leftJoin(attendeesTable, eq(activityLogTable.attendeeId, attendeesTable.id))
     .leftJoin(bookingsTable, eq(activityLogTable.bookingId, bookingsTable.id))
+    .where(notInArray(activityLogTable.type, ["_stripe_payment_attempt"]))
     .orderBy(desc(activityLogTable.createdAt))
     .limit(200);
 
