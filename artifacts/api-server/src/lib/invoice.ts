@@ -5,7 +5,9 @@ import { bookingsTable, attendeesTable } from "@workspace/db";
 import { logger } from "./logger";
 import type { DbExecutor } from "./pricing";
 import { defaultOrderRef } from "./order-reference";
-import { buildStripeCustomerDisplayName } from "./stripe-customer";
+import { getOrCreateStripeCustomer } from "./stripe-customer";
+import { buildStripePaymentDetails, getStripeBillingDetails } from "./stripe-payment-details";
+import { syncStripeInvoicePaymentDetails } from "./stripe-invoice-payments";
 
 const PASS_LABELS: Record<string, string> = {
   single: "Workforce Pass, SWP Summit 2027",
@@ -258,54 +260,12 @@ export async function reissueBookingInvoice(
   const promoDiscount = parseFloat(booking.promoDiscountAmount?.toString() || "0");
   const baseAmount = subtotalAfterDiscounts + groupDiscount + promoDiscount;
 
-  const contactEmail = booking.billingEmail || lead.workEmail;
-  const contactName = booking.billingName || `${lead.firstName} ${lead.lastName}`;
-  const contactCompany = booking.billingCompany || lead.company;
-  const stripeCustomerName = buildStripeCustomerDisplayName(contactName, contactCompany);
-
-  const addressInput = booking.billingAddressLine1
-    ? {
-        line1: booking.billingAddressLine1,
-        line2: booking.billingAddressLine2 || undefined,
-        city: booking.billingTown || undefined,
-        state: booking.billingRegion || undefined,
-        postal_code: booking.billingPostcode || undefined,
-        country:
-          booking.billingCountry === "United Kingdom" ? "GB" : booking.billingCountry || "GB",
-      }
-    : undefined;
-
-  const customerCreateParams: Stripe.CustomerCreateParams = {
-    email: contactEmail,
-    name: stripeCustomerName,
-    metadata: { company: contactCompany || "", billingContactName: contactName },
-    ...(addressInput ? { address: addressInput } : {}),
-  };
-  const customerUpdateParams: Stripe.CustomerUpdateParams = {
-    name: stripeCustomerName,
-    metadata: { company: contactCompany || "", billingContactName: contactName },
-    ...(addressInput ? { address: addressInput } : {}),
-  };
-
-  // Find or create Stripe customer; always sync name + address to current values.
-  // Stripe displays the customer name prominently on invoices, so include the
-  // company in that field while keeping the contact name in metadata.
-  const customerList = await stripe.customers.list({ email: contactEmail, limit: 1 });
-  let customer: Stripe.Customer;
-  if (customerList.data.length > 0) {
-    customer = customerList.data[0];
-    try {
-      await stripe.customers.update(customer.id, customerUpdateParams);
-    } catch (err) {
-      logger.warn(
-        { err, customerId: customer.id },
-        "Failed to sync Stripe customer billing details, creating a replacement customer",
-      );
-      customer = await stripe.customers.create(customerCreateParams);
-    }
-  } else {
-    customer = await stripe.customers.create(customerCreateParams);
-  }
+  const customer = await getOrCreateStripeCustomer(
+    stripe,
+    getStripeBillingDetails(booking, lead),
+    bookingId,
+  );
+  const paymentDetails = buildStripePaymentDetails(booking, lead, "invoice");
 
   // Look up - or bootstrap - the UK VAT 20% Stripe tax rate
   const vatRateId = await getOrCreateVatRate(stripe);
@@ -330,14 +290,10 @@ export async function reissueBookingInvoice(
     customer: customer.id,
     collection_method: "send_invoice",
     days_until_due: 14,
-    description: `SWP Summit 2027, ${orderRef}`,
+    description: paymentDetails.description,
     footer: INVOICE_FOOTER,
     custom_fields: baseCustomFields,
-    metadata: {
-      bookingId: String(bookingId),
-      orderRef,
-      ...(booking.poNumber ? { poNumber: booking.poNumber } : {}),
-    },
+    metadata: paymentDetails.metadata,
     auto_advance: false,
   });
 
@@ -372,6 +328,17 @@ export async function reissueBookingInvoice(
   }
 
   const finalized = await stripe.invoices.finalizeInvoice(invoiceObj.id);
+  try {
+    await syncStripeInvoicePaymentDetails(
+      stripe,
+      finalized,
+      buildStripePaymentDetails(booking, lead, "invoice", finalized),
+    );
+  } catch (err) {
+    // A labelling outage must not prevent an otherwise valid invoice being issued.
+    // The paid webhook retries this sync, including the eventual successful charge.
+    logger.warn({ err, bookingId, invoiceId: finalized.id }, "Invoice payment labels pending sync");
+  }
   const sent = await stripe.invoices.sendInvoice(finalized.id);
 
   const dueDate = sent.due_date
