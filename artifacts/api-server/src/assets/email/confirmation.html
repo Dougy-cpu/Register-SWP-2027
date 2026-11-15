@@ -40,8 +40,36 @@
     </p>
   </td>
 </tr>
-{{bookingSummary}} {{nextStep}} {{eventDetails}} {{calendarSection}} {{attendees}}
-{{paymentSummary}} {{invoiceDetails}}
+{{bookingSummary}} {{nextStep}} {{eventDetails}}
+<tr>
+  <td class="pad" style="padding: 28px 40px 28px; border-top: 1px solid #e2e8f0">
+    <p
+      style="
+        margin: 0 0 12px;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11px;
+        line-height: 1.5;
+        font-weight: bold;
+        letter-spacing: 1.8px;
+        color: #004eb9;
+      "
+    >
+      ON THE DAY
+    </p>
+    <p
+      style="
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #101c2e;
+      "
+    >
+      {{checkinDetails}}
+    </p>
+  </td>
+</tr>
+{{calendarSection}} {{attendees}} {{paymentSummary}} {{invoiceDetails}}
 <tr>
   <td class="pad" style="padding: 28px 40px 32px; border-top: 1px solid #e2e8f0">
     <h2

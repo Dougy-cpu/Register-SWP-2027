@@ -377,6 +377,7 @@ const BRANDED_TEMPLATE_VARIABLES: Record<TemplateType, TemplateVariable[]> = {
     ["bookingSummary", "Booking and payment status"],
     ["nextStep", "Add or update attendee details"],
     ["eventDetails", "Event date and venue"],
+    ["checkinDetails", "Check-in instructions"],
     ["calendarSection", "Available calendar links"],
     ["attendees", "Named and unassigned attendees"],
     ["paymentSummary", "Prices, discounts and attachments"],

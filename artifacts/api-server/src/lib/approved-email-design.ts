@@ -10,6 +10,9 @@ const ink = "#101c2e";
 const muted = "#4a5568";
 const font = "Arial, Helvetica, sans-serif";
 const contactEmail = "douglas@peoplestrategyhub.com";
+const passCollectionInstructions =
+  "When you arrive, just give your name at reception. We’ll have your pass ready for you.";
+export const passCollectionParagraph = `<p><strong>On the day</strong><br>${passCollectionInstructions}</p>`;
 
 function asset(name: string): Buffer {
   const path = [join(moduleDir, "assets", name), join(moduleDir, "../assets", name)].find(
@@ -178,6 +181,7 @@ function commonVars(settings: EventSettings, calendarHtml = "") {
     "{{eventDate}}": escape(settings.eventDate || "Wednesday, 3 March 2027"),
     "{{eventVenue}}": escape(settings.eventVenue || "1 Basinghall Avenue, London"),
     "{{eventVenuePostcode}}": escape(settings.eventVenuePostcode || "EC2V 5DD"),
+    "{{checkinDetails}}": passCollectionInstructions,
     "{{calendarSection}}": calendarHtml ? emailSection(calendarHtml, 0, 28, false) : "",
   };
 }
@@ -430,8 +434,6 @@ export function welcomeDesignVars(context: {
               "0",
             ),
         ),
-    "{{checkinDetails}}":
-      "When you arrive, just give your name at reception. We’ll have your pass ready for you.",
     "{{badgeNotice}}": emailSection(
       heading("Badge scanning and sponsor leads", 16, "0 0 10px") +
         p(

@@ -10,6 +10,7 @@ import {
   emailPlainText,
   emailSection,
   isApprovedEmailDesign,
+  passCollectionParagraph,
   renderApprovedEmail,
   welcomeDesignVars,
   type EmailDocument,
@@ -702,6 +703,7 @@ export async function buildConfirmationEmailHtml(
       <strong>Date:</strong> ${escHtml(settings.eventDate)}<br>
       <strong>Venue:</strong> ${escHtml(settings.eventVenue)}, ${escHtml(settings.eventVenuePostcode)}
     </div>
+    ${passCollectionParagraph}
     <h3 style="margin-top:28px;margin-bottom:12px;color:#000;">Update Attendee Details Anytime</h3>
     <p style="margin:0 0 16px;color:#444;line-height:1.6;">You have a secure self-service link to manage all your attendee information. You can fill in placeholder seats, update existing details, add dietary requirements - all without logging in. Need to share registration with colleagues? Forward them the link to enter their own details.</p>
     ${managementLinkHtml}

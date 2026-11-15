@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { retiredSocialTask } from "./sponsor-progress";
+import { passCollectionParagraph } from "./approved-email-design";
 import {
   attendeesTable,
   db,
@@ -211,6 +212,7 @@ export async function sendSponsorStaffWelcome(
     <p>Hi ${variables.firstName},</p>
     <p>You have been registered as part of the <strong>${variables.company}</strong> sponsor team for <strong>${variables.eventName}</strong>.</p>
     <div class="info-box"><strong>Date:</strong> ${variables.eventDate}<br><strong>Venue:</strong> ${variables.eventVenue}</div>
+    ${passCollectionParagraph}
     ${buildCalendarLinksSection(settings)}
     <p>There is nothing to pay and no invoice or receipt is needed. If any of your details change, your sponsor contact can update them in the sponsor workspace.</p>
     <div class="info-box"><strong>Badge scanning and sponsor leads</strong><br>At the event, sponsors may scan the QR on your badge to save your name, job title, company and work email as a lead. The QR itself contains only an attendee reference. Scanning is optional. Contact the SWP Summit team if you want your badge excluded from sponsor scanning.</div>
