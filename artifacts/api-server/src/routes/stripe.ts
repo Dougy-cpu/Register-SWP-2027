@@ -23,11 +23,13 @@ import { claimBookingConfirmation, runConfirmationSideEffects } from "../lib/boo
 import { defaultOrderRef } from "../lib/order-reference";
 import { getStripe } from "../lib/stripe-client";
 import {
-  STRIPE_REGISTRATION_APP,
   checkoutSessionBookingId,
   validateCheckoutSessionOwnership,
   validateCompletedCheckoutSession,
 } from "../lib/stripe-checkout-validation";
+import { getOrCreateStripeCustomer } from "../lib/stripe-customer";
+import { buildStripePaymentDetails, getStripeBillingDetails } from "../lib/stripe-payment-details";
+import { syncStripeInvoicePaymentDetails } from "../lib/stripe-invoice-payments";
 
 const DECLINE_CODE_LABELS: Record<string, string> = {
   authentication_required: "Strong customer authentication required - please retry your payment",
@@ -73,7 +75,7 @@ const router: IRouter = Router();
  *    on the happy path AND retries automatically when Stripe replays the
  *    webhook for an already-confirmed booking with stuck flags.
  */
-async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
+async function handleInvoicePaidEvent(stripe: Stripe, event: Stripe.Event): Promise<void> {
   const invoice = event.data.object as Stripe.Invoice;
   const invoiceId = invoice.id;
   if (!invoiceId) {
@@ -94,6 +96,31 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
     return;
   }
 
+  const attendees = await db
+    .select()
+    .from(attendeesTable)
+    .where(eq(attendeesTable.bookingId, booking.id));
+  const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
+  let paymentIntentId: string | null = null;
+  let paymentDetailsError: unknown;
+  try {
+    if (!lead) throw new Error("No attendee found for invoice payment details");
+    paymentIntentId = await syncStripeInvoicePaymentDetails(
+      stripe,
+      invoice,
+      buildStripePaymentDetails(booking, lead, "invoice", invoice),
+      (resolvedId) => {
+        paymentIntentId = resolvedId;
+      },
+    );
+  } catch (err) {
+    paymentDetailsError = err;
+    logger.error(
+      { err, invoiceId, bookingId: booking.id },
+      "Invoice payment label sync needs retry",
+    );
+  }
+
   // Cache the latest Stripe status no matter what - even if we already processed,
   // a fresh sync is cheap and keeps the badge accurate.
   await db
@@ -101,16 +128,9 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
     .set({
       stripeInvoiceStatus: "paid",
       stripeInvoiceStatusSyncedAt: new Date(),
+      ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
     })
     .where(eq(bookingsTable.id, booking.id));
-
-  const rawPaymentIntent = (invoice as unknown as Record<string, unknown>).payment_intent;
-  const paymentIntentId: string | null =
-    typeof rawPaymentIntent === "string"
-      ? rawPaymentIntent
-      : rawPaymentIntent && typeof rawPaymentIntent === "object" && "id" in rawPaymentIntent
-        ? (rawPaymentIntent as { id: string }).id
-        : null;
 
   // Atomic claim. We allow the flip from "invoiced" "paid" (the typical
   // happy path: invoice issued, then customer pays the hosted Stripe link)
@@ -148,6 +168,9 @@ async function handleInvoicePaidEvent(event: Stripe.Event): Promise<void> {
   }
 
   await runConfirmationSideEffects(booking.id);
+  // Stripe retries this event on a labelling failure. Booking confirmation remains
+  // idempotent, and customer delivery is not held up by reconciliation metadata.
+  if (paymentDetailsError) throw paymentDetailsError;
 }
 
 async function isPromoOncePerCustomerViolation(
@@ -244,17 +267,31 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
 
   let session: import("stripe").Stripe.Checkout.Session;
   try {
+    const attendees = await db
+      .select()
+      .from(attendeesTable)
+      .where(eq(attendeesTable.bookingId, booking.id));
+    const lead = attendees.find((attendee) => attendee.isLead) || attendees[0];
+    if (!lead) {
+      res.status(400).json({ error: "No attendee found for booking" });
+      return;
+    }
+    const details = buildStripePaymentDetails(booking, lead, "card");
+    const customer = await getOrCreateStripeCustomer(
+      stripe,
+      getStripeBillingDetails(booking, lead),
+      booking.id,
+    );
     session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
       line_items: lineItems,
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        bookingId: String(booking.id),
-        registrationApp: STRIPE_REGISTRATION_APP,
-      },
-      customer_email: booking.billingEmail || undefined,
+      client_reference_id: details.metadata.orderRef,
+      metadata: details.metadata,
+      customer: customer.id,
+      payment_intent_data: details,
     });
   } catch (err) {
     const e = err as { raw?: { message?: string }; message?: string };
@@ -266,7 +303,11 @@ router.post("/stripe/create-checkout-session", async (req, res): Promise<void> =
 
   await db
     .update(bookingsTable)
-    .set({ stripeSessionId: session.id, status: "pending_payment" })
+    .set({
+      stripeSessionId: session.id,
+      status: "pending_payment",
+      orderReference: booking.orderReference || defaultOrderRef(booking.id),
+    })
     .where(eq(bookingsTable.id, booking.id));
 
   res.json({ sessionId: session.id, url: session.url });
@@ -366,7 +407,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
   // resilience - Stripe sends both in quick succession and webhooks can be retried, so the
   // handler must be fully idempotent (gated by paidConfirmationEmailSentAt).
   if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
-    await handleInvoicePaidEvent(event);
+    await handleInvoicePaidEvent(stripe, event);
   }
 
   // Invoice cancelled in Stripe (manually voided or via API). Cache the status so the
