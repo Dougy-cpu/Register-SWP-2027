@@ -29,6 +29,7 @@ import { getStripe } from "../lib/stripe-client";
 import {
   checkoutSessionBookingId,
   validateCheckoutSessionOwnership,
+  STRIPE_REGISTRATION_APP,
 } from "../lib/stripe-checkout-validation";
 import { buildStripePaymentDetails } from "../lib/stripe-payment-details";
 import {
@@ -594,10 +595,26 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
     const declineMessage = DECLINE_CODE_LABELS[declineCode] || err?.message || "Unknown reason";
 
     // Try to identify the booking for richer log context
-    const [booking] = await db
+    const [storedBooking] = await db
       .select()
       .from(bookingsTable)
       .where(eq(bookingsTable.stripePaymentIntentId, piId));
+    let booking: typeof storedBooking | undefined = storedBooking;
+
+    const candidateId = checkoutSessionBookingId(pi);
+    if (!booking && candidateId && pi.metadata?.registrationApp === STRIPE_REGISTRATION_APP) {
+      booking = await withPaymentOperation(candidateId, async (ops) => {
+        const attempt = (await ops.attempts("card")).find(
+          (item) => item.id === pi.metadata.paymentAttemptId && item.steps.checkout,
+        );
+        const customer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id;
+        if (!attempt || !customer || customer !== attempt.steps.customer?.resultId)
+          return undefined;
+        return (
+          await ops.db.select().from(bookingsTable).where(eq(bookingsTable.id, candidateId))
+        )[0];
+      });
+    }
 
     logger.info(
       { piId, declineCode, declineMessage, bookingId: booking?.id ?? null },

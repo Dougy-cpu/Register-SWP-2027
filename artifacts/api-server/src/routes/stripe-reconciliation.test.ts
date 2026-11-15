@@ -100,6 +100,7 @@ vi.mock("../lib/sponsor-redemptions", () => ({
 }));
 vi.mock("../lib/stripe-client", () => ({ getStripe: () => state.stripe }));
 vi.mock("../lib/booking-confirmation", () => ({
+  PromoReservationError: class extends Error {},
   claimBookingConfirmation: state.claim,
   runConfirmationSideEffects: state.confirmation,
 }));

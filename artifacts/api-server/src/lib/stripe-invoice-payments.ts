@@ -75,13 +75,22 @@ export async function invoicePaymentFailureReason(
     .sort((a, b) => (b.created || 0) - (a.created || 0));
   const seen = new Set<string>();
   for (const reference of references) {
-    const id = objectId(reference.intent);
+    let id = objectId(reference.intent);
+    let intent = typeof reference.intent === "object" && reference.intent ? reference.intent : null;
+    if (!id && reference.charge) {
+      const charge =
+        typeof reference.charge === "object"
+          ? reference.charge
+          : await stripe.charges.retrieve(reference.charge);
+      if (objectId(charge.customer) !== objectId(invoice.customer))
+        throw new Error("Invoice failure charge customer does not match");
+      if (charge.paid || charge.status === "succeeded") continue;
+      id = objectId(charge.payment_intent);
+      if (!id) return labels[charge.failure_code || ""] || charge.failure_message || undefined;
+    }
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const intent =
-      typeof reference.intent === "object" && reference.intent
-        ? reference.intent
-        : await stripe.paymentIntents.retrieve(id);
+    intent ||= await stripe.paymentIntents.retrieve(id);
     if (objectId(intent.customer) !== objectId(invoice.customer))
       throw new Error("Invoice failure payment customer does not match");
     if (intent.status === "succeeded" || intent.status === "canceled") continue;

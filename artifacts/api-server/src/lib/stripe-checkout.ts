@@ -9,7 +9,7 @@ import {
 import { getOrCreateStripeCustomer } from "./stripe-customer";
 import { defaultOrderRef } from "./order-reference";
 import { validateCompletedCheckoutSession } from "./stripe-checkout-validation";
-import { claimBookingConfirmation } from "./booking-confirmation";
+import { claimBookingConfirmation, PromoReservationError } from "./booking-confirmation";
 import {
   assertPaymentCanStart,
   paymentFingerprint,
@@ -131,7 +131,11 @@ export async function closePendingCheckoutsForInvoice(
       await operations.save(attempt);
       continue;
     }
-    if (!attempt.steps.checkout && !attempt.steps.customer) continue;
+    if (!attempt.steps.checkout) {
+      attempt.status = "superseded";
+      await operations.save(attempt);
+      continue;
+    }
     const recovered = await recoverAttemptSession(stripe, operations, attempt);
     ids.add(recovered.id);
     const session = await expireUnpaidSession(stripe, recovered);
@@ -364,22 +368,52 @@ export async function settleCheckoutPayment(
     );
   }
   const orderReference = booking.orderReference || defaultOrderRef(booking.id);
-  const claimed = alreadyPaid
-    ? null
-    : await claimBookingConfirmation(
-        booking.id,
-        "paid",
-        {
-          currentStep: 5,
-          stripeSessionId: session.id,
-          stripePaymentIntentId: validation.paymentIntentId,
-          orderReference,
-          paymentMethod: "card",
-        },
-        ["partial", "pending_payment"],
-        operations.db,
+  let claimed = null;
+  let allocationConflict = false;
+  try {
+    claimed = alreadyPaid
+      ? null
+      : await claimBookingConfirmation(
+          booking.id,
+          "paid",
+          {
+            currentStep: 5,
+            stripeSessionId: session.id,
+            stripePaymentIntentId: validation.paymentIntentId,
+            orderReference,
+            paymentMethod: "card",
+          },
+          ["partial", "pending_payment"],
+          operations.db,
+        );
+  } catch (err) {
+    if (!(err instanceof PromoReservationError)) throw err;
+    allocationConflict = true;
+    // Keep the verified paid reference available for an organiser refund or
+    // deliberate resolution. Do not bypass a sponsor/promo capacity limit.
+    await operations.db
+      .update(bookingsTable)
+      .set({
+        stripeSessionId: session.id,
+        stripePaymentIntentId: validation.paymentIntentId,
+        paymentMethod: "card",
+        orderReference,
+      })
+      .where(
+        and(
+          eq(bookingsTable.id, booking.id),
+          inArray(bookingsTable.status, ["partial", "pending_payment"]),
+        ),
       );
-  if (!alreadyPaid && !claimed) {
+    await operations.alert(
+      "A successful card payment needs promo allocation review before confirmation",
+      {
+        sessionId: session.id,
+        paymentIntentId: validation.paymentIntentId,
+      },
+    );
+  }
+  if (!alreadyPaid && !claimed && !allocationConflict) {
     await operations.alert("A successful card payment raced with a booking status change", {
       sessionId: session.id,
     });
@@ -403,5 +437,9 @@ export async function settleCheckoutPayment(
       });
     }
   }
+  if (allocationConflict)
+    throw new PaymentOperationError(
+      "Your payment was received. The organiser needs to review the pass allocation before confirming this booking. Please do not pay again.",
+    );
   return { alreadyProcessed: !claimed, orderReference };
 }

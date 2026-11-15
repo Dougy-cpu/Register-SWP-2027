@@ -398,6 +398,12 @@ vi.mock("../lib/stripe-client", () => ({
   getStripe: () => getStripeMock(),
 }));
 
+vi.mock("../lib/payment-operations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/payment-operations")>()),
+  withPaymentOperation: async (_id: number, work: (ops: unknown) => Promise<unknown>) =>
+    work({ db: mockDb, attempts: async () => [] }),
+}));
+
 vi.mock("../middleware/admin-login-throttle", () => ({
   adminLoginThrottle: (_req: unknown, _res: unknown, next: () => void) => next(),
   recordAdminLoginFailure: () => ({ failures: 1, lockedForMs: 0 }),
@@ -1027,6 +1033,7 @@ describe("admin audit trail — integration", () => {
     });
     setStripeAvailable(true);
     stripeMock.invoices.voidInvoice.mockResolvedValue({ id: "in_open_123", status: "void" });
+    stripeMock.invoices.retrieve.mockResolvedValue({ id: "in_open_123", status: "open" });
 
     const res = await fetch(`${baseUrl}/admin/registrations/101/status`, {
       method: "PATCH",

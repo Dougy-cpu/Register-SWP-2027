@@ -35,7 +35,8 @@ const services = vi.hoisted(() => ({
     invoiceItems: { create: vi.fn() },
     invoicePayments: { list: vi.fn() },
     paymentIntents: { retrieve: vi.fn(), update: vi.fn() },
-    charges: { update: vi.fn() },
+    charges: { update: vi.fn(), retrieve: vi.fn() },
+    refunds: { create: vi.fn() },
     taxRates: { list: vi.fn() },
   },
   receipt: vi.fn(),
@@ -46,6 +47,7 @@ const services = vi.hoisted(() => ({
   sheets: vi.fn(),
   reserve: vi.fn(),
   release: vi.fn(),
+  restore: vi.fn(),
 }));
 
 vi.mock("@workspace/db", async () => ({
@@ -89,6 +91,7 @@ vi.mock("../lib/stripe-client", () => ({ getStripe: () => services.stripe }));
 vi.mock("../lib/sponsor-redemptions", () => ({
   reservePromoUsageForBooking: services.reserve,
   releaseSponsorRedemption: services.release,
+  restoreSponsorRedemption: services.restore,
   notifySponsorRedemptionForBooking: async () => true,
 }));
 vi.mock("../lib/sponsor-email", () => ({
@@ -106,8 +109,17 @@ vi.mock("../lib/email", () => ({
 }));
 vi.mock("../lib/google-sheets", () => ({ syncBookingToSheets: services.sheets }));
 vi.mock("../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock("../middleware/admin-auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../middleware/admin-auth")>()),
+  adminAuth: (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.headers["x-admin-token"] === "test-admin") next();
+    else res.status(403).json({ error: "Forbidden" });
+  },
+}));
 
 import router from "./stripe";
+import adminRouter from "./admin";
+import { logger } from "../lib/logger";
 import {
   reissueBookingInvoice,
   applyReissueInvoiceResultTx,
@@ -185,6 +197,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use("/api", router);
+  app.use("/api", adminRouter);
   // Silence expected errors while preserving production's 500/retry behaviour.
   app.use(
     (_err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) =>
@@ -331,21 +344,27 @@ beforeEach(async () => {
     remote("send", { id, params }, options, () => invoices.get(id)!),
   );
   services.stripe.invoices.voidInvoice.mockImplementation(async (id, params, options) =>
-    remote("void", { id, params }, options, () =>
-      Object.assign(invoices.get(id)!, { status: "void" }),
-    ),
+    options
+      ? remote("void", { id, params }, options, () =>
+          Object.assign(invoices.get(id)!, { status: "void" }),
+        )
+      : Object.assign(invoices.get(id)!, { status: "void" }),
   );
   services.stripe.invoices.del.mockImplementation(async (id, options) =>
-    remote("delete", { id }, options, () => {
-      invoices.delete(id);
-      return { id, deleted: true };
-    }),
+    options
+      ? remote("delete", { id }, options, () => {
+          invoices.delete(id);
+          return { id, deleted: true };
+        })
+      : (invoices.delete(id), { id, deleted: true }),
   );
   services.stripe.invoices.update.mockImplementation(async (id, params) =>
     Object.assign(invoices.get(id)!, params),
   );
   services.stripe.invoicePayments.list.mockResolvedValue({ data: [], has_more: false });
   services.stripe.paymentIntents.update.mockImplementation(async (id) => ({ id }));
+  services.stripe.refunds.create.mockResolvedValue({ id: "re_test" });
+  services.restore.mockResolvedValue(true);
 });
 
 async function post(path: string, body: unknown, token = "owner") {
@@ -364,6 +383,12 @@ const checkout = (overrides = {}) =>
   });
 const issueInvoice = () => post("create-invoice", { bookingId: 1 });
 const webhook = (type: string, object: unknown) => post("webhook", { type, data: { object } });
+const adminStatus = (status: string) =>
+  fetch(`${baseUrl.replace(/\/stripe$/, "")}/admin/registrations/1/status`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", "x-admin-token": "test-admin" },
+    body: JSON.stringify({ status }),
+  });
 async function booking() {
   return (
     await testDb.select().from(schema.bookingsTable).where(eq(schema.bookingsTable.id, 1))
@@ -1082,5 +1107,199 @@ describe("modern and legacy invoice failure details", () => {
       payment_intent: failure,
     });
     expect(services.failedPayment).not.toHaveBeenCalled();
+  });
+  it("resolves an expanded legacy failed charge without a PaymentIntent", async () => {
+    await seedInvoice();
+    await webhook("invoice.payment_failed", {
+      id: "in_failed",
+      customer: "cus_1",
+      charge: {
+        id: "ch_failed",
+        customer: "cus_1",
+        status: "failed",
+        paid: false,
+        failure_code: "card_declined",
+        failure_message: "Declined",
+      },
+    });
+    expect(services.failedPayment).toHaveBeenCalledWith(1, "Card declined by your bank", undefined);
+  });
+  it("follows a legacy charge ID to its failed PaymentIntent", async () => {
+    await seedInvoice();
+    services.stripe.charges.retrieve.mockResolvedValue({
+      id: "ch_failed",
+      customer: "cus_1",
+      paid: false,
+      status: "failed",
+      payment_intent: "pi_failed",
+    });
+    services.stripe.paymentIntents.retrieve.mockResolvedValue(failure);
+    await webhook("invoice.payment_failed", {
+      id: "in_failed",
+      customer: "cus_1",
+      charge: "ch_failed",
+    });
+    expect(services.failedPayment).toHaveBeenCalledWith(1, "Insufficient funds", undefined);
+  });
+  it("does not use another customer's legacy charge failure", async () => {
+    await seedInvoice();
+    expect(
+      (
+        await webhook("invoice.payment_failed", {
+          id: "in_failed",
+          customer: "cus_1",
+          charge: {
+            id: "ch_wrong",
+            customer: "cus_other",
+            paid: false,
+            status: "failed",
+            failure_code: "card_declined",
+          },
+        })
+      ).status,
+    ).toBe(500);
+    expect(services.failedPayment).not.toHaveBeenCalled();
+  });
+});
+
+describe("organiser actions during payment recovery", () => {
+  it("blocks cancellation while an invoice replacement owns the booking lock", async () => {
+    await issueInvoice();
+    await testDb
+      .update(schema.bookingsTable)
+      .set({ billingName: "Updated Name" })
+      .where(eq(schema.bookingsTable.id, 1));
+    const original = services.stripe.invoices.create.getMockImplementation()!;
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    services.stripe.invoices.create.mockImplementationOnce(async (...args) => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return original(...args);
+    });
+    const replacing = reissueBookingInvoice(stripe, 1);
+    await ready;
+    expect((await adminStatus("cancelled")).status).toBe(409);
+    expect((await booking()).status).toBe("invoiced");
+    release();
+    await replacing;
+    expect((await adminStatus("cancelled")).status).toBe(200);
+    expect((await booking()).status).toBe("cancelled");
+    expect([...invoices.values()].every((invoice) => invoice.status === "void")).toBe(true);
+  });
+  it("blocks new payment setup while an admin cancellation is in progress", async () => {
+    await issueInvoice();
+    const original = services.stripe.invoices.voidInvoice.getMockImplementation()!;
+    let release!: () => void;
+    let entered!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    services.stripe.invoices.voidInvoice.mockImplementationOnce(async (...args) => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return original(...args);
+    });
+    const cancelling = adminStatus("cancelled");
+    await ready;
+    await expect(reissueBookingInvoice(stripe, 1)).rejects.toBeInstanceOf(PaymentOperationBusy);
+    release();
+    expect((await cancelling).status).toBe(200);
+    expect(invoices.size).toBe(1);
+  });
+  it("keeps the booking active when invoice cancellation cannot be verified", async () => {
+    await issueInvoice();
+    services.stripe.invoices.voidInvoice.mockRejectedValueOnce(new Error("Stripe unavailable"));
+    expect((await adminStatus("cancelled")).status).toBe(502);
+    expect((await booking()).status).toBe("invoiced");
+    expect(invoices.get("in_1")!.status).toBe("open");
+    expect(services.release).not.toHaveBeenCalled();
+    expect((await adminStatus("cancelled")).status).toBe(200);
+  });
+  it("closes an open invoice left by an interrupted initial send before cancellation", async () => {
+    await testDb
+      .update(schema.bookingsTable)
+      .set({ sponsorId: 1 })
+      .where(eq(schema.bookingsTable.id, 1));
+    services.stripe.invoices.sendInvoice.mockRejectedValueOnce(new Error("unavailable"));
+    await issueInvoice();
+    expect((await booking()).status).toBe("partial");
+    expect(invoices.get("in_1")!.status).toBe("open");
+    expect((await adminStatus("cancelled")).status).toBe(200);
+    expect(invoices.get("in_1")!.status).toBe("void");
+    expect(services.release).toHaveBeenCalledWith(
+      1,
+      "admin_status_cancelled",
+      expect.objectContaining({ connection: testDb, deferNotification: expect.any(Function) }),
+    );
+  });
+  it("blocks cancellation while the initial invoice reference is still uncertain", async () => {
+    loseResponse = "invoice";
+    await issueInvoice();
+    expect((await adminStatus("cancelled")).status).toBe(409);
+    expect((await booking()).status).toBe("partial");
+    expect(services.release).not.toHaveBeenCalled();
+  });
+  it("closes an unpaid checkout before cancelling its booking", async () => {
+    await checkout();
+    expect((await adminStatus("cancelled")).status).toBe(200);
+    expect(sessions.get("cs_1")!.status).toBe("expired");
+    expect((await checkout()).status).toBe(409);
+  });
+  it("flags an allocation conflict after payment without an endless webhook retry or losing its refund reference", async () => {
+    await testDb
+      .update(schema.bookingsTable)
+      .set({ promoCode: "LAST_SLOT" })
+      .where(eq(schema.bookingsTable.id, 1));
+    await checkout();
+    services.reserve.mockResolvedValue(false);
+    expect((await webhook("checkout.session.completed", paid())).status).toBe(200);
+    expect((await booking()).stripePaymentIntentId).toBe("pi_1");
+    expect((await booking()).status).toBe("pending_payment");
+    expect(services.receipt).not.toHaveBeenCalled();
+    expect((await post("confirm-card-payment", { bookingId: 1, sessionId: "cs_1" })).status).toBe(
+      409,
+    );
+    const alerts = (await testDb.select().from(schema.activityLogTable)).filter(
+      (row) => row.type === "payment_reconciliation_required",
+    );
+    expect(alerts).toHaveLength(1);
+    expect((await adminStatus("cancelled")).status).toBe(200);
+    expect(services.stripe.refunds.create).toHaveBeenCalledWith({ payment_intent: "pi_1" });
+    expect((await booking()).status).toBe("refunded");
+  });
+  it("links a failed card intent to its saved attempt before successful settlement", async () => {
+    await checkout();
+    await webhook("payment_intent.payment_failed", {
+      id: "pi_declined",
+      metadata: sessions.get("cs_1")!.metadata,
+      customer: "cus_1",
+      last_payment_error: { decline_code: "insufficient_funds" },
+    });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ bookingId: 1, piId: "pi_declined" }),
+      "payment_intent.payment_failed: card decline logged",
+    );
+    expect((await booking()).stripePaymentIntentId).toBeNull();
+  });
+  it("does not associate a declined intent with a different saved customer", async () => {
+    await checkout();
+    await webhook("payment_intent.payment_failed", {
+      id: "pi_declined",
+      metadata: sessions.get("cs_1")!.metadata,
+      customer: "cus_other",
+      last_payment_error: { decline_code: "insufficient_funds" },
+    });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ bookingId: null }),
+      "payment_intent.payment_failed: card decline logged",
+    );
   });
 });
